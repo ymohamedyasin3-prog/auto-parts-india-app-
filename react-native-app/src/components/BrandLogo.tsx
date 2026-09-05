@@ -259,71 +259,135 @@ export function AutoPartsLogo({
  */
 function renderBrandVector(brandKey: string, size: number) {
   const s = size;
-  let code = "AUTO";
-  let brandColor = "#0066FF";
-  let subText = "";
-
   const lower = (brandKey || "").toLowerCase();
-  if (lower.includes('maruti') || lower.includes('suzuki')) { code = "MS"; subText = "MARUTI"; brandColor = "#E11D48"; }
-  else if (lower.includes('hyundai')) { code = "H"; subText = "HYUNDAI"; brandColor = "#2563EB"; }
-  else if (lower.includes('tata')) { code = "TATA"; subText = "TATA"; brandColor = "#0284C7"; }
-  else if (lower.includes('mahindra')) { code = "M"; subText = "MAHINDRA"; brandColor = "#DC2626"; }
-  else if (lower.includes('toyota')) { code = "TY"; subText = "TOYOTA"; brandColor = "#EF4444"; }
-  else if (lower.includes('honda')) { code = "H"; subText = "HONDA"; brandColor = "#EF4444"; }
-  else if (lower.includes('kia')) { code = "KIA"; subText = "KIA"; brandColor = "#0F172A"; }
-  else if (lower.includes('volkswagen') || lower.includes('vw')) { code = "VW"; subText = "VOLKSWAGEN"; brandColor = "#1D4ED8"; }
-  else if (lower.includes('skoda')) { code = "SK"; subText = "SKODA"; brandColor = "#059669"; }
-  else if (lower.includes('renault')) { code = "RN"; subText = "RENAULT"; brandColor = "#CA8A04"; }
-  else if (lower.includes('mg')) { code = "MG"; subText = "MG"; brandColor = "#BE123C"; }
-  else if (lower.includes('nissan')) { code = "NISSAN"; subText = "NISSAN"; brandColor = "#E11D48"; }
-  else if (lower.includes('ford')) { code = "FORD"; subText = "FORD"; brandColor = "#1D4ED8"; }
-  else if (lower.includes('bmw')) { code = "BMW"; subText = "BMW"; brandColor = "#2563EB"; }
-  else if (lower.includes('mercedes') || lower.includes('benz')) { code = "MB"; subText = "MERCEDES"; brandColor = "#475569"; }
-  else if (lower.includes('audi')) { code = "AUDI"; subText = "AUDI"; brandColor = "#0F172A"; }
-  else {
-    code = (brandKey || "CAR").substring(0, 3).toUpperCase();
-    subText = (brandKey || "OEM").toUpperCase();
+
+  if (lower.includes('maruti') || lower.includes('suzuki')) {
+    return (
+      <Svg width={s} height={s} viewBox="0 0 200 200">
+        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#E11D48" strokeWidth="4" />
+        <Path d="M 68 55 C 90 45, 135 55, 125 78 C 115 100, 75 95, 85 125 C 95 145, 135 135, 142 120" fill="none" stroke="#E11D48" strokeWidth="16" strokeLinecap="round" />
+        <Path d="M 68 55 C 90 45, 135 55, 125 78 C 115 100, 75 95, 85 125 C 95 145, 135 135, 142 120" fill="none" stroke="#FFFFFF" strokeWidth="6" strokeLinecap="round" />
+        <SvgText x="100" y="165" fontFamily="sans-serif" fontWeight="900" fontSize="14" fill="#E11D48" textAnchor="middle" letterSpacing="3">MARUTI SUZUKI</SvgText>
+      </Svg>
+    );
+  }
+  if (lower.includes('hyundai')) {
+    return (
+      <Svg width={s} height={s} viewBox="0 0 200 200">
+        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#2563EB" strokeWidth="4" />
+        <Ellipse cx="100" cy="100" rx="76" ry="46" fill="none" stroke="#2563EB" strokeWidth="8" transform="rotate(-15 100 100)" />
+        <Path d="M 75 70 L 85 130 M 125 70 L 115 130 M 78 100 L 122 100" stroke="#FFFFFF" strokeWidth="12" strokeLinecap="round" />
+        <SvgText x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="15" fill="#38BDF8" textAnchor="middle" letterSpacing="3">HYUNDAI</SvgText>
+      </Svg>
+    );
+  }
+  if (lower.includes('tata')) {
+    return (
+      <Svg width={s} height={s} viewBox="0 0 200 200">
+        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#0284C7" strokeWidth="4" />
+        <Path d="M 60 110 C 80 135, 120 135, 140 110 C 120 85, 80 85, 60 110 Z" fill="#38BDF8" />
+        <SvgText x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="18" fill="#FFFFFF" textAnchor="middle" letterSpacing="4">TATA</SvgText>
+      </Svg>
+    );
+  }
+  if (lower.includes('mahindra')) {
+    return (
+      <Svg width={s} height={s} viewBox="0 0 200 200">
+        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#DC2626" strokeWidth="4" />
+        <Path d="M 65 135 L 100 70 L 135 135 Z" fill="none" stroke="#DC2626" strokeWidth="14" strokeLinejoin="round" />
+        <Path d="M 65 135 L 100 70 L 135 135 Z" fill="none" stroke="#FFFFFF" strokeWidth="4" strokeLinejoin="round" />
+        <SvgText x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="14" fill="#DC2626" textAnchor="middle" letterSpacing="3">MAHINDRA</SvgText>
+      </Svg>
+    );
+  }
+  if (lower.includes('toyota')) {
+    return (
+      <Svg width={s} height={s} viewBox="0 0 200 200">
+        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#EF4444" strokeWidth="4" />
+        <Ellipse cx="100" cy="100" rx="65" ry="40" fill="none" stroke="#FFFFFF" strokeWidth="6" />
+        <Ellipse cx="100" cy="90" rx="35" ry="25" fill="none" stroke="#FFFFFF" strokeWidth="5" />
+        <SvgText x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="16" fill="#EF4444" textAnchor="middle" letterSpacing="3">TOYOTA</SvgText>
+      </Svg>
+    );
+  }
+  if (lower.includes('honda')) {
+    return (
+      <Svg width={s} height={s} viewBox="0 0 200 200">
+        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#EF4444" strokeWidth="4" />
+        <Path d="M 75 60 L 75 140 M 125 60 L 125 140 M 75 100 L 125 100" stroke="#FFFFFF" strokeWidth="14" strokeLinecap="round" />
+        <SvgText x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="16" fill="#EF4444" textAnchor="middle" letterSpacing="3">HONDA</SvgText>
+      </Svg>
+    );
+  }
+  if (lower.includes('kia')) {
+    return (
+      <Svg width={s} height={s} viewBox="0 0 200 200">
+        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#38BDF8" strokeWidth="4" />
+        <SvgText x="100" y="112" fontFamily="sans-serif" fontWeight="900" fontSize="48" fill="#FFFFFF" textAnchor="middle" letterSpacing="2">KIA</SvgText>
+        <SvgText x="100" y="152" fontFamily="sans-serif" fontWeight="700" fontSize="12" fill="#38BDF8" textAnchor="middle" letterSpacing="3">MOVEMENT</SvgText>
+      </Svg>
+    );
+  }
+  if (lower.includes('volkswagen') || lower.includes('vw')) {
+    return (
+      <Svg width={s} height={s} viewBox="0 0 200 200">
+        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#3B82F6" strokeWidth="4" />
+        <Circle cx="100" cy="100" r="68" fill="none" stroke="#3B82F6" strokeWidth="6" />
+        <Path d="M 68 75 L 85 125 L 100 95 L 115 125 L 132 75 M 62 105 L 138 105" stroke="#FFFFFF" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+        <SvgText x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="14" fill="#60A5FA" textAnchor="middle" letterSpacing="3">VOLKSWAGEN</SvgText>
+      </Svg>
+    );
+  }
+  if (lower.includes('skoda')) {
+    return (
+      <Svg width={s} height={s} viewBox="0 0 200 200">
+        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#059669" strokeWidth="4" />
+        <Circle cx="100" cy="100" r="70" fill="none" stroke="#059669" strokeWidth="6" />
+        <SvgText x="100" y="110" fontFamily="sans-serif" fontWeight="900" fontSize="26" fill="#10B981" textAnchor="middle" letterSpacing="2">SKODA</SvgText>
+        <SvgText x="100" y="150" fontFamily="sans-serif" fontWeight="700" fontSize="12" fill="#94A3B8" textAnchor="middle" letterSpacing="2">AUTO</SvgText>
+      </Svg>
+    );
+  }
+  if (lower.includes('bmw')) {
+    return (
+      <Svg width={s} height={s} viewBox="0 0 200 200">
+        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#FFFFFF" strokeWidth="5" />
+        <Circle cx="100" cy="100" r="74" fill="#1E293B" stroke="#38BDF8" strokeWidth="4" />
+        <Path d="M 100 26 A 74 74 0 0 1 174 100 L 100 100 Z" fill="#3B82F6" />
+        <Path d="M 100 174 A 74 74 0 0 1 26 100 L 100 100 Z" fill="#3B82F6" />
+        <SvgText x="100" y="70" fontFamily="sans-serif" fontWeight="900" fontSize="14" fill="#FFFFFF" textAnchor="middle" letterSpacing="5">BMW</SvgText>
+      </Svg>
+    );
+  }
+  if (lower.includes('mercedes') || lower.includes('benz')) {
+    return (
+      <Svg width={s} height={s} viewBox="0 0 200 200">
+        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#CBD5E1" strokeWidth="5" />
+        <Path d="M 100 40 L 100 100 M 100 100 L 145 130 M 100 100 L 55 130" stroke="#FFFFFF" strokeWidth="10" strokeLinecap="round" />
+        <SvgText x="100" y="165" fontFamily="sans-serif" fontWeight="900" fontSize="13" fill="#E2E8F0" textAnchor="middle" letterSpacing="2">MERCEDES</SvgText>
+      </Svg>
+    );
+  }
+  if (lower.includes('audi')) {
+    return (
+      <Svg width={s} height={s} viewBox="0 0 200 200">
+        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#94A3B8" strokeWidth="4" />
+        <Circle cx="70" cy="95" r="22" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+        <Circle cx="90" cy="95" r="22" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+        <Circle cx="110" cy="95" r="22" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+        <Circle cx="130" cy="95" r="22" fill="none" stroke="#FFFFFF" strokeWidth="8" />
+        <SvgText x="100" y="160" fontFamily="sans-serif" fontWeight="900" fontSize="18" fill="#FFFFFF" textAnchor="middle" letterSpacing="5">AUDI</SvgText>
+      </Svg>
+    );
   }
 
+  let code = (brandKey || "CAR").substring(0, 3).toUpperCase();
+  let subText = (brandKey || "OEM").toUpperCase();
   return (
     <Svg width={s} height={s} viewBox="0 0 200 200">
-      <Defs>
-        <LinearGradient id="badgeBg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <Stop offset="0%" stopColor="#0B132B" />
-          <Stop offset="100%" stopColor="#040812" />
-        </LinearGradient>
-        <LinearGradient id="chromeRing" x1="0%" y1="0%" x2="100%" y2="100%">
-          <Stop offset="0%" stopColor="#FFFFFF" />
-          <Stop offset="50%" stopColor="#CBD5E1" />
-          <Stop offset="100%" stopColor="#64748B" />
-        </LinearGradient>
-      </Defs>
-      <Circle cx="100" cy="100" r="92" fill="url(#badgeBg)" stroke="url(#chromeRing)" strokeWidth="6" />
-      <Circle cx="100" cy="100" r="78" fill="none" stroke={brandColor} strokeWidth="3" opacity="0.6" />
-      <SvgText 
-        x="100" 
-        y={code.length > 3 ? "106" : "110"} 
-        fontFamily="sans-serif" 
-        fontWeight="900" 
-        fontSize={code.length > 3 ? "30" : "54"} 
-        fill="#FFFFFF" 
-        textAnchor="middle" 
-        letterSpacing="2"
-      >
-        {code}
-      </SvgText>
-      <SvgText 
-        x="100" 
-        y="148" 
-        fontFamily="sans-serif" 
-        fontWeight="700" 
-        fontSize="12" 
-        fill="#94A3B8" 
-        textAnchor="middle" 
-        letterSpacing="1.5"
-      >
-        {subText}
-      </SvgText>
+      <Circle cx="100" cy="100" r="92" fill="#0B132B" stroke="#38BDF8" strokeWidth="5" />
+      <SvgText x="100" y="110" fontFamily="sans-serif" fontWeight="900" fontSize="42" fill="#FFFFFF" textAnchor="middle" letterSpacing="2">{code}</SvgText>
+      <SvgText x="100" y="148" fontFamily="sans-serif" fontWeight="700" fontSize="12" fill="#94A3B8" textAnchor="middle" letterSpacing="2">{subText}</SvgText>
     </Svg>
   );
 }

@@ -204,7 +204,7 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
               onPress={() => {
                 const uid = activeUid || getCurrentUser()?.uid;
                 if (uid) {
-                  navigation.navigate('SellerProfileScreen', { sellerId: uid, sellerName: displayName });
+                  navigation.navigate('SellerProfile', { sellerId: uid, sellerName: displayName });
                 }
               }} 
               style={styles.avatarWrap}
@@ -239,7 +239,7 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
             <TouchableOpacity onPress={() => {
               const uid = activeUid || getCurrentUser()?.uid;
               if (uid) {
-                navigation.navigate('SellerProfileScreen', { sellerId: uid, sellerName: displayName });
+                navigation.navigate('SellerProfile', { sellerId: uid, sellerName: displayName });
               }
             }}>
               <Text style={styles.profileName}>{displayName}</Text>
@@ -251,7 +251,7 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
                 onPress={() => {
                   const uid = activeUid || getCurrentUser()?.uid;
                   if (uid) {
-                    navigation.navigate('SellerProfileScreen', { sellerId: uid, sellerName: displayName });
+                    navigation.navigate('SellerProfile', { sellerId: uid, sellerName: displayName });
                   }
                 }}
               >

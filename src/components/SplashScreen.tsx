@@ -14,6 +14,7 @@ export default function SplashScreen({
   isReady = true
 }: SplashScreenProps) {
   const [isDone, setIsDone] = useState(false);
+  const [minTimeElapsed, setMinTimeElapsed] = useState(false);
 
   useEffect(() => {
     // Prevent scrolling while splash screen is active
@@ -23,12 +24,7 @@ export default function SplashScreen({
     document.body.style.touchAction = "none";
 
     const timer = setTimeout(() => {
-      if (isReady) {
-        setIsDone(true);
-        if (onFinish) {
-          onFinish();
-        }
-      }
+      setMinTimeElapsed(true);
     }, minDurationMs);
 
     return () => {
@@ -36,7 +32,16 @@ export default function SplashScreen({
       document.body.style.overflow = originalOverflow;
       document.body.style.touchAction = originalTouchAction;
     };
-  }, [minDurationMs, isReady, onFinish]);
+  }, [minDurationMs]);
+
+  useEffect(() => {
+    if (minTimeElapsed && isReady && !isDone) {
+      setIsDone(true);
+      if (onFinish) {
+        onFinish();
+      }
+    }
+  }, [minTimeElapsed, isReady, isDone, onFinish]);
 
   return (
     <AnimatePresence>
