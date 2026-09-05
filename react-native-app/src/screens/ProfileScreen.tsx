@@ -199,11 +199,49 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Profile Header Block */}
         <View style={styles.profileHeaderCard}>
-          <TouchableOpacity onPress={() => setIsPopupModalVisible(true)} style={styles.avatarWrap}>
-            <Image source={{ uri: displayPhotoUrl }} style={styles.avatarImage} />
-          </TouchableOpacity>
+          <View style={{ position: 'relative' }}>
+            <TouchableOpacity 
+              onPress={() => {
+                if (activeUid) {
+                  navigation.navigate('SellerProfileScreen', { sellerId: activeUid, sellerName: displayName });
+                }
+              }} 
+              style={styles.avatarWrap}
+            >
+              <Image source={{ uri: displayPhotoUrl }} style={styles.avatarImage} />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={handlePickProfilePhoto}
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                right: 0,
+                backgroundColor: '#0066FF',
+                width: 26,
+                height: 26,
+                borderRadius: 13,
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderWidth: 2,
+                borderColor: '#FFFFFF',
+                elevation: 3,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.2,
+                shadowRadius: 2,
+              }}
+            >
+              <Icon source="camera" size={13} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
           <View style={styles.profileInfoWrap}>
-            <Text style={styles.profileName}>{displayName}</Text>
+            <TouchableOpacity onPress={() => {
+              if (activeUid) {
+                navigation.navigate('SellerProfileScreen', { sellerId: activeUid, sellerName: displayName });
+              }
+            }}>
+              <Text style={styles.profileName}>{displayName}</Text>
+            </TouchableOpacity>
             <Text style={styles.profileEmail}>{userEmail}</Text>
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
               <TouchableOpacity 
