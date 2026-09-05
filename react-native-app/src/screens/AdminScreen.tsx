@@ -20,6 +20,7 @@ import EditListingModal from '../components/EditListingModal';
 import { AdminTaxonomyCMS } from '../components/AdminTaxonomyCMS';
 import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
 import { uploadImageToCloudinary } from '../services/cloudinary';
+import { promptImageSourceDialog } from '../services/imagePickerService';
 
 const { width } = Dimensions.get('window');
 
@@ -496,14 +497,20 @@ export default function AdminScreen({ navigation }: any) {
 
   const handlePickBannerImage = async () => {
     try {
-      const res = await launchImageLibrary({ mediaType: 'photo', quality: 0.8 });
-      if (res.assets && res.assets[0]?.uri) {
+      const selectedUri = await promptImageSourceDialog(
+        'Banner Image',
+        'Choose Camera or Gallery for banner image'
+      );
+      if (selectedUri) {
         setUploadingBannerImage(true);
-        const uploadedUrl = await uploadImageToCloudinary(res.assets[0].uri, 'banners');
-        setBannerImageUrl(uploadedUrl);
+        const uploadedUrl = await uploadImageToCloudinary(selectedUri, 'banners');
+        if (uploadedUrl) {
+          setBannerImageUrl(uploadedUrl);
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[Admin] Banner image pick error:', err);
+      Alert.alert('Error', err.message || 'Failed to upload banner image.');
     } finally {
       setUploadingBannerImage(false);
     }

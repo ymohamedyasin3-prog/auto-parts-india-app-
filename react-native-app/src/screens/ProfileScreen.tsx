@@ -202,8 +202,9 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
           <View style={{ position: 'relative' }}>
             <TouchableOpacity 
               onPress={() => {
-                if (activeUid) {
-                  navigation.navigate('SellerProfileScreen', { sellerId: activeUid, sellerName: displayName });
+                const uid = activeUid || getCurrentUser()?.uid;
+                if (uid) {
+                  navigation.navigate('SellerProfileScreen', { sellerId: uid, sellerName: displayName });
                 }
               }} 
               style={styles.avatarWrap}
@@ -236,8 +237,9 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
           </View>
           <View style={styles.profileInfoWrap}>
             <TouchableOpacity onPress={() => {
-              if (activeUid) {
-                navigation.navigate('SellerProfileScreen', { sellerId: activeUid, sellerName: displayName });
+              const uid = activeUid || getCurrentUser()?.uid;
+              if (uid) {
+                navigation.navigate('SellerProfileScreen', { sellerId: uid, sellerName: displayName });
               }
             }}>
               <Text style={styles.profileName}>{displayName}</Text>
@@ -247,19 +249,14 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
               <TouchableOpacity 
                 style={[styles.editProfileBtn, { flex: 1, backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]} 
                 onPress={() => {
-                  if (activeUid) {
-                    navigation.navigate('SellerProfileScreen', { sellerId: activeUid, sellerName: displayName });
+                  const uid = activeUid || getCurrentUser()?.uid;
+                  if (uid) {
+                    navigation.navigate('SellerProfileScreen', { sellerId: uid, sellerName: displayName });
                   }
                 }}
               >
                 <Icon source="eye-outline" size={14} color="#0066FF" />
                 <Text style={[styles.editProfileBtnText, { color: '#0066FF' }]}>View Public Profile</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.editProfileBtn, { paddingHorizontal: 12 }]} 
-                onPress={openEditModal}
-              >
-                <Icon source="pencil-outline" size={14} color="#0F172A" />
               </TouchableOpacity>
             </View>
           </View>
@@ -291,16 +288,6 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
               <Divider style={styles.divider} />
             </>
           )}
-
-          <TouchableOpacity style={styles.menuItem} onPress={openEditModal}>
-            <View style={[styles.menuIconBox, { backgroundColor: '#F0FDF4' }]}>
-              <Icon source="account-edit-outline" size={20} color="#16A34A" />
-            </View>
-            <Text style={styles.menuItemText}>Edit Profile Info</Text>
-            <Icon source="chevron-right" size={20} color="#CBD5E1" />
-          </TouchableOpacity>
-
-          <Divider style={styles.divider} />
 
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('MyAdsTab')}>
             <View style={[styles.menuIconBox, { backgroundColor: '#EFF6FF' }]}>

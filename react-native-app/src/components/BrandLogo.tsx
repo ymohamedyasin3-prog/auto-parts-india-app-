@@ -328,20 +328,72 @@ function renderBrandVector(brandKey: string, size: number) {
   );
 }
 
-function getLocalBrandLogo(brandKey: string) {
+function getOfficialBrandLogoUrl(brandKey: string): string | null {
+  const lower = (brandKey || '').toLowerCase();
+  if (lower.includes('maruti') || lower.includes('suzuki')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Suzuki_logo_2.svg/512px-Suzuki_logo_2.svg.png';
+  }
+  if (lower.includes('hyundai')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Hyundai_Motor_Company_logo.svg/512px-Hyundai_Motor_Company_logo.svg.png';
+  }
+  if (lower.includes('tata')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Tata_logo.svg/512px-Tata_logo.svg.png';
+  }
+  if (lower.includes('mahindra')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e2/Mahindra_logo_2021.svg/512px-Mahindra_logo_2021.svg.png';
+  }
+  if (lower.includes('toyota')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9d/Toyota_car_logo.svg/512px-Toyota_car_logo.svg.png';
+  }
+  if (lower.includes('honda')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Honda_Logo.svg/512px-Honda_Logo.svg.png';
+  }
+  if (lower.includes('kia')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/Kia-logo.svg/512px-Kia-logo.svg.png';
+  }
+  if (lower.includes('volkswagen') || lower.includes('vw')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Volkswagen_logo_2019.svg/512px-Volkswagen_logo_2019.svg.png';
+  }
+  if (lower.includes('skoda')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Skoda_Logo_2016.svg/512px-Skoda_Logo_2016.svg.png';
+  }
+  if (lower.includes('renault')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Renault_logo_%282021%29.svg/512px-Renault_logo_%282021%29.svg.png';
+  }
+  if (lower.includes('mg')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/MG_Motor_logo_%282021%29.svg/512px-MG_Motor_logo_%282021%29.svg.png';
+  }
+  if (lower.includes('nissan')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Nissan_logo_%282020%29.svg/512px-Nissan_logo_%282020%29.svg.png';
+  }
+  if (lower.includes('ford')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Ford_logo_flat.svg/512px-Ford_logo_flat.svg.png';
+  }
+  if (lower.includes('bmw')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/BMW.svg/512px-BMW.svg.png';
+  }
+  if (lower.includes('mercedes') || lower.includes('benz')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Mercedes-Logo.svg/512px-Mercedes-Logo.svg.png';
+  }
+  if (lower.includes('audi')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/Audi-Logo_2016.svg/512px-Audi-Logo_2016.svg.png';
+  }
+  if (lower.includes('jeep')) {
+    return 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Jeep_logo.svg/512px-Jeep_logo.svg.png';
+  }
   return null;
 }
 
 function OfficialBrandLogo({ brandKey, size, style }: { brandKey: string; size: number; style?: StyleProp<ViewStyle> }) {
   const [imageError, setImageError] = React.useState(false);
-  const localAsset = getLocalBrandLogo(brandKey);
+  const logoUrl = getOfficialBrandLogoUrl(brandKey);
 
-  if (!imageError && localAsset) {
+  if (!imageError && logoUrl) {
     return (
-      <View style={[styles.center, { width: size, height: size }, style]}>
+      <View style={[styles.center, { width: size, height: size, backgroundColor: '#FFFFFF', borderRadius: size / 2, overflow: 'hidden', padding: 3 }, style]}>
         <Image 
-          source={localAsset} 
-          style={{ width: size * 0.9, height: size * 0.9, resizeMode: 'contain' }}
+          source={{ uri: logoUrl }} 
+          style={{ width: size * 0.85, height: size * 0.85, resizeMode: 'contain' }}
           onError={() => setImageError(true)}
         />
       </View>

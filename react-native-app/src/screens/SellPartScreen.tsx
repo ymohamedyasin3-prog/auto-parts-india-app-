@@ -185,6 +185,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
   const [finalBrand, setCarBrand] = useState('');
   const [finalModel, setCarModel] = useState('');
   const [carVariant, setCarVariant] = useState('');
+  const [carYear, setCarYear] = useState('2023');
   const [finalCategory, setCategory] = useState('');
   const [finalPartName, setPartName] = useState('');
   const [condition, setCondition] = useState<'New' | 'Used'>('Used');
@@ -232,7 +233,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
 
   // Search & Selector Modals
   const [pickerModalType, setPickerModalType] = useState<
-    'brand' | 'model' | 'finalCategory' | 'finalPartName' | 'state' | 'district' | null
+    'brand' | 'model' | 'finalCategory' | 'finalPartName' | 'state' | 'district' | 'carYear' | 'carVariant' | null
   >(null);
   const [pickerSearchQuery, setPickerSearchQuery] = useState('');
 
@@ -597,6 +598,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
         carModel: resolvedModel,
         finalModel: resolvedModel,
         carVariant: carVariant.trim() || null,
+        carYear: carYear || '2023',
         category: resolvedCategory,
         finalCategory: resolvedCategory,
         partName: resolvedPartName,
@@ -762,6 +764,19 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
         return availableStates.filter((s) => s.toLowerCase().includes(q));
       case 'district':
         return availableDistricts.filter((d) => d.toLowerCase().includes(q));
+      case 'carYear': {
+        const years = Array.from({ length: 37 }, (_, i) => String(2026 - i));
+        return years.filter((y) => y.includes(q));
+      }
+      case 'carVariant': {
+        const variants = [
+          'Petrol', 'Diesel', 'CNG', 'Hybrid', 'Electric (EV)',
+          'Manual', 'Automatic',
+          'VXI', 'ZXI', 'SX', 'LXI', 'VDI', 'ZDI', 'EXi',
+          'VXi (O)', 'ZXi (O)', 'SX (O)', 'Base', 'Mid', 'Top End'
+        ];
+        return variants.filter((v) => v.toLowerCase().includes(q));
+      }
       default:
         return [];
     }
@@ -1069,25 +1084,26 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
           <View style={styles.twoFieldRow}>
             <View style={styles.halfField}>
               <Text style={styles.fieldLabel}>VARIANT</Text>
-              <RNTextInput
-                value={carVariant}
-                onChangeText={(val) => {
-                  setCarVariant(val);
-                  updateAutoTitle(finalBrand, finalModel, val, finalPartName);
-                }}
-                placeholder="Optional"
-                placeholderTextColor="#94A3B8"
-                style={styles.nativeTextInput}
-              />
+              <TouchableOpacity
+                onPress={() => setPickerModalType('carVariant')}
+                style={[styles.nativeTextInput, { justifyContent: 'center', backgroundColor: '#F8FAFC' }]}
+              >
+                <Text style={{ color: carVariant ? '#0F172A' : '#94A3B8', fontSize: 15, fontWeight: '500' }}>
+                  {carVariant || 'Select Variant'}
+                </Text>
+              </TouchableOpacity>
             </View>
 
             <View style={styles.halfField}>
               <Text style={styles.fieldLabel}>YEAR</Text>
-              <RNTextInput
-                placeholder="e.g. 2022"
-                placeholderTextColor="#94A3B8"
-                style={styles.nativeTextInput}
-              />
+              <TouchableOpacity
+                onPress={() => setPickerModalType('carYear')}
+                style={[styles.nativeTextInput, { justifyContent: 'center', backgroundColor: '#F8FAFC' }]}
+              >
+                <Text style={{ color: carYear ? '#0F172A' : '#94A3B8', fontSize: 15, fontWeight: '500' }}>
+                  {carYear || 'Select Year'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1329,6 +1345,8 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
                 {pickerModalType === 'finalPartName' && `Select Part in ${finalCategory}`}
                 {pickerModalType === 'state' && 'Select State'}
                 {pickerModalType === 'district' && `Select District in ${finalState}`}
+                {pickerModalType === 'carYear' && 'Select Manufacturing Year'}
+                {pickerModalType === 'carVariant' && 'Select Car Variant / Fuel'}
               </Text>
               <TouchableOpacity onPress={() => setPickerModalType(null)}>
                 <IconButton icon="close" size={20} iconColor="#0F172A" style={{ margin: 0 }} />
@@ -1364,7 +1382,9 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
                   (pickerModalType === 'finalCategory' && finalCategory === item) ||
                   (pickerModalType === 'finalPartName' && finalPartName === item) ||
                   (pickerModalType === 'state' && finalState === item) ||
-                  (pickerModalType === 'district' && finalDistrict === item);
+                  (pickerModalType === 'district' && finalDistrict === item) ||
+                  (pickerModalType === 'carYear' && carYear === item) ||
+                  (pickerModalType === 'carVariant' && carVariant === item);
 
                 return (
                   <TouchableOpacity
@@ -1376,6 +1396,15 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
                       else if (pickerModalType === 'finalPartName') handlePartNameSelect(item);
                       else if (pickerModalType === 'state') handleStateSelect(item);
                       else if (pickerModalType === 'district') handleDistrictSelect(item);
+                      else if (pickerModalType === 'carYear') {
+                        setCarYear(item);
+                        setPickerModalType(null);
+                      }
+                      else if (pickerModalType === 'carVariant') {
+                        setCarVariant(item);
+                        updateAutoTitle(finalBrand, finalModel, item, finalPartName);
+                        setPickerModalType(null);
+                      }
                     }}
                   >
                     <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected]}>

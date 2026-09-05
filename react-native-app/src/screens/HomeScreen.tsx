@@ -180,16 +180,6 @@ const AnimatedPartCard = React.memo(({
             <Text numberOfLines={2} style={styles.partTitle}>
               {item.title || `${item.carBrand || ''} ${item.carModel || ''} Part`}
             </Text>
-            <TouchableOpacity 
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} 
-              style={{ paddingLeft: 4, paddingTop: 1 }}
-              onPress={(e) => {
-                e.stopPropagation?.();
-                onOpenActionMenu?.(item);
-              }}
-            >
-              <Icon source="dots-vertical" size={16} color="#94A3B8" />
-            </TouchableOpacity>
           </View>
 
           <Text style={styles.price}>
@@ -389,8 +379,8 @@ export default function HomeScreen({ navigation, route, user }: any) {
     },
   ];
 
-  // Dynamic promo banners from Firestore or defaults
-  const promoBanners = banners.length > 0 ? banners : DEFAULT_PROMO_BANNERS;
+  // Dynamic promo banners from Firestore (no mock banners)
+  const promoBanners = banners;
   const bannerScrollRef = useRef<ScrollView>(null);
 
   // Auto rotate banner carousel
@@ -790,131 +780,133 @@ export default function HomeScreen({ navigation, route, user }: any) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0066FF']} />
         }
       >
-        {/* Responsive Promotional Banner Carousel with horizontal swipe & pagination dots */}
-        <View style={styles.bannerOuterContainer}>
-          <ScrollView
-            ref={bannerScrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(e) => {
-              const slideWidth = screenWidth - 32;
-              const idx = Math.round(e.nativeEvent.contentOffset.x / slideWidth);
-              if (idx >= 0 && idx < promoBanners.length && idx !== activeBannerIndex) {
-                setActiveBannerIndex(idx);
-              }
-            }}
-            contentContainerStyle={{ alignItems: 'center' }}
-          >
-            {promoBanners.slice(0, 4).map((curBanner, bIdx) => {
-              const targetCat = curBanner.targetLink || curBanner.targetCategory || curBanner.category || '';
-              const handleBannerPress = () => {
-                if (targetCat && targetCat !== 'All') {
-                  setSelectedCategory(targetCat);
-                } else {
-                  navigation.navigate('Search');
+        {/* Responsive Promotional Banner Carousel only if admin added real banners */}
+        {promoBanners.length > 0 && (
+          <View style={styles.bannerOuterContainer}>
+            <ScrollView
+              ref={bannerScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e) => {
+                const slideWidth = screenWidth - 32;
+                const idx = Math.round(e.nativeEvent.contentOffset.x / slideWidth);
+                if (idx >= 0 && idx < promoBanners.length && idx !== activeBannerIndex) {
+                  setActiveBannerIndex(idx);
                 }
-              };
+              }}
+              contentContainerStyle={{ alignItems: 'center' }}
+            >
+              {promoBanners.slice(0, 4).map((curBanner, bIdx) => {
+                const targetCat = curBanner.targetLink || curBanner.targetCategory || curBanner.category || '';
+                const handleBannerPress = () => {
+                  if (targetCat && targetCat !== 'All') {
+                    setSelectedCategory(targetCat);
+                  } else {
+                    navigation.navigate('Search');
+                  }
+                };
 
-              const badgeText = curBanner.badge || 'MEGA DEALS';
-              const headline1 = curBanner.headline1 || 'UP TO';
-              const discountText = curBanner.discount || '50% OFF';
-              const headline2 = curBanner.headline2 || 'ON GENUINE PARTS';
-              const features = Array.isArray(curBanner.features) && curBanner.features.length > 0
-                ? curBanner.features
-                : ['100% Genuine Parts', 'Best Price Guaranteed', 'Fast & Safe Delivery'];
-              const ctaText = curBanner.cta || 'SHOP NOW';
+                const badgeText = curBanner.badge || 'MEGA DEALS';
+                const headline1 = curBanner.headline1 || 'UP TO';
+                const discountText = curBanner.discount || '50% OFF';
+                const headline2 = curBanner.headline2 || 'ON GENUINE PARTS';
+                const features = Array.isArray(curBanner.features) && curBanner.features.length > 0
+                  ? curBanner.features
+                  : ['100% Genuine Parts', 'Best Price Guaranteed', 'Fast & Safe Delivery'];
+                const ctaText = curBanner.cta || 'SHOP NOW';
 
-              if (curBanner.imageUrl) {
+                if (curBanner.imageUrl) {
+                  return (
+                    <TouchableOpacity
+                      key={curBanner.id || `banner-${bIdx}`}
+                      activeOpacity={0.92}
+                      onPress={handleBannerPress}
+                      style={[styles.fullImageBannerCard, { width: screenWidth - 32 }]}
+                    >
+                      <Image
+                        source={{ uri: curBanner.imageUrl }}
+                        style={styles.fullBannerImage}
+                        resizeMode="cover"
+                      />
+                    </TouchableOpacity>
+                  );
+                }
+
                 return (
                   <TouchableOpacity
                     key={curBanner.id || `banner-${bIdx}`}
                     activeOpacity={0.92}
                     onPress={handleBannerPress}
-                    style={[styles.fullImageBannerCard, { width: screenWidth - 32 }]}
+                    style={[
+                      styles.megaDealBanner,
+                      { width: screenWidth - 32 },
+                      curBanner.backgroundColor ? { backgroundColor: curBanner.backgroundColor } : null
+                    ]}
                   >
-                    <Image
-                      source={{ uri: curBanner.imageUrl }}
-                      style={styles.fullBannerImage}
-                      resizeMode="cover"
+                    <View style={styles.bannerLeftContent}>
+                      <View style={styles.bannerBadgePill}>
+                        <Text style={styles.bannerBadgePillText}>{badgeText}</Text>
+                      </View>
+
+                      <Text style={styles.bannerSubHeadSmall}>{headline1}</Text>
+                      <Text style={styles.megaDealDiscount}>{discountText}</Text>
+                      <Text style={styles.megaDealHeadline}>{headline2}</Text>
+
+                      <View style={styles.bannerFeatureList}>
+                        {features.slice(0, 3).map((feat: string, fIdx: number) => (
+                          <View key={`feat-${fIdx}`} style={styles.bannerFeatureItem}>
+                            <Icon source="check-circle" size={12} color="#60A5FA" />
+                            <Text style={styles.bannerFeatureText} numberOfLines={1}>
+                              {feat}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+
+                      <View style={styles.shopNowBtn}>
+                        <Text style={styles.shopNowBtnText}>{ctaText}</Text>
+                        <Icon source="chevron-right" size={13} color="#051433" />
+                      </View>
+                    </View>
+
+                    {/* Right 3D Spare Parts Collage Graphic */}
+                    <View style={styles.bannerRightArt}>
+                      <BannerPartsCollage />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* 4 Carousel Pagination Dots matching reference */}
+            <View style={styles.dotsRow}>
+              {promoBanners.slice(0, 4).map((_, dotIdx) => {
+                const isActive = (activeBannerIndex % 4) === dotIdx;
+                return (
+                  <TouchableOpacity
+                    key={`banner-dot-${dotIdx}`}
+                    onPress={() => {
+                      setActiveBannerIndex(dotIdx);
+                      bannerScrollRef.current?.scrollTo({
+                        x: dotIdx * (screenWidth - 32),
+                        animated: true,
+                      });
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  >
+                    <View 
+                      style={[
+                        styles.dot, 
+                        isActive && styles.activeDot
+                      ]} 
                     />
                   </TouchableOpacity>
                 );
-              }
-
-              return (
-                <TouchableOpacity
-                  key={curBanner.id || `banner-${bIdx}`}
-                  activeOpacity={0.92}
-                  onPress={handleBannerPress}
-                  style={[
-                    styles.megaDealBanner,
-                    { width: screenWidth - 32 },
-                    curBanner.backgroundColor ? { backgroundColor: curBanner.backgroundColor } : null
-                  ]}
-                >
-                  <View style={styles.bannerLeftContent}>
-                    <View style={styles.bannerBadgePill}>
-                      <Text style={styles.bannerBadgePillText}>{badgeText}</Text>
-                    </View>
-
-                    <Text style={styles.bannerSubHeadSmall}>{headline1}</Text>
-                    <Text style={styles.megaDealDiscount}>{discountText}</Text>
-                    <Text style={styles.megaDealHeadline}>{headline2}</Text>
-
-                    <View style={styles.bannerFeatureList}>
-                      {features.slice(0, 3).map((feat: string, fIdx: number) => (
-                        <View key={`feat-${fIdx}`} style={styles.bannerFeatureItem}>
-                          <Icon source="check-circle" size={12} color="#60A5FA" />
-                          <Text style={styles.bannerFeatureText} numberOfLines={1}>
-                            {feat}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-
-                    <View style={styles.shopNowBtn}>
-                      <Text style={styles.shopNowBtnText}>{ctaText}</Text>
-                      <Icon source="chevron-right" size={13} color="#051433" />
-                    </View>
-                  </View>
-
-                  {/* Right 3D Spare Parts Collage Graphic */}
-                  <View style={styles.bannerRightArt}>
-                    <BannerPartsCollage />
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          {/* 4 Carousel Pagination Dots matching reference */}
-          <View style={styles.dotsRow}>
-            {promoBanners.slice(0, 4).map((_, dotIdx) => {
-              const isActive = (activeBannerIndex % 4) === dotIdx;
-              return (
-                <TouchableOpacity
-                  key={`banner-dot-${dotIdx}`}
-                  onPress={() => {
-                    setActiveBannerIndex(dotIdx);
-                    bannerScrollRef.current?.scrollTo({
-                      x: dotIdx * (screenWidth - 32),
-                      animated: true,
-                    });
-                  }}
-                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                >
-                  <View 
-                    style={[
-                      styles.dot, 
-                      isActive && styles.activeDot
-                    ]} 
-                  />
-                </TouchableOpacity>
-              );
-            })}
+              })}
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Modern Categories Explorer */}
         <View style={styles.sectionContainer}>
