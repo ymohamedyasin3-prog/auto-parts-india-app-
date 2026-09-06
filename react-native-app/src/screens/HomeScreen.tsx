@@ -504,6 +504,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
     // 2. Add or override with Firestore topCategories
     if (topCategories && topCategories.length > 0) {
       topCategories.forEach((c) => {
+        if (c.active === false || c.isActive === false) return; // Skip inactive categories
         const meta = getCategoryMeta(c);
         const rawName = c.name || c.title || c.id || '';
         const displayName = rawName.length > 0 ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : rawName;
@@ -513,14 +514,17 @@ export default function HomeScreen({ navigation, route, user }: any) {
           icon: c.icon || meta.icon,
           bg: meta.bg,
           color: meta.color,
-          imageUrl: c.imageUrl,
-          order: c.order ?? 0,
+          imageUrl: c.imageUrl || null,
+          order: typeof c.order === 'number' ? c.order : 0,
         };
         map.set(displayName.toLowerCase().trim(), item);
       });
     }
 
     const merged = Array.from(map.values());
+    // Sort items by order if specified
+    merged.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
     // Always append 'More' at the end
     merged.push({
       id: 'More',
@@ -958,7 +962,15 @@ export default function HomeScreen({ navigation, route, user }: any) {
                   }}
                 >
                   <View style={[styles.modernCatIconBox, { backgroundColor: cat.bg || '#EFF6FF' }, isSelected && styles.modernCatIconBoxSelected]}>
-                    <Icon source={cat.icon || 'car-cog'} size={24} color={isSelected ? '#FFFFFF' : (cat.color || '#0066FF')} />
+                    {cat.imageUrl ? (
+                      <Image
+                        source={{ uri: cat.imageUrl }}
+                        style={styles.modernCatImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Icon source={cat.icon || 'car-cog'} size={24} color={isSelected ? '#FFFFFF' : (cat.color || '#0066FF')} />
+                    )}
                   </View>
                   <Text style={[styles.modernCatName, isSelected && styles.modernCatNameSelected]} numberOfLines={1}>
                     {cat.name}
@@ -1747,6 +1759,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,
+    overflow: 'hidden',
+  },
+  modernCatImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
   },
   modernCatIconBoxSelected: {
     backgroundColor: '#0066FF',

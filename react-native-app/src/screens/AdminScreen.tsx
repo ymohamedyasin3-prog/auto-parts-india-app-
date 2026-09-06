@@ -625,10 +625,16 @@ export default function AdminScreen({ navigation }: any) {
       if (res.assets && res.assets[0]?.uri) {
         setUploadingTopCatImage(true);
         const uploadedUrl = await uploadImageToCloudinary(res.assets[0].uri, 'categories');
-        setTopCategoryImageUrl(uploadedUrl);
+        if (uploadedUrl) {
+          setTopCategoryImageUrl(uploadedUrl);
+          Alert.alert('Success', 'Category image uploaded successfully!');
+        } else {
+          Alert.alert('Upload Failed', 'Failed to upload category image. Please check your network.');
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[Admin] Top Category image pick error:', err);
+      Alert.alert('Error', err?.message || 'Could not pick or upload image.');
     } finally {
       setUploadingTopCatImage(false);
     }

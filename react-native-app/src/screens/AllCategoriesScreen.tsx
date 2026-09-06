@@ -9,6 +9,7 @@ import {
   TextInput,
   useWindowDimensions,
   Platform,
+  Image,
 } from 'react-native';
 import { Text, Icon } from 'react-native-paper';
 import { getFirebaseFirestore } from '../services/firebase';
@@ -21,6 +22,7 @@ export interface CategoryItem {
   color: string;
   description: string;
   popularParts: string[];
+  imageUrl?: string;
 }
 
 export const ALL_AUTOMOTIVE_CATEGORIES: CategoryItem[] = [
@@ -223,6 +225,7 @@ export default function AllCategoriesScreen({ navigation, route }: any) {
 
     // 3. Firestore topCategories
     firestoreCategories.forEach((c: any) => {
+      if (c.active === false || c.isActive === false) return;
       const rawName = c.name || c.title || c.id || '';
       const displayName = rawName.length > 0 ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : rawName;
       const item: CategoryItem = {
@@ -233,6 +236,7 @@ export default function AllCategoriesScreen({ navigation, route }: any) {
         color: c.color || '#0066FF',
         description: c.description || c.subtitle || 'Verified automotive spare parts & OEM components',
         popularParts: c.popularParts || ['OEM Part', 'Spare Part', 'Accessory'],
+        imageUrl: c.imageUrl || undefined,
       };
       map.set(displayName.toLowerCase().trim(), item);
     });
@@ -271,7 +275,15 @@ export default function AllCategoriesScreen({ navigation, route }: any) {
       >
         {/* Left Colorful Modern Icon Box */}
         <View style={[styles.iconBox, { backgroundColor: item.bg }]}>
-          <Icon source={item.icon} size={28} color={item.color} />
+          {item.imageUrl ? (
+            <Image
+              source={{ uri: item.imageUrl }}
+              style={styles.categoryImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <Icon source={item.icon} size={28} color={item.color} />
+          )}
         </View>
 
         {/* Center Content */}
@@ -459,6 +471,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.04)',
+    overflow: 'hidden',
+  },
+  categoryImage: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
   },
   cardInfo: {
     flex: 1,

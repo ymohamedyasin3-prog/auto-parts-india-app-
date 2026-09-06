@@ -20,138 +20,126 @@ const SIZE_MAP: Record<string, number> = {
   '2xl': 128,
 };
 
-function renderBrandVector(brandKey: string, size: number) {
-  const s = size;
-  const lower = (brandKey || "").toLowerCase();
+const BRAND_IMAGE_MAP: Record<string, string> = {
+  'maruti_suzuki': '/assets/brands/maruti_suzuki.png',
+  'maruti suzuki': '/assets/brands/maruti_suzuki.png',
+  'maruti': '/assets/brands/maruti_suzuki.png',
+  'suzuki': '/assets/brands/maruti_suzuki.png',
+  'hyundai': '/assets/brands/hyundai.png',
+  'tata': '/assets/brands/tata.png',
+  'mahindra': '/assets/brands/mahindra.png',
+  'toyota': '/assets/brands/toyota.png',
+  'honda': '/assets/brands/honda.png',
+  'kia': '/assets/brands/kia.png',
+  'volkswagen': '/assets/brands/volkswagen.png',
+  'vw': '/assets/brands/volkswagen.png',
+  'skoda': '/assets/brands/skoda.svg',
+  'renault': '/assets/brands/renault.svg',
+  'nissan': '/assets/brands/nissan.svg',
+  'ford': '/assets/brands/ford.svg',
+  'bmw': '/assets/brands/bmw.svg',
+  'mercedes': '/assets/brands/mercedes.svg',
+  'benz': '/assets/brands/mercedes.svg',
+  'audi': '/assets/brands/audi.svg',
+  'mg': '/assets/brands/mg.svg',
+};
 
-  if (lower.includes('maruti') || lower.includes('suzuki')) {
-    return (
-      <svg width={s} height={s} viewBox="0 0 200 200" className="select-none">
-        <circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#E11D48" strokeWidth="4" />
-        <path d="M 68 55 C 90 45, 135 55, 125 78 C 115 100, 75 95, 85 125 C 95 145, 135 135, 142 120" fill="none" stroke="#E11D48" strokeWidth="16" strokeLinecap="round" />
-        <path d="M 68 55 C 90 45, 135 55, 125 78 C 115 100, 75 95, 85 125 C 95 145, 135 135, 142 120" fill="none" stroke="#FFFFFF" strokeWidth="6" strokeLinecap="round" />
-        <text x="100" y="165" fontFamily="sans-serif" fontWeight="900" fontSize="14" fill="#E11D48" textAnchor="middle" letterSpacing="3">MARUTI SUZUKI</text>
-      </svg>
-    );
+const BRAND_CDN_FALLBACKS: Record<string, string> = {
+  'maruti_suzuki': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Suzuki_logo_2021.svg/600px-Suzuki_logo_2021.svg.png',
+  'maruti suzuki': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Suzuki_logo_2021.svg/600px-Suzuki_logo_2021.svg.png',
+  'maruti': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Suzuki_logo_2021.svg/600px-Suzuki_logo_2021.svg.png',
+  'suzuki': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Suzuki_logo_2021.svg/600px-Suzuki_logo_2021.svg.png',
+  'hyundai': 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Hyundai_Motor_Company_logo.svg/600px-Hyundai_Motor_Company_logo.svg.png',
+  'tata': 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Tata_logo.svg/600px-Tata_logo.svg.png',
+  'mahindra': 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Mahindra_Rise_logo.svg/600px-Mahindra_Rise_logo.svg.png',
+  'toyota': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Toyota_logo.svg/600px-Toyota_logo.svg.png',
+  'honda': 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Honda_Logo.svg/600px-Honda_Logo.svg.png',
+  'kia': 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/KIA_logo2021.svg/600px-KIA_logo2021.svg.png',
+  'volkswagen': 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Volkswagen_logo_2019.svg/600px-Volkswagen_logo_2019.svg.png',
+  'vw': 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Volkswagen_logo_2019.svg/600px-Volkswagen_logo_2019.svg.png',
+  'skoda': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ae/Skoda_Auto_logo_%282022%29.svg/600px-Skoda_Auto_logo_%282022%29.svg.png',
+  'renault': 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/Renault_2021.svg/600px-Renault_2021.svg.png',
+  'nissan': 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Nissan_2020_logo.svg/600px-Nissan_2020_logo.svg.png',
+  'ford': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Ford_Motor_Company_Logo.svg/600px-Ford_Motor_Company_Logo.svg.png',
+  'bmw': 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/BMW.svg/600px-BMW.svg.png',
+  'mercedes': 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Mercedes-Logo.svg/600px-Mercedes-Logo.svg.png',
+  'benz': 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Mercedes-Logo.svg/600px-Mercedes-Logo.svg.png',
+  'audi': 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/Audi-Logo_2016.svg/600px-Audi-Logo_2016.svg.png',
+  'mg': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/MG_Motor_logo.svg/600px-MG_Motor_logo.svg.png',
+  'jeep': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Jeep_logo.svg/600px-Jeep_logo.svg.png',
+  'chevrolet': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Chevrolet-logo.png/600px-Chevrolet-logo.png',
+  'datsun': 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/Datsun_logo.svg/600px-Datsun_logo.svg.png',
+  'fiat': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/FIAT_logo.svg/600px-FIAT_logo.svg.png',
+  'force': 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Force_Motors_logo.svg/600px-Force_Motors_logo.svg.png',
+  'jaguar': 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Jaguar_2021_logo.svg/600px-Jaguar_2021_logo.svg.png',
+  'landrover': 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Land_Rover_logo.svg/600px-Land_Rover_logo.svg.png',
+  'volvo': 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/Volvo-Logo.svg/600px-Volvo-Logo.svg.png',
+  'porsche': 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Porsche_logo.png/600px-Porsche_logo.png'
+};
+
+function CarBrandImage({ brandKey, size }: { brandKey: string; size: number }) {
+  const lower = (brandKey || "").toLowerCase().trim();
+  const cleanKey = lower.replace(/[^a-z0-9]/g, '');
+
+  let matchedSrc: string | null = null;
+  let fallbackSrc: string | null = null;
+
+  for (const k of Object.keys(BRAND_IMAGE_MAP)) {
+    if (lower.includes(k) || cleanKey.includes(k.replace(/[^a-z0-9]/g, ''))) {
+      matchedSrc = BRAND_IMAGE_MAP[k];
+      fallbackSrc = BRAND_CDN_FALLBACKS[k] || null;
+      break;
+    }
   }
-  if (lower.includes('hyundai')) {
-    return (
-      <svg width={s} height={s} viewBox="0 0 200 200" className="select-none">
-        <circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#2563EB" strokeWidth="4" />
-        <ellipse cx="100" cy="100" rx="76" ry="46" fill="none" stroke="#2563EB" strokeWidth="8" transform="rotate(-15 100 100)" />
-        <path d="M 75 70 L 85 130 M 125 70 L 115 130 M 78 100 L 122 100" stroke="#FFFFFF" strokeWidth="12" strokeLinecap="round" />
-        <text x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="15" fill="#38BDF8" textAnchor="middle" letterSpacing="3">HYUNDAI</text>
-      </svg>
-    );
+
+  if (!matchedSrc) {
+    for (const k of Object.keys(BRAND_CDN_FALLBACKS)) {
+      if (lower.includes(k) || cleanKey.includes(k.replace(/[^a-z0-9]/g, ''))) {
+        matchedSrc = BRAND_CDN_FALLBACKS[k];
+        break;
+      }
+    }
   }
-  if (lower.includes('tata')) {
+
+  const [currentSrc, setCurrentSrc] = React.useState<string | null>(matchedSrc);
+  const [hasError, setHasError] = React.useState(false);
+
+  React.useEffect(() => {
+    setCurrentSrc(matchedSrc);
+    setHasError(false);
+  }, [matchedSrc]);
+
+  if (!currentSrc || hasError) {
+    const code = (brandKey || "CAR").substring(0, 3).toUpperCase();
     return (
-      <svg width={s} height={s} viewBox="0 0 200 200" className="select-none">
-        <circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#0284C7" strokeWidth="4" />
-        <path d="M 60 110 C 80 135, 120 135, 140 110 C 120 85, 80 85, 60 110 Z" fill="#38BDF8" />
-        <text x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="18" fill="#FFFFFF" textAnchor="middle" letterSpacing="4">TATA</text>
-      </svg>
-    );
-  }
-  if (lower.includes('mahindra')) {
-    return (
-      <svg width={s} height={s} viewBox="0 0 200 200" className="select-none">
-        <circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#DC2626" strokeWidth="4" />
-        <path d="M 65 135 L 100 70 L 135 135 Z" fill="none" stroke="#DC2626" strokeWidth="14" strokeLinejoin="round" />
-        <path d="M 65 135 L 100 70 L 135 135 Z" fill="none" stroke="#FFFFFF" strokeWidth="4" strokeLinejoin="round" />
-        <text x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="14" fill="#DC2626" textAnchor="middle" letterSpacing="3">MAHINDRA</text>
-      </svg>
-    );
-  }
-  if (lower.includes('toyota')) {
-    return (
-      <svg width={s} height={s} viewBox="0 0 200 200" className="select-none">
-        <circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#EF4444" strokeWidth="4" />
-        <ellipse cx="100" cy="100" rx="65" ry="40" fill="none" stroke="#FFFFFF" strokeWidth="6" />
-        <ellipse cx="100" cy="90" rx="35" ry="25" fill="none" stroke="#FFFFFF" strokeWidth="5" />
-        <text x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="16" fill="#EF4444" textAnchor="middle" letterSpacing="3">TOYOTA</text>
-      </svg>
-    );
-  }
-  if (lower.includes('honda')) {
-    return (
-      <svg width={s} height={s} viewBox="0 0 200 200" className="select-none">
-        <circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#EF4444" strokeWidth="4" />
-        <path d="M 75 60 L 75 140 M 125 60 L 125 140 M 75 100 L 125 100" stroke="#FFFFFF" strokeWidth="14" strokeLinecap="round" />
-        <text x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="16" fill="#EF4444" textAnchor="middle" letterSpacing="3">HONDA</text>
-      </svg>
-    );
-  }
-  if (lower.includes('kia')) {
-    return (
-      <svg width={s} height={s} viewBox="0 0 200 200" className="select-none">
-        <circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#38BDF8" strokeWidth="4" />
-        <text x="100" y="112" fontFamily="sans-serif" fontWeight="900" fontSize="48" fill="#FFFFFF" textAnchor="middle" letterSpacing="2">KIA</text>
-        <text x="100" y="152" fontFamily="sans-serif" fontWeight="700" fontSize="12" fill="#38BDF8" textAnchor="middle" letterSpacing="3">MOVEMENT</text>
-      </svg>
-    );
-  }
-  if (lower.includes('volkswagen') || lower.includes('vw')) {
-    return (
-      <svg width={s} height={s} viewBox="0 0 200 200" className="select-none">
-        <circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#3B82F6" strokeWidth="4" />
-        <circle cx="100" cy="100" r="68" fill="none" stroke="#3B82F6" strokeWidth="6" />
-        <path d="M 68 75 L 85 125 L 100 95 L 115 125 L 132 75 M 62 105 L 138 105" stroke="#FFFFFF" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
-        <text x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="14" fill="#60A5FA" textAnchor="middle" letterSpacing="3">VOLKSWAGEN</text>
-      </svg>
-    );
-  }
-  if (lower.includes('skoda')) {
-    return (
-      <svg width={s} height={s} viewBox="0 0 200 200" className="select-none">
-        <circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#059669" strokeWidth="4" />
-        <circle cx="100" cy="100" r="70" fill="none" stroke="#059669" strokeWidth="6" />
-        <text x="100" y="110" fontFamily="sans-serif" fontWeight="900" fontSize="26" fill="#10B981" textAnchor="middle" letterSpacing="2">SKODA</text>
-        <text x="100" y="150" fontFamily="sans-serif" fontWeight="700" fontSize="12" fill="#94A3B8" textAnchor="middle" letterSpacing="2">AUTO</text>
-      </svg>
-    );
-  }
-  if (lower.includes('bmw')) {
-    return (
-      <svg width={s} height={s} viewBox="0 0 200 200" className="select-none">
-        <circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#FFFFFF" strokeWidth="5" />
-        <circle cx="100" cy="100" r="74" fill="#1E293B" stroke="#38BDF8" strokeWidth="4" />
-        <path d="M 100 26 A 74 74 0 0 1 174 100 L 100 100 Z" fill="#3B82F6" />
-        <path d="M 100 174 A 74 74 0 0 1 26 100 L 100 100 Z" fill="#3B82F6" />
-        <text x="100" y="70" fontFamily="sans-serif" fontWeight="900" fontSize="14" fill="#FFFFFF" textAnchor="middle" letterSpacing="5">BMW</text>
-      </svg>
-    );
-  }
-  if (lower.includes('mercedes') || lower.includes('benz')) {
-    return (
-      <svg width={s} height={s} viewBox="0 0 200 200" className="select-none">
-        <circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#CBD5E1" strokeWidth="5" />
-        <path d="M 100 40 L 100 100 M 100 100 L 145 130 M 100 100 L 55 130" stroke="#FFFFFF" strokeWidth="10" strokeLinecap="round" />
-        <text x="100" y="165" fontFamily="sans-serif" fontWeight="900" fontSize="13" fill="#E2E8F0" textAnchor="middle" letterSpacing="2">MERCEDES</text>
-      </svg>
-    );
-  }
-  if (lower.includes('audi')) {
-    return (
-      <svg width={s} height={s} viewBox="0 0 200 200" className="select-none">
-        <circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#94A3B8" strokeWidth="4" />
-        <circle cx="70" cy="95" r="22" fill="none" stroke="#FFFFFF" strokeWidth="8" />
-        <circle cx="90" cy="95" r="22" fill="none" stroke="#FFFFFF" strokeWidth="8" />
-        <circle cx="110" cy="95" r="22" fill="none" stroke="#FFFFFF" strokeWidth="8" />
-        <circle cx="130" cy="95" r="22" fill="none" stroke="#FFFFFF" strokeWidth="8" />
-        <text x="100" y="160" fontFamily="sans-serif" fontWeight="900" fontSize="18" fill="#FFFFFF" textAnchor="middle" letterSpacing="5">AUDI</text>
-      </svg>
+      <div 
+        className="flex items-center justify-center rounded-xl bg-slate-900 border border-sky-500/30 text-sky-400 font-black text-xs select-none shadow-xs"
+        style={{ width: size, height: size }}
+      >
+        {code}
+      </div>
     );
   }
 
-  const code = (brandKey || "CAR").substring(0, 3).toUpperCase();
-  const subText = (brandKey || "OEM").toUpperCase();
   return (
-    <svg width={s} height={s} viewBox="0 0 200 200" className="select-none">
-      <circle cx="100" cy="100" r="92" fill="#0B132B" stroke="#38BDF8" strokeWidth="5" />
-      <text x="100" y="110" fontFamily="sans-serif" fontWeight="900" fontSize="42" fill="#FFFFFF" textAnchor="middle" letterSpacing="2">{code}</text>
-      <text x="100" y="148" fontFamily="sans-serif" fontWeight="700" fontSize="12" fill="#94A3B8" textAnchor="middle" letterSpacing="2">{subText}</text>
-    </svg>
+    <img
+      src={currentSrc}
+      alt={brandKey}
+      onError={() => {
+        if (fallbackSrc && currentSrc !== fallbackSrc) {
+          setCurrentSrc(fallbackSrc);
+        } else {
+          setHasError(true);
+        }
+      }}
+      style={{
+        width: size,
+        height: size,
+        objectFit: 'contain',
+      }}
+      className="select-none pointer-events-none p-0.5 max-w-full max-h-full"
+      draggable={false}
+    />
   );
 }
 
@@ -160,10 +148,7 @@ export function BrandLogo({
   brand = '', 
   size = 32, 
   className = '', 
-  active,
-  variant = 'full',
-  theme = 'dark',
-  showTagline = true 
+  variant = 'full'
 }: BrandLogoProps) {
   const numericSize = typeof size === 'number' 
     ? size 
@@ -175,7 +160,7 @@ export function BrandLogo({
   if (brandKey && brandKey !== 'all' && brandKey !== 'all brands') {
     return (
       <div className={`flex items-center justify-center shrink-0 ${className}`} style={{ width: safeSize, height: safeSize }}>
-        {renderBrandVector(brandKey, safeSize)}
+        <CarBrandImage brandKey={brandKey} size={safeSize} />
       </div>
     );
   }
@@ -228,3 +213,4 @@ export function GearSpeedLogoIcon({ size = 48 }: { size?: number }) {
 }
 
 export default BrandLogo;
+
