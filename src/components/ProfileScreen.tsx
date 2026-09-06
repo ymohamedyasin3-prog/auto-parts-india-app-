@@ -45,7 +45,8 @@ import {
   Users,
   Package,
   Plus,
-  Calendar
+  Calendar,
+  Eye
 } from "lucide-react";
 import { User, SparePart, AppVersionConfig } from "../types";
 import BrandLogo from "./BrandLogo";
@@ -1532,6 +1533,10 @@ export default function ProfileScreen({
                             <span className="text-xs font-extrabold text-slate-900 font-mono">
                               {formatPrice(part.price)}
                             </span>
+                            <div className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                              <Eye size={12} />
+                              <span>{(part as any).views || (part as any).viewCount || 0} Views</span>
+                            </div>
                           </div>
                         </div>
                       </div>

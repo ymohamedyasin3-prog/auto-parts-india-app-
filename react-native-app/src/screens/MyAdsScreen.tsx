@@ -483,6 +483,14 @@ export default function MyAdsScreen({ navigation, user: initialUser }: any) {
               </View>
               <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
             </View>
+
+            {/* Views Metric Badge (Visible only to seller in My Ads) */}
+            <View style={styles.adMetricsRow}>
+              <View style={styles.viewsBadge}>
+                <Icon source="eye-outline" size={13} color="#0066FF" />
+                <Text style={styles.viewsBadgeText}>{item.views || item.viewCount || 0} Views</Text>
+              </View>
+            </View>
           </View>
         </TouchableOpacity>
 
@@ -1029,6 +1037,27 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#94A3B8',
     fontWeight: '500',
+  },
+  adMetricsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  viewsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+  },
+  viewsBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0066FF',
   },
   cardActionsToolbar: {
     flexDirection: 'row',
