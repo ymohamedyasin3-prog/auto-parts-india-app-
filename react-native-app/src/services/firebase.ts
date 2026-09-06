@@ -26,15 +26,36 @@ const authListeners = new Set<(user: any) => void>();
 AsyncStorage.getItem('@autoparts_current_user').then((val) => {
   if (val) {
     try {
-      cachedAuthUser = JSON.parse(val);
-      authListeners.forEach((cb) => {
-        try { cb(cachedAuthUser); } catch (_) {}
-      });
+      const parsed = JSON.parse(val);
+      if (parsed) {
+        parsed.updateProfile = async (updates: any) => {
+          if (updates.displayName) parsed.displayName = updates.displayName;
+          if (updates.photoURL) {
+            parsed.photoURL = updates.photoURL;
+            parsed.profilePhoto = updates.photoURL;
+          }
+          await setCurrentAuthUser({ ...parsed });
+        };
+        cachedAuthUser = parsed;
+        authListeners.forEach((cb) => {
+          try { cb(cachedAuthUser); } catch (_) {}
+        });
+      }
     } catch (_) {}
   }
 }).catch(() => {});
 
 export async function setCurrentAuthUser(user: any) {
+  if (user) {
+    user.updateProfile = async (updates: { displayName?: string; photoURL?: string }) => {
+      if (updates.displayName) user.displayName = updates.displayName;
+      if (updates.photoURL) {
+        user.photoURL = updates.photoURL;
+        user.profilePhoto = updates.photoURL;
+      }
+      await setCurrentAuthUser({ ...user });
+    };
+  }
   cachedAuthUser = user;
   try {
     if (user) {
@@ -224,6 +245,7 @@ const firestoreBaseUrl = `https://firestore.googleapis.com/v1/projects/${FIREBAS
 // In-memory local cache synced with Cloud Firestore
 const cloudCache: Record<string, Record<string, any>> = {};
 const activeListeners: Record<string, Set<(snapshot: any) => void>> = {};
+const activeDocListeners: Record<string, Set<(docSnap: any) => void>> = {};
 
 function notifyLocalSubscribers(collPath: string) {
   const listeners = activeListeners[collPath];
@@ -245,6 +267,20 @@ function notifyLocalSubscribers(collPath: string) {
   };
   listeners.forEach((cb) => {
     try { cb(snapshot); } catch (_) {}
+  });
+}
+
+function notifyLocalDocSubscribers(collPath: string, docId: string, data: any) {
+  const fullPath = `${normalizeCollectionPath(collPath)}/${docId}`;
+  const listeners = activeDocListeners[fullPath];
+  if (!listeners || listeners.size === 0) return;
+  const docSnap = {
+    id: docId,
+    data: () => (data ? { ...data } : null),
+    exists: Boolean(data),
+  };
+  listeners.forEach((cb) => {
+    try { cb(docSnap); } catch (_) {}
   });
 }
 
@@ -348,6 +384,7 @@ async function writeCloudDoc(collPath: string, docId: string, data: any, isMerge
     const merged = isMerge ? { ...existing, ...data, id: docId } : { id: docId, ...data };
     cloudCache[collPath][docId] = merged;
     notifyLocalSubscribers(collPath);
+    notifyLocalDocSubscribers(collPath, docId, merged);
 
     try {
       await AsyncStorage.setItem(STORAGE_KEY_PREFIX + collPath, JSON.stringify(cloudCache[collPath]));
@@ -402,6 +439,7 @@ async function deleteCloudDoc(collPath: string, docId: string): Promise<void> {
       delete cloudCache[collPath][docId];
     }
     notifyLocalSubscribers(collPath);
+    notifyLocalDocSubscribers(collPath, docId, null);
     try {
       await AsyncStorage.setItem(STORAGE_KEY_PREFIX + collPath, JSON.stringify(cloudCache[collPath]));
     } catch (_) {}
@@ -428,11 +466,12 @@ async function deleteCloudDoc(collPath: string, docId: string): Promise<void> {
 }
 
 // Pre-load from AsyncStorage cache on boot
-['spareParts', 'products/listings/items', 'users', 'chats', 'favorites', 'follows'].forEach((coll) => {
+['spareParts', 'products/listings/items', 'users', 'chats', 'favorites', 'follows', 'banners', 'topCategories', 'carBrands', 'announcements'].forEach((coll) => {
   AsyncStorage.getItem(STORAGE_KEY_PREFIX + coll).then((val) => {
     if (val) {
       try {
         cloudCache[coll] = JSON.parse(val);
+        notifyLocalSubscribers(coll);
       } catch (_) {}
     }
   }).catch(() => {});
@@ -532,10 +571,40 @@ function createRealFirestoreQuery(collectionPath: string) {
 
       activeListeners[collectionPath].add(subscriber);
 
-      // Trigger initial cloud fetch
+      // 1. Immediately emit from in-memory cache or AsyncStorage so UI is populated instantly with zero lag
+      const emitCurrent = () => {
+        const cached = Object.values(cloudCache[collectionPath] || {});
+        subscriber({
+          docs: cached.map((i) => ({ id: i.id, data: () => ({ ...i }), exists: true })),
+          empty: cached.length === 0,
+          size: cached.length,
+          forEach: (cb: (d: any) => void) => {
+            cached.forEach((item) => cb({ id: item.id, data: () => ({ ...item }), exists: true }));
+          },
+        });
+      };
+
+      emitCurrent();
+
+      // If in-memory was empty, attempt immediate AsyncStorage load
+      if (!cloudCache[collectionPath] || Object.keys(cloudCache[collectionPath]).length === 0) {
+        AsyncStorage.getItem(STORAGE_KEY_PREFIX + collectionPath).then((val) => {
+          if (val) {
+            try {
+              cloudCache[collectionPath] = JSON.parse(val);
+              emitCurrent();
+            } catch (_) {}
+          }
+        }).catch(() => {});
+      }
+
+      // 2. Trigger cloud fetch
       fetchCloudCollection(collectionPath).then((items) => {
         subscriber({
           docs: items.map((i) => ({ id: i.id, data: () => ({ ...i }), exists: true })),
+          empty: items.length === 0,
+          size: items.length,
+          forEach: (cb: (doc: any) => void) => items.forEach(cb),
         });
       });
 
@@ -588,6 +657,21 @@ function createRealFirestoreQuery(collectionPath: string) {
           await deleteCloudDoc(collectionPath, docId);
         },
         onSnapshot: (onNext: (docSnap: any) => void, _onError?: (err: any) => void) => {
+          const fullPath = `${normalizeCollectionPath(collectionPath)}/${docId}`;
+          if (!activeDocListeners[fullPath]) {
+            activeDocListeners[fullPath] = new Set();
+          }
+          activeDocListeners[fullPath].add(onNext);
+
+          // 1. Immediately notify with in-memory cached doc if available
+          const cached = cloudCache[collectionPath]?.[docId];
+          if (cached) {
+            try {
+              onNext({ id: docId, data: () => ({ ...cached }), exists: true });
+            } catch (_) {}
+          }
+
+          // 2. Fetch from cloud REST to ensure fresh data
           const fetchAndNotify = async () => {
             try {
               const res = await fetch(`${firestoreBaseUrl}/${docPath}?key=${FIREBASE_API_KEY}`);
@@ -595,6 +679,8 @@ function createRealFirestoreQuery(collectionPath: string) {
                 const data = await res.json();
                 const decoded = decodeFirestoreDoc(data);
                 if (decoded) {
+                  if (!cloudCache[collectionPath]) cloudCache[collectionPath] = {};
+                  cloudCache[collectionPath][docId] = decoded;
                   onNext({ id: docId, data: () => ({ ...decoded }), exists: true });
                   return;
                 }
@@ -606,11 +692,14 @@ function createRealFirestoreQuery(collectionPath: string) {
                 return;
               }
             } catch (_) {}
-            const cached = cloudCache[collectionPath]?.[docId];
-            onNext({ id: docId, data: () => cached ? { ...cached } : null, exists: Boolean(cached) });
+            const fallbackCached = cloudCache[collectionPath]?.[docId];
+            onNext({ id: docId, data: () => fallbackCached ? { ...fallbackCached } : null, exists: Boolean(fallbackCached) });
           };
           fetchAndNotify();
-          return () => {};
+
+          return () => {
+            activeDocListeners[fullPath]?.delete(onNext);
+          };
         },
       };
     },
@@ -639,6 +728,25 @@ export function getFirebaseFirestore(): any {
         return createRealFirestoreQuery(coll).doc(docId);
       }
       return createRealFirestoreQuery(path).doc('default');
+    },
+    batch: () => {
+      const ops: (() => Promise<any>)[] = [];
+      return {
+        set: (docRef: any, data: any, options?: any) => {
+          ops.push(() => docRef.set(data, options));
+        },
+        update: (docRef: any, data: any) => {
+          ops.push(() => docRef.update(data));
+        },
+        delete: (docRef: any) => {
+          ops.push(() => docRef.delete());
+        },
+        commit: async () => {
+          for (const op of ops) {
+            await op();
+          }
+        },
+      };
     },
   };
 }

@@ -45,6 +45,11 @@ import { matchesCategoryFilter } from '../utils/categoryMatcher';
 import { Category3DIcon } from '../components/Category3DIcon';
 import { BannerPartsCollage } from '../components/BannerPartsCollage';
 import { subscribeToUnreadNotificationCount } from '../services/notifications';
+import { 
+  initializeTaxonomyDefaults, 
+  INITIAL_DEFAULT_CATEGORIES, 
+  INITIAL_DEFAULT_BRANDS 
+} from '../services/taxonomyDefaults';
 
 // City coordinates for real distance calculations
 const CITY_COORDINATES: Record<string, { lat: number; lng: number }> = {
@@ -216,6 +221,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
   const [parts, setParts] = useState<any[]>([]);
   const [banners, setBanners] = useState<any[]>([]);
   const [topCategories, setTopCategories] = useState<any[]>([]);
+  const [carBrands, setCarBrands] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -239,6 +245,50 @@ export default function HomeScreen({ navigation, route, user }: any) {
       setSelectedCategory(route.params.selectedCategory);
     }
   }, [route?.params?.selectedCategory]);
+
+  // Instant cache load on boot so categories, brands, and banners never disappear when reopening the app
+  useEffect(() => {
+    initializeTaxonomyDefaults().catch((e) => console.warn('Init taxonomy defaults notice:', e));
+
+    AsyncStorage.getItem('@autoparts_firestore_topCategories').then((val) => {
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          const list = Object.values(parsed);
+          if (list.length > 0) {
+            list.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
+            setTopCategories(list);
+          }
+        } catch (_) {}
+      }
+    }).catch(() => {});
+
+    AsyncStorage.getItem('@autoparts_firestore_carBrands').then((val) => {
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          const list = Object.values(parsed);
+          if (list.length > 0) {
+            list.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
+            setCarBrands(list);
+          }
+        } catch (_) {}
+      }
+    }).catch(() => {});
+
+    AsyncStorage.getItem('@autoparts_firestore_banners').then((val) => {
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          const list = Object.values(parsed);
+          if (list.length > 0) {
+            list.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
+            setBanners(list);
+          }
+        } catch (_) {}
+      }
+    }).catch(() => {});
+  }, []);
 
   // Load saved location
   useEffect(() => {
@@ -490,43 +540,56 @@ export default function HomeScreen({ navigation, route, user }: any) {
     return { icon: 'apps', bg: '#F1F5F9', color: '#475569' };
   };
 
-  // Dynamic category grid items combining defaults and Firestore topCategories without duplicates
+  // Dynamic category grid items derived strictly from Firestore topCategories so deletions immediately take effect
   const categoryGridItems = React.useMemo(() => {
-    const map = new Map<string, any>();
+    // 1. Always start with 'All Parts'
+    const items: any[] = [
+      {
+        id: 'All',
+        name: 'All Parts',
+        icon: 'car-multiple',
+        bg: '#EFF6FF',
+        color: '#0066FF',
+      },
+    ];
 
-    // 1. Add default categories first (except 'More')
-    DEFAULT_CATEGORY_GRID_ITEMS.forEach(item => {
-      if (item.id !== 'More') {
-        map.set(item.name.toLowerCase().trim(), item);
-      }
-    });
-
-    // 2. Add or override with Firestore topCategories
+    // 2. Use Firestore topCategories if loaded (so deleted categories stay deleted!)
     if (topCategories && topCategories.length > 0) {
-      topCategories.forEach((c) => {
-        if (c.active === false || c.isActive === false) return; // Skip inactive categories
-        const meta = getCategoryMeta(c);
-        const rawName = c.name || c.title || c.id || '';
-        const displayName = rawName.length > 0 ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : rawName;
-        const item = {
-          id: c.id || rawName,
-          name: displayName,
-          icon: c.icon || meta.icon,
-          bg: meta.bg,
-          color: meta.color,
-          imageUrl: c.imageUrl || null,
-          order: typeof c.order === 'number' ? c.order : 0,
-        };
-        map.set(displayName.toLowerCase().trim(), item);
+      const activeCats = topCategories
+        .filter((c) => c.active !== false && c.isActive !== false)
+        .map((c) => {
+          const meta = getCategoryMeta(c);
+          const rawName = c.name || c.title || c.id || '';
+          const displayName = rawName.length > 0 ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : rawName;
+          return {
+            id: c.id || rawName,
+            name: displayName,
+            icon: c.icon || meta.icon,
+            bg: c.bg || meta.bg,
+            color: c.color || meta.color,
+            imageUrl: c.imageUrl || null,
+            order: typeof c.order === 'number' ? c.order : 0,
+          };
+        });
+      activeCats.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      items.push(...activeCats);
+    } else {
+      // Smooth initial fallback before first load
+      INITIAL_DEFAULT_CATEGORIES.forEach((cat) => {
+        items.push({
+          id: cat.id,
+          name: cat.name,
+          icon: cat.icon,
+          bg: cat.bg,
+          color: cat.color,
+          imageUrl: cat.imageUrl || null,
+          order: cat.order,
+        });
       });
     }
 
-    const merged = Array.from(map.values());
-    // Sort items by order if specified
-    merged.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-    // Always append 'More' at the end
-    merged.push({
+    // 3. Always append 'More' (All Categories) at the end
+    items.push({
       id: 'More',
       name: 'All Categories',
       icon: 'apps',
@@ -535,28 +598,30 @@ export default function HomeScreen({ navigation, route, user }: any) {
       imageUrl: undefined,
     });
 
-    return merged;
+    return items;
   }, [topCategories]);
 
-  // Brand items for horizontal brand selector matching the reference image
-  const brandList = [
-    { id: 'maruti', name: 'Maruti Suzuki' },
-    { id: 'hyundai', name: 'Hyundai' },
-    { id: 'tata', name: 'Tata' },
-    { id: 'mahindra', name: 'Mahindra' },
-    { id: 'toyota', name: 'Toyota' },
-    { id: 'kia', name: 'Kia' },
-    { id: 'honda', name: 'Honda' },
-    { id: 'volkswagen', name: 'Volkswagen' },
-    { id: 'skoda', name: 'Skoda' },
-    { id: 'renault', name: 'Renault' },
-    { id: 'mg', name: 'MG' },
-    { id: 'nissan', name: 'Nissan' },
-    { id: 'ford', name: 'Ford' },
-    { id: 'bmw', name: 'BMW' },
-    { id: 'mercedes', name: 'Mercedes-Benz' },
-    { id: 'audi', name: 'Audi' },
-  ];
+  // Brand items for horizontal brand selector derived strictly from Firestore carBrands so deletions immediately take effect
+  const brandList = React.useMemo(() => {
+    if (carBrands && carBrands.length > 0) {
+      const activeBrands = carBrands.filter((b) => b.active !== false && b.isActive !== false);
+      const list = activeBrands.map((b) => ({
+        id: b.id || b.name,
+        name: b.name,
+        imageUrl: b.imageUrl || b.logoUrl || null,
+        order: typeof b.order === 'number' ? b.order : 0,
+      }));
+      list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      return list;
+    }
+    // Smooth initial fallback before first load
+    return INITIAL_DEFAULT_BRANDS.map((b) => ({
+      id: b.id,
+      name: b.name,
+      imageUrl: b.imageUrl || null,
+      order: b.order,
+    }));
+  }, [carBrands]);
 
   const popularCities = [
     'All India', 'Chennai', 'Coimbatore', 'Karur', 'Pallapatti', 
@@ -656,6 +721,24 @@ export default function HomeScreen({ navigation, route, user }: any) {
         console.warn('Could not listen to topCategories collection:', cCatch);
       }
 
+      // 4. Listen for Admin Car Brands (carBrands collection)
+      let unsubscribeBrands = () => {};
+      try {
+        const qBrands = db.collection('carBrands');
+        unsubscribeBrands = qBrands.onSnapshot((snapshot: any) => {
+          const bList: any[] = [];
+          snapshot.forEach((doc: any) => {
+            bList.push({ id: doc.id, ...doc.data() });
+          });
+          bList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          setCarBrands(bList);
+        }, (bErr: any) => {
+          console.warn('Notice from carBrands listener:', bErr);
+        });
+      } catch (bCatch) {
+        console.warn('Could not listen to carBrands collection:', bCatch);
+      }
+
     } catch (queryErr) {
       console.warn('Failed to query Firestore:', queryErr);
       setParts((current) => current.length > 0 ? current : INITIAL_SPARE_PARTS);
@@ -667,6 +750,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
       try { unsubscribeParts(); } catch (_) {}
       try { unsubscribeBanners(); } catch (_) {}
       try { unsubscribeCategories(); } catch (_) {}
+      try { unsubscribeBrands(); } catch (_) {}
     };
   }, []);
 
@@ -944,6 +1028,44 @@ export default function HomeScreen({ navigation, route, user }: any) {
             {categoryGridItems.map((cat) => {
               const isSelected = selectedCategory.toLowerCase() === cat.id.toLowerCase() || (cat.id === 'All' && selectedCategory === 'All');
               const isMore = cat.id === 'More';
+              const hasImage = Boolean(cat.imageUrl && typeof cat.imageUrl === 'string' && cat.imageUrl.trim().length > 0);
+
+              if (hasImage) {
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
+                    style={[
+                      styles.modernCatCoverCard,
+                      isSelected && styles.modernCatCoverCardSelected
+                    ]}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setSelectedCategory(isSelected && cat.id !== 'All' ? 'All' : cat.id);
+                    }}
+                  >
+                    <View style={styles.modernCatCoverImgBox}>
+                      <Image
+                        source={{ uri: cat.imageUrl }}
+                        style={styles.modernCatCoverImg}
+                        resizeMode="cover"
+                      />
+                      {isSelected && (
+                        <View style={styles.modernCatSelectedBadge}>
+                          <Icon source="check" size={11} color="#FFFFFF" />
+                        </View>
+                      )}
+                    </View>
+                    <View style={[styles.modernCatCoverLabelWrap, isSelected && styles.modernCatCoverLabelWrapSelected]}>
+                      <Text
+                        style={[styles.modernCatCoverText, isSelected && styles.modernCatCoverTextSelected]}
+                        numberOfLines={1}
+                      >
+                        {cat.name}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }
 
               return (
                 <TouchableOpacity
@@ -962,15 +1084,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
                   }}
                 >
                   <View style={[styles.modernCatIconBox, { backgroundColor: cat.bg || '#EFF6FF' }, isSelected && styles.modernCatIconBoxSelected]}>
-                    {cat.imageUrl ? (
-                      <Image
-                        source={{ uri: cat.imageUrl }}
-                        style={styles.modernCatImage}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <Icon source={cat.icon || 'car-cog'} size={24} color={isSelected ? '#FFFFFF' : (cat.color || '#0066FF')} />
-                    )}
+                    <Icon source={cat.icon || 'car-cog'} size={24} color={isSelected ? '#FFFFFF' : (cat.color || '#0066FF')} />
                   </View>
                   <Text style={[styles.modernCatName, isSelected && styles.modernCatNameSelected]} numberOfLines={1}>
                     {cat.name}
@@ -1019,7 +1133,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
                   }}
                 >
                   <View style={styles.modernBrandLogoWrapper}>
-                    <CarBrandBadge brand={b.name} size={42} />
+                    <CarBrandBadge brand={b.name} imageUrl={b.imageUrl} size={42} />
                   </View>
                   <Text 
                     style={[styles.modernBrandLabel, isBrandSelected && styles.modernBrandLabelSelected]} 
@@ -1785,6 +1899,71 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#0066FF',
     marginTop: 4,
+  },
+  modernCatCoverCard: {
+    width: 96,
+    height: 114,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  modernCatCoverCardSelected: {
+    borderColor: '#0066FF',
+    borderWidth: 2,
+    shadowColor: '#0066FF',
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  modernCatCoverImgBox: {
+    width: '100%',
+    height: 78,
+    backgroundColor: '#F8FAFC',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  modernCatCoverImg: {
+    width: '100%',
+    height: '100%',
+  },
+  modernCatSelectedBadge: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    backgroundColor: '#0066FF',
+    borderRadius: 10,
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modernCatCoverLabelWrap: {
+    height: 34,
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  modernCatCoverLabelWrapSelected: {
+    backgroundColor: '#EFF6FF',
+  },
+  modernCatCoverText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1E293B',
+    textAlign: 'center',
+  },
+  modernCatCoverTextSelected: {
+    color: '#0066FF',
+    fontWeight: '800',
   },
   modernBrandsScroll: {
     paddingHorizontal: 16,

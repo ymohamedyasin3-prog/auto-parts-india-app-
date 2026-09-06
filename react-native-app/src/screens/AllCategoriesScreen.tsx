@@ -198,51 +198,34 @@ export default function AllCategoriesScreen({ navigation, route }: any) {
   }, []);
 
   const combinedCategories = useMemo(() => {
-    const map = new Map<string, CategoryItem>();
+    // 1. If Firestore categories are loaded, they are the ONLY source of truth so deletions stay deleted!
+    if (firestoreCategories && firestoreCategories.length > 0) {
+      const list: CategoryItem[] = [];
+      firestoreCategories.forEach((c: any) => {
+        if (c.active === false || c.isActive === false) return;
+        const rawName = c.name || c.title || c.id || '';
+        const displayName = rawName.length > 0 ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : rawName;
+        list.push({
+          id: c.id || displayName,
+          name: displayName,
+          icon: c.icon || 'car-cog',
+          bg: c.bg || '#F0F9FF',
+          color: c.color || '#0066FF',
+          description: c.description || c.subtitle || 'Verified automotive spare parts & OEM components',
+          popularParts: c.popularParts || c.subcategories || ['OEM Part', 'Spare Part', 'Accessory'],
+          imageUrl: c.imageUrl || undefined,
+        });
+      });
+      return list;
+    }
 
-    // 1. Default categories
+    // 2. Fallback only if Firestore is not yet loaded
+    const map = new Map<string, CategoryItem>();
     ALL_AUTOMOTIVE_CATEGORIES.forEach(c => {
       map.set(c.name.toLowerCase().trim(), c);
     });
-
-    // 2. Passed categories from route.params
-    const passed = route?.params?.categories || [];
-    passed.forEach((c: any) => {
-      if (c.id === 'More' || c.name === 'All Categories') return;
-      const rawName = c.name || c.title || c.id || '';
-      const displayName = rawName.length > 0 ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : rawName;
-      const item: CategoryItem = {
-        id: c.id || displayName,
-        name: displayName,
-        icon: c.icon || 'car-cog',
-        bg: c.bg || '#F0F9FF',
-        color: c.color || '#0066FF',
-        description: c.description || c.subtitle || 'Verified automotive spare parts & OEM components',
-        popularParts: c.popularParts || ['OEM Part', 'Spare Part', 'Accessory'],
-      };
-      map.set(displayName.toLowerCase().trim(), item);
-    });
-
-    // 3. Firestore topCategories
-    firestoreCategories.forEach((c: any) => {
-      if (c.active === false || c.isActive === false) return;
-      const rawName = c.name || c.title || c.id || '';
-      const displayName = rawName.length > 0 ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : rawName;
-      const item: CategoryItem = {
-        id: c.id || displayName,
-        name: displayName,
-        icon: c.icon || 'car-cog',
-        bg: c.bg || '#F0F9FF',
-        color: c.color || '#0066FF',
-        description: c.description || c.subtitle || 'Verified automotive spare parts & OEM components',
-        popularParts: c.popularParts || ['OEM Part', 'Spare Part', 'Accessory'],
-        imageUrl: c.imageUrl || undefined,
-      };
-      map.set(displayName.toLowerCase().trim(), item);
-    });
-
     return Array.from(map.values());
-  }, [route?.params?.categories, firestoreCategories]);
+  }, [firestoreCategories]);
 
   // Filter categories based on search input
   const filteredCategories = useMemo(() => {
@@ -464,19 +447,19 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   iconBox: {
-    width: 52,
-    height: 52,
+    width: 60,
+    height: 60,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    borderColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
+    backgroundColor: '#F8FAFC',
   },
   categoryImage: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
+    width: '100%',
+    height: '100%',
   },
   cardInfo: {
     flex: 1,

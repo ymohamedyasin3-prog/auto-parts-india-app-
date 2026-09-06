@@ -21,17 +21,19 @@ import { AdminTaxonomyCMS } from '../components/AdminTaxonomyCMS';
 import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
 import { uploadImageToCloudinary } from '../services/cloudinary';
 import { promptImageSourceDialog } from '../services/imagePickerService';
+import { restoreDefaultCategories, restoreDefaultCarBrands } from '../services/taxonomyDefaults';
 
 const { width } = Dimensions.get('window');
 
 export default function AdminScreen({ navigation }: any) {
   // Navigation tabs
-  const [tab, setTab] = useState<'overview' | 'listings' | 'users' | 'banners' | 'topCategories' | 'taxonomy' | 'announcements' | 'version'>('overview');
+  const [tab, setTab] = useState<'overview' | 'listings' | 'users' | 'banners' | 'topCategories' | 'carBrands' | 'taxonomy' | 'announcements' | 'version'>('overview');
 
   // Core Data States
   const [listings, setListings] = useState<any[]>([]);
   const [banners, setBanners] = useState<any[]>([]);
   const [topCategories, setTopCategories] = useState<any[]>([]);
+  const [carBrands, setCarBrands] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,6 +78,18 @@ export default function AdminScreen({ navigation }: any) {
   const [topCategoryActive, setTopCategoryActive] = useState(true);
   const [savingTopCategory, setSavingTopCategory] = useState(false);
   const [uploadingTopCatImage, setUploadingTopCatImage] = useState(false);
+  const [seedingCategories, setSeedingCategories] = useState(false);
+
+  // Car Brands Management States
+  const [carBrandModalVisible, setCarBrandModalVisible] = useState(false);
+  const [editingCarBrand, setEditingCarBrand] = useState<any | null>(null);
+  const [carBrandName, setCarBrandName] = useState('');
+  const [carBrandImageUrl, setCarBrandImageUrl] = useState('');
+  const [carBrandOrder, setCarBrandOrder] = useState('0');
+  const [carBrandActive, setCarBrandActive] = useState(true);
+  const [savingCarBrand, setSavingCarBrand] = useState(false);
+  const [uploadingCarBrandImage, setUploadingCarBrandImage] = useState(false);
+  const [seedingCarBrands, setSeedingCarBrands] = useState(false);
 
   // Announcement Form State
   const [annTitle, setAnnTitle] = useState('');
@@ -192,6 +206,21 @@ export default function AdminScreen({ navigation }: any) {
         }
       );
 
+      // 2c. Listen to Car Brands
+      let unsubCarBrands = () => {};
+      const qCarBrands = db.collection('carBrands');
+      unsubCarBrands = qCarBrands.onSnapshot(
+        (snap: any) => {
+          const list: any[] = [];
+          snap.forEach((d: any) => list.push({ id: d.id, ...d.data() }));
+          list.sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+          setCarBrands(list);
+        },
+        (err: any) => {
+          console.warn('[Admin] CarBrands snapshot error:', err);
+        }
+      );
+
       // 3. Listen to Users
       const qUsers = db.collection('users');
       unsubUsers = qUsers.onSnapshot(
@@ -227,6 +256,8 @@ export default function AdminScreen({ navigation }: any) {
     return () => {
       try { unsubListings(); } catch (_) {}
       try { unsubBanners(); } catch (_) {}
+      try { unsubTopCategories(); } catch (_) {}
+      try { unsubCarBrands(); } catch (_) {}
       try { unsubUsers(); } catch (_) {}
       try { unsubAnnouncements(); } catch (_) {}
     };
@@ -700,6 +731,7 @@ export default function AdminScreen({ navigation }: any) {
         style: 'destructive',
         onPress: async () => {
           try {
+            setTopCategories((prev) => prev.filter((c) => c.id !== cat.id));
             const db = getFirebaseFirestore();
             if (!db) return;
             await db.collection('topCategories').doc(cat.id).delete();
@@ -710,6 +742,169 @@ export default function AdminScreen({ navigation }: any) {
         },
       },
     ]);
+  };
+
+  const handleSeedDefaultCategories = async () => {
+    Alert.alert(
+      'Preload / Restore Categories',
+      'This will populate the standard 8 automotive categories (Engine, Body & Frame, Electricals, Brakes, Suspension, Exhaust, Filters, AC). Proceed?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Restore Defaults',
+          onPress: async () => {
+            setSeedingCategories(true);
+            try {
+              await restoreDefaultCategories();
+              Alert.alert('Success', 'Default categories restored successfully!');
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to restore default categories.');
+            } finally {
+              setSeedingCategories(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // -------------------------------------------------------------
+  // Car Brands Actions
+  // -------------------------------------------------------------
+  const handleOpenAddCarBrand = () => {
+    setEditingCarBrand(null);
+    setCarBrandName('');
+    setCarBrandImageUrl('');
+    setCarBrandActive(true);
+    setCarBrandOrder(String(carBrands.length));
+    setCarBrandModalVisible(true);
+  };
+
+  const handleOpenEditCarBrand = (brand: any) => {
+    setEditingCarBrand(brand);
+    setCarBrandName(brand.name || '');
+    setCarBrandImageUrl(brand.imageUrl || brand.logoUrl || '');
+    setCarBrandActive(brand.active !== false);
+    setCarBrandOrder(String(typeof brand.order === 'number' ? brand.order : 0));
+    setCarBrandModalVisible(true);
+  };
+
+  const handlePickCarBrandImage = async () => {
+    try {
+      const res = await launchImageLibrary({ mediaType: 'photo', quality: 0.85 });
+      if (res.assets && res.assets[0]?.uri) {
+        setUploadingCarBrandImage(true);
+        const uploadedUrl = await uploadImageToCloudinary(res.assets[0].uri, 'brands');
+        if (uploadedUrl) {
+          setCarBrandImageUrl(uploadedUrl);
+          Alert.alert('Success', 'Brand logo uploaded successfully!');
+        } else {
+          Alert.alert('Upload Failed', 'Failed to upload brand logo. Please check network.');
+        }
+      }
+    } catch (err: any) {
+      console.warn('[Admin] Car brand image pick error:', err);
+      Alert.alert('Error', err?.message || 'Could not pick or upload image.');
+    } finally {
+      setUploadingCarBrandImage(false);
+    }
+  };
+
+  const handleSaveCarBrand = async () => {
+    if (!carBrandName.trim()) {
+      Alert.alert('Validation', 'Please enter a car brand name (e.g. Toyota, Tata, Maruti Suzuki).');
+      return;
+    }
+
+    setSavingCarBrand(true);
+    try {
+      const db = getFirebaseFirestore();
+      if (!db) return;
+
+      const payload = {
+        name: carBrandName.trim(),
+        imageUrl: carBrandImageUrl.trim(),
+        logoUrl: carBrandImageUrl.trim(),
+        active: carBrandActive,
+        order: parseInt(carBrandOrder, 10) || 0,
+        updatedAt: Date.now(),
+      };
+
+      if (editingCarBrand) {
+        await db.collection('carBrands').doc(editingCarBrand.id).update(payload);
+        Alert.alert('Success', 'Car Brand updated successfully!');
+      } else {
+        await db.collection('carBrands').add({
+          ...payload,
+          createdAt: Date.now(),
+        });
+        Alert.alert('Success', 'New Car Brand created successfully!');
+      }
+      setCarBrandModalVisible(false);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to save Car Brand.');
+    } finally {
+      setSavingCarBrand(false);
+    }
+  };
+
+  const handleToggleCarBrandActive = async (brand: any) => {
+    try {
+      const db = getFirebaseFirestore();
+      if (!db) return;
+      const newActive = brand.active === false;
+      await db.collection('carBrands').doc(brand.id).update({
+        active: newActive,
+        updatedAt: Date.now(),
+      });
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to toggle brand status.');
+    }
+  };
+
+  const handleDeleteCarBrand = (brand: any) => {
+    Alert.alert('Delete Brand', `Permanently delete "${brand.name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setCarBrands((prev) => prev.filter((b) => b.id !== brand.id));
+            const db = getFirebaseFirestore();
+            if (!db) return;
+            await db.collection('carBrands').doc(brand.id).delete();
+            Alert.alert('Deleted', 'Car Brand deleted successfully.');
+          } catch (err: any) {
+            Alert.alert('Error', err.message || 'Failed to delete car brand.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleSeedDefaultBrands = async () => {
+    Alert.alert(
+      'Preload / Restore Default Brands',
+      'This will populate standard Indian car brands (Maruti Suzuki, Hyundai, Tata, Mahindra, Toyota, Honda, Kia, etc.) so you can easily customize and upload their logos. Proceed?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Preload',
+          onPress: async () => {
+            setSeedingCarBrands(true);
+            try {
+              await restoreDefaultCarBrands();
+              Alert.alert('Success', 'Default car brands preloaded! You can now edit and upload custom logos for each.');
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to preload default brands.');
+            } finally {
+              setSeedingCarBrands(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   // -------------------------------------------------------------
@@ -1122,6 +1317,7 @@ export default function AdminScreen({ navigation }: any) {
             { id: 'users', label: `Users (${users.length})`, icon: 'account-group-outline' },
             { id: 'banners', label: `Banners (${banners.length})`, icon: 'image-multiple-outline' },
             { id: 'topCategories', label: `Top Categories (${topCategories.length})`, icon: 'grid-large' },
+            { id: 'carBrands', label: `Car Brands (${carBrands.length})`, icon: 'car-estate' },
             { id: 'taxonomy', label: 'Taxonomy CMS', icon: 'shape-outline' },
             { id: 'announcements', label: `Broadcast (${announcements.length})`, icon: 'bullhorn-outline' },
             { id: 'version', label: 'App Update', icon: 'cellphone-arrow-down' },
@@ -1630,19 +1826,31 @@ export default function AdminScreen({ navigation }: any) {
         /* TAB 3B: TOP CATEGORIES MANAGEMENT */
         <View style={{ flex: 1 }}>
           <View style={styles.bannerHeaderRow}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.sectionHeaderTitle}>TOP HOME CATEGORIES</Text>
               <Text style={styles.sectionHeaderSubtitle}>
                 {topCategories.length} categories on home screen grid
               </Text>
             </View>
-            <TouchableOpacity
-              style={styles.addBannerNativeBtn}
-              onPress={handleOpenAddTopCategory}
-            >
-              <Icon source="plus-circle" size={16} color="#FFFFFF" />
-              <Text style={styles.addBannerBtnText}>Add Category</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              {topCategories.length === 0 && (
+                <TouchableOpacity
+                  style={[styles.addBannerNativeBtn, { backgroundColor: '#0284C7' }]}
+                  onPress={handleSeedDefaultCategories}
+                  disabled={seedingCategories}
+                >
+                  <Icon source="auto-fix" size={15} color="#FFFFFF" />
+                  <Text style={styles.addBannerBtnText}>Preload Defaults</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.addBannerNativeBtn}
+                onPress={handleOpenAddTopCategory}
+              >
+                <Icon source="plus-circle" size={16} color="#FFFFFF" />
+                <Text style={styles.addBannerBtnText}>Add Category</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.listContent}>
@@ -1735,7 +1943,147 @@ export default function AdminScreen({ navigation }: any) {
             {topCategories.length === 0 && (
               <View style={styles.centerContainer}>
                 <Icon source="shape-outline" size={48} color="#94A3B8" />
-                <Text style={styles.emptyText}>No top categories configured yet.</Text>
+                <Text style={styles.emptyText}>No top categories currently configured.</Text>
+                <TouchableOpacity
+                  style={[styles.addBannerNativeBtn, { backgroundColor: '#0284C7', marginTop: 14 }]}
+                  onPress={handleSeedDefaultCategories}
+                  disabled={seedingCategories}
+                >
+                  <Icon source="auto-fix" size={15} color="#FFFFFF" />
+                  <Text style={styles.addBannerBtnText}>Preload / Restore 8 Default Categories</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      ) : tab === 'carBrands' ? (
+        /* TAB 3C: CAR BRANDS & LOGOS MANAGEMENT */
+        <View style={{ flex: 1 }}>
+          <View style={styles.bannerHeaderRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionHeaderTitle}>CAR BRANDS & LOGOS</Text>
+              <Text style={styles.sectionHeaderSubtitle}>
+                {carBrands.length} brands • Manage car logos for Home screen & filters
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              {carBrands.length === 0 && (
+                <TouchableOpacity
+                  style={[styles.addBannerNativeBtn, { backgroundColor: '#0284C7' }]}
+                  onPress={handleSeedDefaultBrands}
+                  disabled={seedingCarBrands}
+                >
+                  <Icon source="auto-fix" size={15} color="#FFFFFF" />
+                  <Text style={styles.addBannerBtnText}>Preload Defaults</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.addBannerNativeBtn}
+                onPress={handleOpenAddCarBrand}
+              >
+                <Icon source="plus-circle" size={16} color="#FFFFFF" />
+                <Text style={styles.addBannerBtnText}>Add Brand</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.listContent}>
+            {carBrands.map((brand, index) => {
+              const brandImg = brand.imageUrl || brand.logoUrl;
+              return (
+                <View key={brand.id || index} style={styles.nativeCategoryAdminCard}>
+                  <View style={[styles.categoryAdminIconWrap, { backgroundColor: '#FFFFFF' }]}>
+                    {brandImg ? (
+                      <Image
+                        source={{ uri: brandImg }}
+                        style={styles.categoryAdminImg}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <Icon source="car-sports" size={28} color="#1565FF" />
+                    )}
+                  </View>
+
+                  <View style={styles.categoryAdminInfoCol}>
+                    <View style={styles.categoryAdminNameRow}>
+                      <Text style={styles.categoryAdminNameText}>{brand.name}</Text>
+                      <View
+                        style={[
+                          styles.catStatusPill,
+                          { backgroundColor: brand.active !== false ? '#DCFCE7' : '#F1F5F9' },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.catStatusText,
+                            { color: brand.active !== false ? '#15803D' : '#64748B' },
+                          ]}
+                        >
+                          {brand.active !== false ? 'Active' : 'Hidden'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.categoryAdminMetaText}>
+                      Order: {brand.order ?? 0} • {brandImg ? 'Custom Logo Uploaded' : 'Default/Vector Logo'}
+                    </Text>
+
+                    <View style={styles.categoryAdminActionsRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.bannerActionBtn,
+                          { backgroundColor: brand.active !== false ? '#DCFCE7' : '#F1F5F9' },
+                        ]}
+                        onPress={() => handleToggleCarBrandActive(brand)}
+                      >
+                        <Icon
+                          source={brand.active !== false ? 'check-circle' : 'eye-off'}
+                          size={14}
+                          color={brand.active !== false ? '#15803D' : '#64748B'}
+                        />
+                        <Text
+                          style={[
+                            styles.bannerActionBtnText,
+                            { color: brand.active !== false ? '#15803D' : '#64748B' },
+                          ]}
+                        >
+                          {brand.active !== false ? 'Active' : 'Disabled'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.bannerActionBtn, { backgroundColor: '#F1F5F9' }]}
+                        onPress={() => handleOpenEditCarBrand(brand)}
+                      >
+                        <Icon source="pencil-outline" size={14} color="#1565FF" />
+                        <Text style={[styles.bannerActionBtnText, { color: '#1565FF' }]}>Edit Logo</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.bannerActionBtn, { backgroundColor: '#FEE2E2' }]}
+                        onPress={() => handleDeleteCarBrand(brand)}
+                      >
+                        <Icon source="trash-can-outline" size={14} color="#DC2626" />
+                        <Text style={[styles.bannerActionBtnText, { color: '#DC2626' }]}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+
+            {carBrands.length === 0 && (
+              <View style={styles.centerContainer}>
+                <Icon source="car-estate" size={48} color="#94A3B8" />
+                <Text style={styles.emptyText}>No car brands configured yet.</Text>
+                <TouchableOpacity
+                  style={[styles.addBannerNativeBtn, { marginTop: 12, backgroundColor: '#1565FF' }]}
+                  onPress={handleSeedDefaultBrands}
+                  disabled={seedingCarBrands}
+                >
+                  <Icon source="auto-fix" size={16} color="#FFFFFF" />
+                  <Text style={styles.addBannerBtnText}>Preload Popular Indian Brands</Text>
+                </TouchableOpacity>
               </View>
             )}
           </ScrollView>
@@ -2261,6 +2609,113 @@ export default function AdminScreen({ navigation }: any) {
                 disabled={savingTopCategory}
               >
                 Save Category
+              </Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL 3C: Add / Edit Car Brand & Logo Modal */}
+      {/* ------------------------------------------------------------- */}
+      <Modal
+        visible={carBrandModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCarBrandModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContentCard}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitleText}>
+                {editingCarBrand ? 'Edit Car Brand Logo' : 'Add New Car Brand'}
+              </Text>
+              <IconButton icon="close" size={20} onPress={() => setCarBrandModalVisible(false)} />
+            </View>
+
+            <ScrollView style={{ maxHeight: 420 }}>
+              <TextInput
+                label="Brand Name *"
+                value={carBrandName}
+                onChangeText={setCarBrandName}
+                mode="outlined"
+                outlineColor="#E2E8F0"
+                activeOutlineColor="#1565FF"
+                style={styles.modalInput}
+                placeholder="e.g. Toyota, Tata, Maruti Suzuki, Hyundai"
+              />
+
+              <TextInput
+                label="Display Order (0, 1, 2...)"
+                value={carBrandOrder}
+                onChangeText={setCarBrandOrder}
+                mode="outlined"
+                keyboardType="numeric"
+                outlineColor="#E2E8F0"
+                activeOutlineColor="#1565FF"
+                style={styles.modalInput}
+              />
+
+              {/* Brand Logo Upload Box */}
+              <View style={styles.bannerPickerBox}>
+                <Text style={styles.bannerPickerLabel}>Brand Logo Image</Text>
+                {carBrandImageUrl ? (
+                  <View style={{ width: 80, height: 80, borderRadius: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center', marginBottom: 6, overflow: 'hidden' }}>
+                    <Image
+                      source={{ uri: carBrandImageUrl }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="contain"
+                    />
+                  </View>
+                ) : null}
+
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                  <Button
+                    mode="outlined"
+                    icon="camera"
+                    onPress={handlePickCarBrandImage}
+                    loading={uploadingCarBrandImage}
+                    disabled={uploadingCarBrandImage}
+                    style={{ flex: 1 }}
+                  >
+                    Upload Logo from Gallery
+                  </Button>
+                </View>
+
+                <TextInput
+                  label="Or Direct Image URL"
+                  value={carBrandImageUrl}
+                  onChangeText={setCarBrandImageUrl}
+                  mode="outlined"
+                  outlineColor="#E2E8F0"
+                  activeOutlineColor="#1565FF"
+                  style={[styles.modalInput, { marginTop: 8 }]}
+                  placeholder="https://..."
+                />
+              </View>
+
+              <View style={[styles.switchNativeRow, { marginVertical: 8 }]}>
+                <Text style={styles.switchLabel}>Show on Home Screen & Filters</Text>
+                <Switch
+                  value={carBrandActive}
+                  onValueChange={setCarBrandActive}
+                  trackColor={{ false: '#CBD5E1', true: '#10B981' }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalBtnRow}>
+              <Button onPress={() => setCarBrandModalVisible(false)}>Cancel</Button>
+              <Button
+                mode="contained"
+                buttonColor="#1565FF"
+                textColor="#FFFFFF"
+                onPress={handleSaveCarBrand}
+                loading={savingCarBrand}
+                disabled={savingCarBrand}
+              >
+                Save Brand Logo
               </Button>
             </View>
           </View>

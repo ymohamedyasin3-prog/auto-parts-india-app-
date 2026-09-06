@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, TouchableOpacity, Image, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
 import { Text, Icon, Divider } from 'react-native-paper';
-import { getFirebaseAuth, getFirebaseFirestore, getCurrentUser } from '../services/firebase';
+import { getFirebaseAuth, getFirebaseFirestore, getCurrentUser, setCurrentAuthUser } from '../services/firebase';
 import { signOutFromGoogle } from '../services/googleAuth';
 import { UserProfilePopupModal } from '../components/UserProfilePopupModal';
-import { promptImageSourceDialog } from '../services/imagePickerService';
+import { openNativeCamera, openNativeGallery, promptImageSourceDialog } from '../services/imagePickerService';
 import { uploadImageToCloudinary } from '../services/cloudinary';
 
 const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250';
@@ -46,17 +46,23 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
             setActiveUid(user.uid);
             setUserEmail(user.email || '');
             setDisplayName(user.displayName || 'User');
-            setDisplayPhotoUrl(user.photoURL || DEFAULT_AVATAR);
+            if (user.photoURL || user.profilePhoto) {
+              setDisplayPhotoUrl(user.profilePhoto || user.photoURL);
+            }
 
             const db = getFirebaseFirestore();
             if (db && typeof db.collection === 'function') {
               unsubscribeDb = db.collection('users').doc(user.uid).onSnapshot((doc: any) => {
-                if (doc.exists) {
-                  const data = doc.data();
-                  setDbUserDoc(data);
-                  if (data.displayName) setDisplayName(data.displayName);
-                  if (data.photoURL || data.profilePhoto) {
-                    setDisplayPhotoUrl(data.photoURL || data.profilePhoto);
+                const exists = typeof doc?.exists === 'function' ? doc.exists() : Boolean(doc?.exists);
+                if (exists) {
+                  const data = typeof doc?.data === 'function' ? doc.data() : doc?.data;
+                  if (data) {
+                    setDbUserDoc(data);
+                    if (data.displayName) setDisplayName(data.displayName);
+                    const photo = data.profilePhoto || data.customPhoto || data.photoURL;
+                    if (photo) {
+                      setDisplayPhotoUrl(photo);
+                    }
                   }
                 }
               });
@@ -75,6 +81,40 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
       unsubscribeDb();
     };
   }, []);
+
+  // Screen focus listener to immediately refresh profile picture when returning
+  useEffect(() => {
+    if (!navigation || typeof navigation.addListener !== 'function') return;
+    const unsubFocus = navigation.addListener('focus', async () => {
+      const current = getCurrentUser();
+      if (current?.uid) {
+        setActiveUid(current.uid);
+        if (current.displayName) setDisplayName(current.displayName);
+        if (current.email) setUserEmail(current.email);
+        const curPhoto = current.profilePhoto || current.photoURL;
+        if (curPhoto) setDisplayPhotoUrl(curPhoto);
+
+        try {
+          const db = getFirebaseFirestore();
+          if (db && typeof db.collection === 'function') {
+            const snap = await db.collection('users').doc(current.uid).get();
+            const exists = typeof snap?.exists === 'function' ? snap.exists() : Boolean(snap?.exists);
+            if (exists) {
+              const data = typeof snap?.data === 'function' ? snap.data() : snap?.data;
+              if (data) {
+                setDbUserDoc(data);
+                if (data.displayName) setDisplayName(data.displayName);
+                const cloudPhoto = data.profilePhoto || data.customPhoto || data.photoURL;
+                if (cloudPhoto) setDisplayPhotoUrl(cloudPhoto);
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    });
+
+    return unsubFocus;
+  }, [navigation]);
 
   const syncUserPhotoAcrossListingsAndChats = async (uid: string, photoUrl: string) => {
     if (!uid || !photoUrl) return;
@@ -118,41 +158,65 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
     setEditName(dbUserDoc?.displayName || displayName || '');
     setEditPhone(dbUserDoc?.phone || '');
     setEditLocation(dbUserDoc?.location || '');
-    setEditPhoto(dbUserDoc?.photoURL || dbUserDoc?.profilePhoto || displayPhotoUrl || '');
+    setEditPhoto(dbUserDoc?.profilePhoto || dbUserDoc?.photoURL || displayPhotoUrl || '');
     setIsEditProfileModalOpen(true);
   };
 
-  const handlePickProfilePhoto = async () => {
+  const pickAndUploadPhoto = async (source: 'camera' | 'gallery' | 'prompt' = 'prompt') => {
     try {
-      const selectedUri = await promptImageSourceDialog(
-        'Profile Picture',
-        'Choose Camera or Gallery to set your profile photo'
-      );
+      let selectedUri: string | null = null;
+      if (source === 'camera') {
+        selectedUri = await openNativeCamera();
+      } else if (source === 'gallery') {
+        selectedUri = await openNativeGallery();
+      } else {
+        selectedUri = await promptImageSourceDialog(
+          'Profile Picture',
+          'Choose Camera or Gallery to set your profile photo'
+        );
+      }
+
       if (selectedUri) {
         setUploadingPhoto(true);
+        // Instant optimistic update
+        setDisplayPhotoUrl(selectedUri);
+        setEditPhoto(selectedUri);
+
         const cloudinaryUrl = await uploadImageToCloudinary(selectedUri, 'profile_photos');
-        if (cloudinaryUrl) {
-          setEditPhoto(cloudinaryUrl);
-          setDisplayPhotoUrl(cloudinaryUrl);
-          
-          if (activeUid) {
-            const db = getFirebaseFirestore();
-            if (db && typeof db.collection === 'function') {
-              await db.collection('users').doc(activeUid).set({
-                photoURL: cloudinaryUrl,
-                profilePhoto: cloudinaryUrl,
-                updatedAt: Date.now(),
-              }, { merge: true });
-            }
-            const authUser = getCurrentUser();
-            if (authUser && typeof authUser.updateProfile === 'function') {
-              await authUser.updateProfile({ photoURL: cloudinaryUrl });
-            }
-            // Cascade update all listings and chats for activeUid
-            await syncUserPhotoAcrossListingsAndChats(activeUid, cloudinaryUrl);
+        const finalUrl = cloudinaryUrl || selectedUri;
+
+        setDisplayPhotoUrl(finalUrl);
+        setEditPhoto(finalUrl);
+
+        const currentUid = activeUid || getCurrentUser()?.uid;
+        if (currentUid) {
+          const db = getFirebaseFirestore();
+          if (db && typeof db.collection === 'function') {
+            await db.collection('users').doc(currentUid).set({
+              photoURL: finalUrl,
+              profilePhoto: finalUrl,
+              customPhoto: finalUrl,
+              updatedAt: Date.now(),
+            }, { merge: true });
           }
-          Alert.alert('Success', 'Profile picture updated successfully!');
+
+          const authUser = getCurrentUser();
+          if (authUser) {
+            if (typeof authUser.updateProfile === 'function') {
+              await authUser.updateProfile({ photoURL: finalUrl });
+            }
+            await setCurrentAuthUser({
+              ...authUser,
+              photoURL: finalUrl,
+              profilePhoto: finalUrl,
+            });
+          }
+
+          // Cascade update all listings and chats for currentUid
+          await syncUserPhotoAcrossListingsAndChats(currentUid, finalUrl);
         }
+
+        Alert.alert('Success', 'Profile picture updated successfully!');
       }
     } catch (err: any) {
       console.warn('Profile photo pick error:', err);
@@ -160,6 +224,32 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
     } finally {
       setUploadingPhoto(false);
     }
+  };
+
+  const handleAvatarPress = () => {
+    Alert.alert(
+      'Profile Picture',
+      'Choose an action:',
+      [
+        {
+          text: 'Take Photo (Camera)',
+          onPress: () => pickAndUploadPhoto('camera'),
+        },
+        {
+          text: 'Choose from Gallery',
+          onPress: () => pickAndUploadPhoto('gallery'),
+        },
+        {
+          text: 'View Full Picture',
+          onPress: () => setIsPopupModalVisible(true),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handlePickProfilePhoto = async () => {
+    await pickAndUploadPhoto('prompt');
   };
 
   const handleSaveProfileDetails = async () => {
@@ -184,10 +274,17 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
 
         // Update auth profile
         const authUser = getCurrentUser();
-        if (authUser && typeof authUser.updateProfile === 'function') {
+        if (authUser) {
           const updatePayload: any = { displayName: editName.trim() };
           if (editPhoto.trim()) updatePayload.photoURL = editPhoto.trim();
-          await authUser.updateProfile(updatePayload);
+          if (typeof authUser.updateProfile === 'function') {
+            await authUser.updateProfile(updatePayload);
+          }
+          await setCurrentAuthUser({
+            ...authUser,
+            displayName: editName.trim(),
+            ...(editPhoto.trim() ? { photoURL: editPhoto.trim(), profilePhoto: editPhoto.trim() } : {}),
+          });
           setDisplayName(editName.trim());
         }
 
@@ -245,12 +342,27 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.profileHeaderCard}>
           <TouchableOpacity 
-            onPress={() => setIsPopupModalVisible(true)} 
-            style={styles.avatarWrap}
-            activeOpacity={0.8}
+            onPress={handleAvatarPress} 
+            style={styles.avatarContainer}
+            activeOpacity={0.85}
           >
-            <Image source={{ uri: displayPhotoUrl }} style={styles.avatarImage} />
+            <View style={styles.avatarWrap}>
+              <Image 
+                source={{ uri: displayPhotoUrl }} 
+                style={styles.avatarImage} 
+                key={displayPhotoUrl}
+              />
+              {uploadingPhoto && (
+                <View style={styles.avatarLoadingOverlay}>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                </View>
+              )}
+            </View>
+            <View style={styles.cameraBadge}>
+              <Icon source="camera" size={13} color="#FFFFFF" />
+            </View>
           </TouchableOpacity>
+
           <View style={styles.profileInfoWrap}>
             <TouchableOpacity onPress={() => {
               const uid = activeUid || getCurrentUser()?.uid;
@@ -261,7 +373,15 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
               <Text style={styles.profileName}>{displayName}</Text>
             </TouchableOpacity>
             <Text style={styles.profileEmail}>{userEmail}</Text>
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+
+            <View style={styles.actionButtonsRow}>
+              <TouchableOpacity 
+                style={[styles.editProfileBtn, { flex: 1, backgroundColor: '#0066FF', borderColor: '#0066FF' }]} 
+                onPress={openEditModal}
+              >
+                <Icon source="pencil-outline" size={14} color="#FFFFFF" />
+                <Text style={[styles.editProfileBtnText, { color: '#FFFFFF' }]}>Edit Profile</Text>
+              </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.editProfileBtn, { flex: 1, backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]} 
                 onPress={() => {
@@ -272,7 +392,7 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
                 }}
               >
                 <Icon source="eye-outline" size={14} color="#0066FF" />
-                <Text style={[styles.editProfileBtnText, { color: '#0066FF' }]}>View Public Profile</Text>
+                <Text style={[styles.editProfileBtnText, { color: '#0066FF' }]}>View Public</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -465,6 +585,8 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
         visible={isPopupModalVisible}
         onDismiss={() => setIsPopupModalVisible(false)}
         userPhoto={displayPhotoUrl}
+        userName={displayName}
+        onChangePhoto={() => pickAndUploadPhoto('prompt')}
       />
 
     </View>
@@ -522,13 +644,66 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
-  avatarWrap: { width: 72, height: 72, borderRadius: 36, overflow: 'hidden', borderWidth: 2, borderColor: '#F1F5F9' },
+  avatarContainer: {
+    position: 'relative',
+    width: 76,
+    height: 76,
+  },
+  avatarWrap: { 
+    width: 76, 
+    height: 76, 
+    borderRadius: 38, 
+    overflow: 'hidden', 
+    borderWidth: 2.5, 
+    borderColor: '#0066FF',
+    backgroundColor: '#E2E8F0',
+    position: 'relative',
+  },
   avatarImage: { width: '100%', height: '100%' },
+  avatarLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#0066FF',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
   profileInfoWrap: { flex: 1 },
-  profileName: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 4 },
-  profileEmail: { fontSize: 13, color: '#64748B', marginBottom: 12 },
-  editProfileBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F1F5F9', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, alignSelf: 'flex-start' },
-  editProfileBtnText: { fontSize: 12, fontWeight: '700', color: '#0F172A' },
+  profileName: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 2 },
+  profileEmail: { fontSize: 13, color: '#64748B', marginBottom: 8 },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  editProfileBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    gap: 6, 
+    paddingVertical: 7, 
+    paddingHorizontal: 10, 
+    borderRadius: 8, 
+    borderWidth: 1,
+  },
+  editProfileBtnText: { fontSize: 12, fontWeight: '700' },
   
   menuContainer: { backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden' },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, gap: 12 },

@@ -249,6 +249,12 @@
     "announcements/{announcementId}": {
       "schema": { "$ref": "#/entities/Announcement" },
       "description": "System announcements broadcasted to users"
+    },
+    "topCategories/{catId}": {
+      "description": "Custom categories shown on the home screen"
+    },
+    "carBrands/{brandId}": {
+      "description": "Custom car brand logos and titles managed by admin"
     }
   }
 }

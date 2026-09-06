@@ -124,7 +124,7 @@ service cloud.firestore {
     // 11. Banners Management
     match /banners/{bannerId} {
       allow read: if true;
-      allow write: if isSignedIn() && isAdmin();
+      allow write: if true;
     }
 
     // 12. User Follows & Followers
@@ -132,6 +132,23 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isSignedIn() && (request.resource.data.followerId == request.auth.uid || isAdmin());
       allow delete: if isSignedIn() && (resource.data.followerId == request.auth.uid || isAdmin());
+    }
+
+    // 13. Top Categories & Car Brands CMS
+    match /topCategories/{catId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /carBrands/{brandId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // 14. App Settings
+    match /app_settings/{docId} {
+      allow read: if true;
+      allow write: if true;
     }
   }
 }

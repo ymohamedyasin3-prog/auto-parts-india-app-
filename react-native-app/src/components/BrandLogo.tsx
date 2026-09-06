@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, StyleProp, ViewStyle, Image } from 'react-native';
+import { getFirebaseFirestore } from '../services/firebase';
 import Svg, { 
   Path, 
   Circle, 
@@ -17,11 +18,52 @@ import Svg, {
 export interface BrandLogoProps {
   name?: string;
   brand?: string;
+  imageUrl?: string;
+  logoUrl?: string;
   size?: number;
   style?: StyleProp<ViewStyle>;
   active?: boolean;
   variant?: 'icon' | 'full' | 'horizontal' | string;
   theme?: 'dark' | 'light' | string;
+}
+
+// In-memory cache for dynamic logos set by Admin in Firestore `carBrands`
+const dynamicBrandLogos: Record<string, string> = {};
+
+export function updateBrandLogosCache(brands: Array<{ name: string; imageUrl?: string; logoUrl?: string }>) {
+  brands.forEach((b) => {
+    const url = b.imageUrl || b.logoUrl;
+    if (b.name && url) {
+      dynamicBrandLogos[b.name.toLowerCase().trim()] = url;
+      dynamicBrandLogos[b.name.toLowerCase().replace(/[^a-z0-9]/g, '')] = url;
+    }
+  });
+}
+
+// Automatically subscribe once to carBrands collection if Firestore is initialized
+let hasSubscribedToCarBrands = false;
+function ensureCarBrandsSubscription() {
+  if (hasSubscribedToCarBrands) return;
+  try {
+    const db = getFirebaseFirestore();
+    if (db) {
+      hasSubscribedToCarBrands = true;
+      db.collection('carBrands').onSnapshot((snap: any) => {
+        snap.forEach((doc: any) => {
+          const data = doc.data();
+          const url = data?.imageUrl || data?.logoUrl;
+          if (data?.name && url) {
+            const rawKey = data.name.toLowerCase().trim();
+            const cleanKey = rawKey.replace(/[^a-z0-9]/g, '');
+            dynamicBrandLogos[rawKey] = url;
+            dynamicBrandLogos[cleanKey] = url;
+          }
+        });
+      }, () => {
+        // Silently ignore if offline or loading
+      });
+    }
+  } catch (_) {}
 }
 
 const BRAND_IMAGES: Record<string, any> = {
@@ -163,11 +205,37 @@ export function AutoPartsLogo({
 /**
  * Authentic Official OEM Brand Logo Renderer
  */
-function renderBrandVector(brandKey: string, size: number) {
+function renderBrandVector(brandKey: string, size: number, directImage?: string) {
   const s = size;
   const rawKey = (brandKey || "").toLowerCase().trim();
   const cleanKey = rawKey.replace(/[^a-z0-9]/g, '');
 
+  // 1. Direct custom image URL passed via props (Highest priority)
+  if (directImage && directImage.trim().length > 0) {
+    return (
+      <View style={{ width: s, height: s, alignItems: 'center', justifyContent: 'center' }}>
+        <Image 
+          source={{ uri: directImage.trim() }} 
+          style={{ width: '100%', height: '100%', resizeMode: 'contain' }} 
+        />
+      </View>
+    );
+  }
+
+  // 2. Custom logo URL uploaded by Admin in Firestore `carBrands`
+  const dynamicUrl = dynamicBrandLogos[rawKey] || dynamicBrandLogos[cleanKey];
+  if (dynamicUrl) {
+    return (
+      <View style={{ width: s, height: s, alignItems: 'center', justifyContent: 'center' }}>
+        <Image 
+          source={{ uri: dynamicUrl }} 
+          style={{ width: '100%', height: '100%', resizeMode: 'contain' }} 
+        />
+      </View>
+    );
+  }
+
+  // 3. Fallback bundled local brand assets
   let matchedImage = null;
   for (const key of Object.keys(BRAND_IMAGES)) {
     if (rawKey.includes(key) || cleanKey.includes(key.replace(/[^a-z0-9]/g, ''))) {
@@ -187,6 +255,7 @@ function renderBrandVector(brandKey: string, size: number) {
     );
   }
 
+  // 4. Fallback remote brand URLs
   let matchedUrl = null;
   for (const key of Object.keys(BRAND_URLS)) {
     if (rawKey.includes(key) || cleanKey.includes(key.replace(/[^a-z0-9]/g, ''))) {
@@ -234,19 +303,26 @@ function renderBrandVector(brandKey: string, size: number) {
 export function BrandLogo({ 
   name = '', 
   brand = '', 
+  imageUrl = '',
+  logoUrl = '',
   size = 32, 
   style, 
   active, 
   variant = 'full',
   theme = 'dark'
 }: BrandLogoProps) {
+  useEffect(() => {
+    ensureCarBrandsSubscription();
+  }, []);
+
   const safeSize = Number.isFinite(size) && size > 0 ? size : 32;
   const brandKey = String(brand || name || '').toLowerCase().trim();
+  const directImage = imageUrl || logoUrl;
 
   if (brandKey && brandKey !== 'all' && brandKey !== 'all brands') {
     return (
       <View style={[styles.center, style]}>
-        {renderBrandVector(brandKey, safeSize)}
+        {renderBrandVector(brandKey, safeSize, directImage)}
       </View>
     );
   }

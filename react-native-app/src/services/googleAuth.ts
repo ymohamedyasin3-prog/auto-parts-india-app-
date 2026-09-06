@@ -143,16 +143,31 @@ export async function signInWithGoogleNative() {
       const db = getFirebaseFirestore();
       if (db && typeof db.collection === 'function') {
         const userDocRef = db.collection('users').doc(finalUserId);
+        const existingSnap = await userDocRef.get();
+        const existingData = typeof existingSnap?.data === 'function' ? existingSnap.data() : null;
+
+        // Preserve custom photo if the user previously uploaded one
+        const existingCustomPhoto = existingData?.profilePhoto || existingData?.customPhoto || existingData?.photoURL;
+        const finalPhoto = (existingCustomPhoto && (existingCustomPhoto.includes('cloudinary') || existingCustomPhoto.startsWith('data:') || !existingCustomPhoto.includes('googleusercontent.com')))
+          ? existingCustomPhoto
+          : (userPhoto || existingCustomPhoto || '');
+
         await userDocRef.set({
           id: finalUserId,
           uid: finalUserId,
           email: userEmail,
           name: userName,
           displayName: userName,
-          photoURL: userPhoto,
-          role: 'buyer',
+          photoURL: finalPhoto,
+          role: existingData?.role || 'buyer',
           lastLoginAt: Date.now(),
         }, { merge: true });
+
+        if (finalPhoto && sessionUser && sessionUser.photoURL !== finalPhoto) {
+          sessionUser.photoURL = finalPhoto;
+          sessionUser.profilePhoto = finalPhoto;
+          await setCurrentAuthUser(sessionUser);
+        }
       }
     } catch (dbErr) {
       console.warn('[GoogleAuth] User profile sync warning:', dbErr);

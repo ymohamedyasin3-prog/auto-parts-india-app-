@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Linking, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Platform, Dimensions, SafeAreaView } from 'react-native';
 import { Text, Surface, Button, Icon, ActivityIndicator as PaperActivityIndicator } from 'react-native-paper';
-import { getFirebaseAuth, getFirebaseFirestore, getCurrentUser } from '../services/firebase';
+import { getFirebaseAuth, getFirebaseFirestore, getCurrentUser, setCurrentAuthUser } from '../services/firebase';
 import ImageView from 'react-native-image-viewing';
 import { UserProfilePopupModal } from '../components/UserProfilePopupModal';
 import { openNativeCamera, openNativeGallery } from '../services/imagePickerService';
@@ -218,8 +218,15 @@ export default function SellerProfileScreen({ route, navigation }: any) {
             }
           } catch (_) {}
         }
-        if (currentUser && typeof currentUser.updateProfile === 'function') {
-          await currentUser.updateProfile({ photoURL: cloudinaryUrl });
+        if (currentUser) {
+          if (typeof currentUser.updateProfile === 'function') {
+            await currentUser.updateProfile({ photoURL: cloudinaryUrl });
+          }
+          await setCurrentAuthUser({
+            ...currentUser,
+            photoURL: cloudinaryUrl,
+            profilePhoto: cloudinaryUrl,
+          });
         }
         Alert.alert('Success', 'Profile picture updated successfully!');
       }
