@@ -1007,7 +1007,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
                   }}
                 >
                   <View style={styles.modernBrandLogoWrapper}>
-                    <CarBrandBadge brand={b.name} size={38} />
+                    <CarBrandBadge brand={b.name} size={42} />
                   </View>
                   <Text 
                     style={[styles.modernBrandLabel, isBrandSelected && styles.modernBrandLabelSelected]} 
@@ -1800,8 +1800,8 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   modernBrandLogoWrapper: {
-    width: 44,
-    height: 38,
+    width: 52,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },

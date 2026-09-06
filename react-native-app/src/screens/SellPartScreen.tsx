@@ -1281,9 +1281,9 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
 
         {/* CONTACT */}
         <View style={styles.nativeSection}>
-          <Text style={styles.nativeSectionTitle}>Contact</Text>
+          <Text style={styles.nativeSectionTitle}>Contact Details</Text>
           <Text style={styles.nativeSectionHint}>
-            {isAdmin ? 'Account name & phone (Editable by Admin)' : 'Auto-filled from your account (Read-only)'}
+            {isAdmin ? 'Account name (Editable by Admin) & mobile number' : 'Account name (Read-only) & editable mobile number'}
           </Text>
 
           <View style={styles.nativeField}>
@@ -1303,18 +1303,17 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
           </View>
 
           <View style={styles.nativeField}>
-            <Text style={styles.fieldLabel}>PHONE *</Text>
+            <Text style={styles.fieldLabel}>MOBILE NUMBER *</Text>
             <RNTextInput
               value={contactPhone}
               onChangeText={setContactPhone}
-              editable={isAdmin}
+              editable={true}
               keyboardType="phone-pad"
-              placeholder="10 digit phone number"
+              placeholder="Enter 10-digit mobile number"
               placeholderTextColor="#94A3B8"
               style={[
                 styles.nativeTextInput,
-                !isAdmin && { backgroundColor: '#F1F5F9', color: '#64748B' },
-                submittedAttempt && (!contactPhone || contactPhone.length < 8) && styles.fieldError,
+                submittedAttempt && (!contactPhone || contactPhone.trim().length < 8) && styles.fieldError,
               ]}
             />
           </View>

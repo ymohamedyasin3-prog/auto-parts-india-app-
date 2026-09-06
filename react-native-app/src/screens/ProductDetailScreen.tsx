@@ -22,6 +22,31 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
   const [part, setPart] = useState<any>(initialPart || null);
   const [loadingDoc, setLoadingDoc] = useState<boolean>(!initialPart && Boolean(routePartId));
   const [userCoords, setUserCoords] = useState<LocationCoords | null>(null);
+  const [liveSellerPhoto, setLiveSellerPhoto] = useState<string | null>(null);
+
+  useEffect(() => {
+    const sellerId = part?.sellerId || part?.ownerId || part?.userId;
+    if (!sellerId) return;
+
+    let unsubSeller = () => {};
+    try {
+      const db = getFirebaseFirestore();
+      if (db && typeof db.collection === 'function') {
+        unsubSeller = db.collection('users').doc(sellerId).onSnapshot((docSnap: any) => {
+          if (docSnap && docSnap.exists) {
+            const uData = docSnap.data();
+            if (uData?.photoURL || uData?.profilePhoto) {
+              setLiveSellerPhoto(uData.photoURL || uData.profilePhoto);
+            }
+          }
+        }, () => {});
+      }
+    } catch (_) {}
+
+    return () => {
+      try { unsubSeller(); } catch (_) {}
+    };
+  }, [part?.sellerId, part?.ownerId, part?.userId]);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
   const [galleryVisible, setGalleryVisible] = useState(false);
@@ -340,7 +365,7 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
             title={part.contactName || part.sellerEmail || 'Verified Parts Dealer'}
             subtitle="Tap photo to view popup"
             left={(props) => {
-              const sPhoto = part.sellerPhotoURL || part.sellerPhoto || part.sellerAvatar || part.photoURL;
+              const sPhoto = liveSellerPhoto || part.sellerPhotoURL || part.sellerPhoto || part.sellerAvatar || part.photoURL;
               return (
                 <TouchableOpacity
                   activeOpacity={0.7}
@@ -389,7 +414,7 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
                   const sId = part.sellerId || part.userId || part.ownerId || 'seller';
                   const sName = part.contactName || part.sellerName || part.sellerEmail || 'Automotive Seller';
                   const sLoc = part.location || part.district || part.state || 'India';
-                  const sPhoto = part.sellerPhotoURL || part.sellerPhoto || part.sellerAvatar || part.photoURL || null;
+                  const sPhoto = liveSellerPhoto || part.sellerPhotoURL || part.sellerPhoto || part.sellerAvatar || part.photoURL || null;
                   navigation.navigate('SellerProfile', {
                     seller: {
                       id: sId,
@@ -518,7 +543,7 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
       <UserProfilePopupModal
         visible={profilePopupVisible}
         onDismiss={() => setProfilePopupVisible(false)}
-        userPhoto={part.sellerPhotoURL || part.sellerPhoto || part.sellerAvatar || part.photoURL || null}
+        userPhoto={liveSellerPhoto || part.sellerPhotoURL || part.sellerPhoto || part.sellerAvatar || part.photoURL || null}
       />
     </ScrollView>
   );

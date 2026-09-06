@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  Image,
 } from 'react-native';
 import {
   Text,
@@ -16,7 +17,9 @@ import {
   Surface,
   ActivityIndicator,
 } from 'react-native-paper';
+import { launchImageLibrary } from 'react-native-image-picker';
 import { getFirestoreInstance } from '../services/firebase';
+import { uploadImageToCloudinary } from '../services/cloudinary';
 import { INDIAN_STATES_AND_DISTRICTS } from '../data/indianLocations';
 
 interface BrandItem {
@@ -28,6 +31,8 @@ interface CategoryItem {
   id: string;
   name: string;
   subcategories: string[];
+  imageUrl?: string;
+  icon?: string;
 }
 
 const DEFAULT_BRANDS: BrandItem[] = [
@@ -70,6 +75,8 @@ export const AdminTaxonomyCMS: React.FC = () => {
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategorySubs, setNewCategorySubs] = useState('');
+  const [newCategoryImageUrl, setNewCategoryImageUrl] = useState('');
+  const [uploadingCatImage, setUploadingCatImage] = useState(false);
 
   useEffect(() => {
     fetchTaxonomy();
@@ -97,6 +104,23 @@ export const AdminTaxonomyCMS: React.FC = () => {
     }
   };
 
+  const handlePickCatImage = async () => {
+    try {
+      const res = await launchImageLibrary({ mediaType: 'photo', quality: 0.8 });
+      if (res.assets && res.assets[0]?.uri) {
+        setUploadingCatImage(true);
+        const uploadedUrl = await uploadImageToCloudinary(res.assets[0].uri, 'categories');
+        if (uploadedUrl) {
+          setNewCategoryImageUrl(uploadedUrl);
+        }
+      }
+    } catch (err) {
+      console.warn('[AdminTaxonomyCMS] image pick error:', err);
+    } finally {
+      setUploadingCatImage(false);
+    }
+  };
+
   const handleSaveToCloud = async () => {
     try {
       setSaving(true);
@@ -105,12 +129,33 @@ export const AdminTaxonomyCMS: React.FC = () => {
         Alert.alert('Notice', 'Unable to connect to the server.');
         return;
       }
+
+      // Save taxonomy doc
       await db.collection('taxonomy').doc('data').set({
         brands,
         categories,
         updatedAt: Date.now(),
       });
-      Alert.alert('Success', 'Settings saved successfully!');
+
+      // Sync categories directly to topCategories collection in Firestore
+      const batch = db.batch ? db.batch() : null;
+      if (batch) {
+        categories.forEach((cat, idx) => {
+          const docRef = db.collection('topCategories').doc(cat.id || `cat_${idx}`);
+          batch.set(docRef, {
+            id: cat.id,
+            name: cat.name,
+            subcategories: cat.subcategories || [],
+            imageUrl: cat.imageUrl || '',
+            active: true,
+            order: idx,
+            updatedAt: Date.now(),
+          }, { merge: true });
+        });
+        await batch.commit();
+      }
+
+      Alert.alert('Success', 'Settings & Category images saved successfully!');
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to save settings.');
     } finally {
@@ -179,10 +224,16 @@ export const AdminTaxonomyCMS: React.FC = () => {
     const newId = newCategoryName.toLowerCase().replace(/[^a-z0-9]/g, '_');
     setCategories([
       ...categories,
-      { id: newId, name: newCategoryName.trim(), subcategories: subArray },
+      { 
+        id: newId, 
+        name: newCategoryName.trim(), 
+        subcategories: subArray,
+        imageUrl: newCategoryImageUrl.trim() || undefined
+      },
     ]);
     setNewCategoryName('');
     setNewCategorySubs('');
+    setNewCategoryImageUrl('');
     setCategoryModalVisible(false);
   };
 
@@ -333,7 +384,11 @@ export const AdminTaxonomyCMS: React.FC = () => {
                 <Surface key={`cat-${c.id}-${cIdx}`} style={styles.cmsCard} elevation={2}>
                   <View style={styles.cmsCardHeader}>
                     <View style={styles.brandTitleRow}>
-                      <IconButton icon="shape-outline" size={20} iconColor="#7C3AED" style={{ margin: 0 }} />
+                      {c.imageUrl ? (
+                        <Image source={{ uri: c.imageUrl }} style={{ width: 28, height: 28, borderRadius: 6, marginRight: 8, backgroundColor: '#F1F5F9' }} />
+                      ) : (
+                        <IconButton icon="shape-outline" size={20} iconColor="#7C3AED" style={{ margin: 0 }} />
+                      )}
                       <Text style={styles.cmsCardTitle}>{c.name}</Text>
                       <View style={styles.countChip}>
                         <Text style={styles.countChipText}>{c.subcategories.length} subparts</Text>
@@ -484,6 +539,44 @@ export const AdminTaxonomyCMS: React.FC = () => {
               mode="outlined"
               style={styles.modalInput}
             />
+
+            {/* Category Image Section */}
+            <View style={{ marginVertical: 8 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 }}>
+                CATEGORY IMAGE
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                {newCategoryImageUrl ? (
+                  <Image 
+                    source={{ uri: newCategoryImageUrl }} 
+                    style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: '#F1F5F9' }} 
+                  />
+                ) : (
+                  <View style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}>
+                    <IconButton icon="image" size={24} iconColor="#94A3B8" />
+                  </View>
+                )}
+                <Button 
+                  mode="outlined" 
+                  onPress={handlePickCatImage} 
+                  loading={uploadingCatImage}
+                  disabled={uploadingCatImage}
+                  compact
+                  icon="upload"
+                >
+                  Upload Image
+                </Button>
+              </View>
+              <TextInput
+                label="Or paste Image URL"
+                value={newCategoryImageUrl}
+                onChangeText={setNewCategoryImageUrl}
+                mode="outlined"
+                dense
+                style={[styles.modalInput, { marginTop: 6 }]}
+              />
+            </View>
+
             <View style={styles.modalBtnRow}>
               <Button onPress={() => setCategoryModalVisible(false)}>Cancel</Button>
               <Button mode="contained" onPress={handleAddCategory}>

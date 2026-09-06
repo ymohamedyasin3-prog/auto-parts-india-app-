@@ -74,6 +74,29 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
     ? (isCurrentUserBuyer ? routeChat.sellerPhoto : routeChat.buyerPhoto)
     : (part ? part.sellerPhoto : '');
 
+  const [livePartnerPhoto, setLivePartnerPhoto] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!partnerId || partnerId === 'seller' || partnerId === 'buyer') return;
+    let unsub = () => {};
+    try {
+      const db = getFirebaseFirestore();
+      if (db && typeof db.collection === 'function') {
+        unsub = db.collection('users').doc(partnerId).onSnapshot((docSnap: any) => {
+          if (docSnap && docSnap.exists) {
+            const uData = docSnap.data();
+            if (uData?.photoURL || uData?.profilePhoto) {
+              setLivePartnerPhoto(uData.photoURL || uData.profilePhoto);
+            }
+          }
+        }, () => {});
+      }
+    } catch (_) {}
+    return () => { try { unsub(); } catch (_) {} };
+  }, [partnerId]);
+
+  const effectivePartnerPhoto = livePartnerPhoto || partnerPhoto;
+
   // State Management
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -518,8 +541,8 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
         {/* Partner avatar for received messages */}
         {!isMe && (
           <View style={styles.partnerBubbleAvatar}>
-            {partnerPhoto ? (
-              <Image source={{ uri: partnerPhoto }} style={styles.partnerSmallAvatarImg} />
+            {effectivePartnerPhoto ? (
+              <Image source={{ uri: effectivePartnerPhoto }} style={styles.partnerSmallAvatarImg} />
             ) : (
               <View style={styles.partnerSmallAvatarPlaceholder}>
                 <Text style={styles.partnerSmallAvatarText}>
@@ -626,8 +649,8 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
           }}
         >
           <View style={styles.partnerHeaderAvatarWrapper}>
-            {partnerPhoto ? (
-              <Image source={{ uri: partnerPhoto }} style={styles.partnerHeaderAvatar} />
+            {effectivePartnerPhoto ? (
+              <Image source={{ uri: effectivePartnerPhoto }} style={styles.partnerHeaderAvatar} />
             ) : (
               <View style={styles.partnerHeaderAvatarPlaceholder}>
                 <Text style={styles.partnerHeaderAvatarInitial}>

@@ -25,8 +25,8 @@ export interface BrandLogoProps {
 }
 
 const BRAND_IMAGES: Record<string, any> = {
-  'maruti': require('../assets/brands/maruti_suzuki.png'),
   'maruti_suzuki': require('../assets/brands/maruti_suzuki.png'),
+  'maruti': require('../assets/brands/maruti_suzuki.png'),
   'suzuki': require('../assets/brands/suzuki.png'),
   'hyundai': require('../assets/brands/hyundai.png'),
   'tata': require('../assets/brands/tata.png'),
@@ -46,6 +46,27 @@ const BRAND_IMAGES: Record<string, any> = {
   'audi': require('../assets/brands/audi.png'),
   'mg': require('../assets/brands/mg.png'),
   'jeep': require('../assets/brands/jeep.png'),
+};
+
+const BRAND_URLS: Record<string, string> = {
+  'chevrolet': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Chevrolet-logo.png/600px-Chevrolet-logo.png',
+  'datsun': 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/Datsun_logo.svg/600px-Datsun_logo.svg.png',
+  'fiat': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/FIAT_logo.svg/600px-FIAT_logo.svg.png',
+  'force': 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Force_Motors_logo.svg/600px-Force_Motors_logo.svg.png',
+  'jaguar': 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Jaguar_2021_logo.svg/600px-Jaguar_2021_logo.svg.png',
+  'landrover': 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Land_Rover_logo.svg/600px-Land_Rover_logo.svg.png',
+  'range_rover': 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Land_Rover_logo.svg/600px-Land_Rover_logo.svg.png',
+  'volvo': 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/Volvo-Logo.svg/600px-Volvo-Logo.svg.png',
+  'isuzu': 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Isuzu_logo.svg/600px-Isuzu_logo.svg.png',
+  'mitsubishi': 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Mitsubishi_logo.svg/600px-Mitsubishi_logo.svg.png',
+  'porsche': 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Porsche_logo.png/600px-Porsche_logo.png',
+  'lexus': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Lexus_logo.svg/600px-Lexus_logo.svg.png',
+  'tesla': 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bd/Tesla_Motors_logo.svg/600px-Tesla_Motors_logo.svg.png',
+  'ferrari': 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Ferrari-Logo.png/600px-Ferrari-Logo.png',
+  'lamborghini': 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/Lamborghini_Logo.svg/600px-Lamborghini_Logo.svg.png',
+  'citroen': 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Citro%C3%ABn_2022_logo.svg/600px-Citro%C3%ABn_2022_logo.svg.png',
+  'peugeot': 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Peugeot_2021_Logo.svg/600px-Peugeot_2021_Logo.svg.png',
+  'mini': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/MINI_logo.svg/600px-MINI_logo.svg.png',
 };
 
 /**
@@ -122,11 +143,12 @@ export function AutoPartsLogo({
  */
 function renderBrandVector(brandKey: string, size: number) {
   const s = size;
-  const lower = (brandKey || "").toLowerCase();
+  const rawKey = (brandKey || "").toLowerCase().trim();
+  const cleanKey = rawKey.replace(/[^a-z0-9]/g, '');
 
   let matchedImage = null;
   for (const key of Object.keys(BRAND_IMAGES)) {
-    if (lower.includes(key)) {
+    if (rawKey.includes(key) || cleanKey.includes(key.replace(/[^a-z0-9]/g, ''))) {
       matchedImage = BRAND_IMAGES[key];
       break;
     }
@@ -137,16 +159,49 @@ function renderBrandVector(brandKey: string, size: number) {
       <View style={{ width: s, height: s, alignItems: 'center', justifyContent: 'center' }}>
         <Image 
           source={matchedImage} 
-          style={{ width: s * 0.9, height: s * 0.9, resizeMode: 'contain' }} 
+          style={{ width: '100%', height: '100%', resizeMode: 'contain' }} 
         />
       </View>
     );
   }
 
-  let code = (brandKey || "CAR").substring(0, 3).toUpperCase();
+  let matchedUrl = null;
+  for (const key of Object.keys(BRAND_URLS)) {
+    if (rawKey.includes(key) || cleanKey.includes(key.replace(/[^a-z0-9]/g, ''))) {
+      matchedUrl = BRAND_URLS[key];
+      break;
+    }
+  }
+
+  if (matchedUrl) {
+    return (
+      <View style={{ width: s, height: s, alignItems: 'center', justifyContent: 'center' }}>
+        <Image 
+          source={{ uri: matchedUrl }} 
+          style={{ width: '100%', height: '100%', resizeMode: 'contain' }} 
+        />
+      </View>
+    );
+  }
+
+  let displayName = (brandKey || "CAR").toUpperCase();
+  let code = displayName.length > 4 ? displayName.substring(0, 3) : displayName;
+
   return (
-    <View style={{ width: s, height: s, borderRadius: s / 2, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: s * 0.35, fontWeight: '800', color: '#0F172A' }}>{code}</Text>
+    <View style={{ 
+      width: s, 
+      height: s, 
+      borderRadius: s * 0.25, 
+      backgroundColor: '#0F172A', 
+      borderWidth: 1.5,
+      borderColor: '#0284C7',
+      alignItems: 'center', 
+      justifyContent: 'center',
+      paddingHorizontal: 2
+    }}>
+      <Text numberOfLines={1} style={{ fontSize: Math.max(9, s * 0.32), fontWeight: '900', color: '#38BDF8', letterSpacing: 0.5 }}>
+        {code}
+      </Text>
     </View>
   );
 }

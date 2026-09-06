@@ -191,6 +191,32 @@ export default function SellerProfileScreen({ route, navigation }: any) {
             profilePhoto: cloudinaryUrl,
             updatedAt: Date.now()
           }, { merge: true });
+
+          // Cascade update all listings posted by this seller
+          try {
+            const partsSnap = await db.collection('spareParts').where('sellerId', '==', currentUser.uid).get();
+            if (partsSnap && !partsSnap.empty) {
+              partsSnap.forEach((docSnap: any) => {
+                docSnap.ref.update({
+                  sellerPhoto: cloudinaryUrl,
+                  sellerPhotoURL: cloudinaryUrl,
+                  sellerAvatar: cloudinaryUrl,
+                }).catch(() => {});
+              });
+            }
+            const sellerChatsSnap = await db.collection('chats').where('sellerId', '==', currentUser.uid).get();
+            if (sellerChatsSnap && !sellerChatsSnap.empty) {
+              sellerChatsSnap.forEach((docSnap: any) => {
+                docSnap.ref.update({ sellerPhoto: cloudinaryUrl }).catch(() => {});
+              });
+            }
+            const buyerChatsSnap = await db.collection('chats').where('buyerId', '==', currentUser.uid).get();
+            if (buyerChatsSnap && !buyerChatsSnap.empty) {
+              buyerChatsSnap.forEach((docSnap: any) => {
+                docSnap.ref.update({ buyerPhoto: cloudinaryUrl }).catch(() => {});
+              });
+            }
+          } catch (_) {}
         }
         if (currentUser && typeof currentUser.updateProfile === 'function') {
           await currentUser.updateProfile({ photoURL: cloudinaryUrl });

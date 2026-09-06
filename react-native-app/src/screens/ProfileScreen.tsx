@@ -55,7 +55,9 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
                   const data = doc.data();
                   setDbUserDoc(data);
                   if (data.displayName) setDisplayName(data.displayName);
-                  if (data.photoURL) setDisplayPhotoUrl(data.photoURL);
+                  if (data.photoURL || data.profilePhoto) {
+                    setDisplayPhotoUrl(data.photoURL || data.profilePhoto);
+                  }
                 }
               });
             }
@@ -73,6 +75,44 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
       unsubscribeDb();
     };
   }, []);
+
+  const syncUserPhotoAcrossListingsAndChats = async (uid: string, photoUrl: string) => {
+    if (!uid || !photoUrl) return;
+    try {
+      const db = getFirebaseFirestore();
+      if (!db || typeof db.collection !== 'function') return;
+
+      // Update all spareParts listings posted by this user
+      const partsSnap = await db.collection('spareParts').where('sellerId', '==', uid).get();
+      if (partsSnap && !partsSnap.empty) {
+        partsSnap.forEach((docSnap: any) => {
+          docSnap.ref.update({
+            sellerPhoto: photoUrl,
+            sellerPhotoURL: photoUrl,
+            sellerAvatar: photoUrl,
+          }).catch(() => {});
+        });
+      }
+
+      // Update chats where user is seller
+      const sellerChatsSnap = await db.collection('chats').where('sellerId', '==', uid).get();
+      if (sellerChatsSnap && !sellerChatsSnap.empty) {
+        sellerChatsSnap.forEach((docSnap: any) => {
+          docSnap.ref.update({ sellerPhoto: photoUrl }).catch(() => {});
+        });
+      }
+
+      // Update chats where user is buyer
+      const buyerChatsSnap = await db.collection('chats').where('buyerId', '==', uid).get();
+      if (buyerChatsSnap && !buyerChatsSnap.empty) {
+        buyerChatsSnap.forEach((docSnap: any) => {
+          docSnap.ref.update({ buyerPhoto: photoUrl }).catch(() => {});
+        });
+      }
+    } catch (err) {
+      console.warn('syncUserPhotoAcrossListingsAndChats error:', err);
+    }
+  };
 
   const openEditModal = () => {
     setEditName(dbUserDoc?.displayName || displayName || '');
@@ -108,6 +148,8 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
             if (authUser && typeof authUser.updateProfile === 'function') {
               await authUser.updateProfile({ photoURL: cloudinaryUrl });
             }
+            // Cascade update all listings and chats for activeUid
+            await syncUserPhotoAcrossListingsAndChats(activeUid, cloudinaryUrl);
           }
           Alert.alert('Success', 'Profile picture updated successfully!');
         }
@@ -147,6 +189,10 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
           if (editPhoto.trim()) updatePayload.photoURL = editPhoto.trim();
           await authUser.updateProfile(updatePayload);
           setDisplayName(editName.trim());
+        }
+
+        if (editPhoto.trim()) {
+          await syncUserPhotoAcrossListingsAndChats(activeUid, editPhoto.trim());
         }
       }
       setIsEditProfileModalOpen(false);
@@ -199,13 +245,9 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.profileHeaderCard}>
           <TouchableOpacity 
-            onPress={() => {
-              const uid = activeUid || getCurrentUser()?.uid;
-              if (uid) {
-                navigation.navigate('SellerProfile', { sellerId: uid, sellerName: displayName });
-              }
-            }} 
+            onPress={() => setIsPopupModalVisible(true)} 
             style={styles.avatarWrap}
+            activeOpacity={0.8}
           >
             <Image source={{ uri: displayPhotoUrl }} style={styles.avatarImage} />
           </TouchableOpacity>
@@ -417,6 +459,13 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
           </View>
         </View>
       </Modal>
+
+      {/* User Profile Round Popup Photo Modal */}
+      <UserProfilePopupModal
+        visible={isPopupModalVisible}
+        onDismiss={() => setIsPopupModalVisible(false)}
+        userPhoto={displayPhotoUrl}
+      />
 
     </View>
   );

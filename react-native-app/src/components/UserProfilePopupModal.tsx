@@ -92,11 +92,11 @@ const styles = StyleSheet.create({
   imageCard: {
     width: CARD_SIZE,
     height: CARD_SIZE,
-    borderRadius: 24,
+    borderRadius: CARD_SIZE / 2,
     overflow: 'hidden',
     backgroundColor: '#0F172A',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
+    borderWidth: 3,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
     position: 'relative',
     ...Platform.select({
       ios: {

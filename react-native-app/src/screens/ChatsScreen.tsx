@@ -79,6 +79,46 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
           setChats(list);
           setLoading(false);
           setRefreshing(false);
+
+          // Enrich with live user photos from Firestore
+          const partnerIds = Array.from(
+            new Set(list.map((c) => (c.buyerId === activeUid ? c.sellerId : c.buyerId)).filter(Boolean))
+          );
+          if (partnerIds.length > 0) {
+            Promise.all(
+              partnerIds.map(async (pId) => {
+                try {
+                  const uDoc = await db.collection('users').doc(pId).get();
+                  if (uDoc && uDoc.exists) {
+                    const uData = uDoc.data();
+                    return { pId, photo: uData?.photoURL || uData?.profilePhoto || null };
+                  }
+                } catch (_) {}
+                return { pId, photo: null };
+              })
+            ).then((results) => {
+              const photoMap: Record<string, string> = {};
+              results.forEach((r) => {
+                if (r.photo) photoMap[r.pId] = r.photo;
+              });
+              if (Object.keys(photoMap).length > 0) {
+                setChats((prev) =>
+                  prev.map((c) => {
+                    const pId = c.buyerId === activeUid ? c.sellerId : c.buyerId;
+                    const livePhoto = photoMap[pId];
+                    if (livePhoto) {
+                      if (c.buyerId === activeUid) {
+                        return { ...c, sellerPhoto: livePhoto };
+                      } else {
+                        return { ...c, buyerPhoto: livePhoto };
+                      }
+                    }
+                    return c;
+                  })
+                );
+              }
+            });
+          }
         },
         (err: any) => {
           console.warn('[ChatsScreen] Snapshot error:', err);
