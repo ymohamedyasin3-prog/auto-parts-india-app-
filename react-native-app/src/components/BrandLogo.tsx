@@ -27,6 +27,30 @@ export interface BrandLogoProps {
 const APP_LOGO = require('../assets/logo.png');
 const APP_LOGO_ICON = require('../assets/logo.png');
 
+const BRAND_IMAGES: Record<string, any> = {
+  'maruti': require('../assets/brands/maruti_suzuki.png'),
+  'maruti_suzuki': require('../assets/brands/maruti_suzuki.png'),
+  'suzuki': require('../assets/brands/suzuki.png'),
+  'hyundai': require('../assets/brands/hyundai.png'),
+  'tata': require('../assets/brands/tata.png'),
+  'mahindra': require('../assets/brands/mahindra.png'),
+  'toyota': require('../assets/brands/toyota.png'),
+  'honda': require('../assets/brands/honda.png'),
+  'kia': require('../assets/brands/kia.png'),
+  'volkswagen': require('../assets/brands/volkswagen.png'),
+  'vw': require('../assets/brands/volkswagen.png'),
+  'skoda': require('../assets/brands/skoda.png'),
+  'renault': require('../assets/brands/renault.png'),
+  'nissan': require('../assets/brands/nissan.png'),
+  'ford': require('../assets/brands/ford.png'),
+  'bmw': require('../assets/brands/bmw.png'),
+  'mercedes': require('../assets/brands/mercedes.png'),
+  'benz': require('../assets/brands/mercedes.png'),
+  'audi': require('../assets/brands/audi.png'),
+  'mg': require('../assets/brands/mg.png'),
+  'jeep': require('../assets/brands/jeep.png'),
+};
+
 /**
  * 100% Native Vector Auto Parts India Square App Icon
  * Features a modern aerodynamic car silhouette combined with a precision minimal gear/wrench element
@@ -261,123 +285,22 @@ function renderBrandVector(brandKey: string, size: number) {
   const s = size;
   const lower = (brandKey || "").toLowerCase();
 
-  if (lower.includes('maruti') || lower.includes('suzuki')) {
-    return (
-      <Svg width={s} height={s} viewBox="0 0 200 200">
-        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#E11D48" strokeWidth="4" />
-        <Path d="M 68 55 C 90 45, 135 55, 125 78 C 115 100, 75 95, 85 125 C 95 145, 135 135, 142 120" fill="none" stroke="#E11D48" strokeWidth="16" strokeLinecap="round" />
-        <Path d="M 68 55 C 90 45, 135 55, 125 78 C 115 100, 75 95, 85 125 C 95 145, 135 135, 142 120" fill="none" stroke="#FFFFFF" strokeWidth="6" strokeLinecap="round" />
-        <SvgText x="100" y="165" fontFamily="sans-serif" fontWeight="900" fontSize="14" fill="#E11D48" textAnchor="middle" letterSpacing="3">MARUTI SUZUKI</SvgText>
-      </Svg>
-    );
+  let matchedImage = null;
+  for (const key of Object.keys(BRAND_IMAGES)) {
+    if (lower.includes(key)) {
+      matchedImage = BRAND_IMAGES[key];
+      break;
+    }
   }
-  if (lower.includes('hyundai')) {
+
+  if (matchedImage) {
     return (
-      <Svg width={s} height={s} viewBox="0 0 200 200">
-        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#2563EB" strokeWidth="4" />
-        <Ellipse cx="100" cy="100" rx="76" ry="46" fill="none" stroke="#2563EB" strokeWidth="8" transform="rotate(-15 100 100)" />
-        <Path d="M 75 70 L 85 130 M 125 70 L 115 130 M 78 100 L 122 100" stroke="#FFFFFF" strokeWidth="12" strokeLinecap="round" />
-        <SvgText x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="15" fill="#38BDF8" textAnchor="middle" letterSpacing="3">HYUNDAI</SvgText>
-      </Svg>
-    );
-  }
-  if (lower.includes('tata')) {
-    return (
-      <Svg width={s} height={s} viewBox="0 0 200 200">
-        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#0284C7" strokeWidth="4" />
-        <Path d="M 60 110 C 80 135, 120 135, 140 110 C 120 85, 80 85, 60 110 Z" fill="#38BDF8" />
-        <SvgText x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="18" fill="#FFFFFF" textAnchor="middle" letterSpacing="4">TATA</SvgText>
-      </Svg>
-    );
-  }
-  if (lower.includes('mahindra')) {
-    return (
-      <Svg width={s} height={s} viewBox="0 0 200 200">
-        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#DC2626" strokeWidth="4" />
-        <Path d="M 65 135 L 100 70 L 135 135 Z" fill="none" stroke="#DC2626" strokeWidth="14" strokeLinejoin="round" />
-        <Path d="M 65 135 L 100 70 L 135 135 Z" fill="none" stroke="#FFFFFF" strokeWidth="4" strokeLinejoin="round" />
-        <SvgText x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="14" fill="#DC2626" textAnchor="middle" letterSpacing="3">MAHINDRA</SvgText>
-      </Svg>
-    );
-  }
-  if (lower.includes('toyota')) {
-    return (
-      <Svg width={s} height={s} viewBox="0 0 200 200">
-        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#EF4444" strokeWidth="4" />
-        <Ellipse cx="100" cy="100" rx="65" ry="40" fill="none" stroke="#FFFFFF" strokeWidth="6" />
-        <Ellipse cx="100" cy="90" rx="35" ry="25" fill="none" stroke="#FFFFFF" strokeWidth="5" />
-        <SvgText x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="16" fill="#EF4444" textAnchor="middle" letterSpacing="3">TOYOTA</SvgText>
-      </Svg>
-    );
-  }
-  if (lower.includes('honda')) {
-    return (
-      <Svg width={s} height={s} viewBox="0 0 200 200">
-        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#EF4444" strokeWidth="4" />
-        <Path d="M 75 60 L 75 140 M 125 60 L 125 140 M 75 100 L 125 100" stroke="#FFFFFF" strokeWidth="14" strokeLinecap="round" />
-        <SvgText x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="16" fill="#EF4444" textAnchor="middle" letterSpacing="3">HONDA</SvgText>
-      </Svg>
-    );
-  }
-  if (lower.includes('kia')) {
-    return (
-      <Svg width={s} height={s} viewBox="0 0 200 200">
-        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#38BDF8" strokeWidth="4" />
-        <SvgText x="100" y="112" fontFamily="sans-serif" fontWeight="900" fontSize="48" fill="#FFFFFF" textAnchor="middle" letterSpacing="2">KIA</SvgText>
-        <SvgText x="100" y="152" fontFamily="sans-serif" fontWeight="700" fontSize="12" fill="#38BDF8" textAnchor="middle" letterSpacing="3">MOVEMENT</SvgText>
-      </Svg>
-    );
-  }
-  if (lower.includes('volkswagen') || lower.includes('vw')) {
-    return (
-      <Svg width={s} height={s} viewBox="0 0 200 200">
-        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#3B82F6" strokeWidth="4" />
-        <Circle cx="100" cy="100" r="68" fill="none" stroke="#3B82F6" strokeWidth="6" />
-        <Path d="M 68 75 L 85 125 L 100 95 L 115 125 L 132 75 M 62 105 L 138 105" stroke="#FFFFFF" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
-        <SvgText x="100" y="168" fontFamily="sans-serif" fontWeight="900" fontSize="14" fill="#60A5FA" textAnchor="middle" letterSpacing="3">VOLKSWAGEN</SvgText>
-      </Svg>
-    );
-  }
-  if (lower.includes('skoda')) {
-    return (
-      <Svg width={s} height={s} viewBox="0 0 200 200">
-        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#059669" strokeWidth="4" />
-        <Circle cx="100" cy="100" r="70" fill="none" stroke="#059669" strokeWidth="6" />
-        <SvgText x="100" y="110" fontFamily="sans-serif" fontWeight="900" fontSize="26" fill="#10B981" textAnchor="middle" letterSpacing="2">SKODA</SvgText>
-        <SvgText x="100" y="150" fontFamily="sans-serif" fontWeight="700" fontSize="12" fill="#94A3B8" textAnchor="middle" letterSpacing="2">AUTO</SvgText>
-      </Svg>
-    );
-  }
-  if (lower.includes('bmw')) {
-    return (
-      <Svg width={s} height={s} viewBox="0 0 200 200">
-        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#FFFFFF" strokeWidth="5" />
-        <Circle cx="100" cy="100" r="74" fill="#1E293B" stroke="#38BDF8" strokeWidth="4" />
-        <Path d="M 100 26 A 74 74 0 0 1 174 100 L 100 100 Z" fill="#3B82F6" />
-        <Path d="M 100 174 A 74 74 0 0 1 26 100 L 100 100 Z" fill="#3B82F6" />
-        <SvgText x="100" y="70" fontFamily="sans-serif" fontWeight="900" fontSize="14" fill="#FFFFFF" textAnchor="middle" letterSpacing="5">BMW</SvgText>
-      </Svg>
-    );
-  }
-  if (lower.includes('mercedes') || lower.includes('benz')) {
-    return (
-      <Svg width={s} height={s} viewBox="0 0 200 200">
-        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#CBD5E1" strokeWidth="5" />
-        <Path d="M 100 40 L 100 100 M 100 100 L 145 130 M 100 100 L 55 130" stroke="#FFFFFF" strokeWidth="10" strokeLinecap="round" />
-        <SvgText x="100" y="165" fontFamily="sans-serif" fontWeight="900" fontSize="13" fill="#E2E8F0" textAnchor="middle" letterSpacing="2">MERCEDES</SvgText>
-      </Svg>
-    );
-  }
-  if (lower.includes('audi')) {
-    return (
-      <Svg width={s} height={s} viewBox="0 0 200 200">
-        <Circle cx="100" cy="100" r="94" fill="#0A0F1D" stroke="#94A3B8" strokeWidth="4" />
-        <Circle cx="70" cy="95" r="22" fill="none" stroke="#FFFFFF" strokeWidth="8" />
-        <Circle cx="90" cy="95" r="22" fill="none" stroke="#FFFFFF" strokeWidth="8" />
-        <Circle cx="110" cy="95" r="22" fill="none" stroke="#FFFFFF" strokeWidth="8" />
-        <Circle cx="130" cy="95" r="22" fill="none" stroke="#FFFFFF" strokeWidth="8" />
-        <SvgText x="100" y="160" fontFamily="sans-serif" fontWeight="900" fontSize="18" fill="#FFFFFF" textAnchor="middle" letterSpacing="5">AUDI</SvgText>
-      </Svg>
+      <View style={{ width: s, height: s, borderRadius: s / 2, backgroundColor: '#0F172A', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 1.5, borderColor: '#334155' }}>
+        <Image 
+          source={matchedImage} 
+          style={{ width: s * 0.78, height: s * 0.78, resizeMode: 'contain' }} 
+        />
+      </View>
     );
   }
 

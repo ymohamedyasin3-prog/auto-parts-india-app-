@@ -59,15 +59,7 @@ class SafeErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundar
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [showSplash, setShowSplash] = useState(true);
   const previousUserIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowSplash(false);
-    }, 1800);
-    return () => clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     let cleanupFcm: (() => void) | null = null;
@@ -142,13 +134,9 @@ export default function App() {
           <LanguageProvider>
             <StatusBar barStyle="light-content" backgroundColor="#0B1220" />
             <PaperProvider theme={theme}>
-              {showSplash ? (
-                <SplashScreen />
-              ) : (
-                <NavigationContainer ref={navigationRef}>
-                  <AppNavigator user={currentUser} />
-                </NavigationContainer>
-              )}
+              <NavigationContainer ref={navigationRef}>
+                <AppNavigator user={currentUser} />
+              </NavigationContainer>
             </PaperProvider>
           </LanguageProvider>
         </SafeAreaProvider>

@@ -6,6 +6,7 @@ import { getFirebaseAuth, getFirebaseFirestore, getCurrentUser } from '../servic
 import ImageView from 'react-native-image-viewing';
 import { UserProfilePopupModal } from '../components/UserProfilePopupModal';
 import { openNativeCamera, openNativeGallery } from '../services/imagePickerService';
+import { uploadImageToCloudinary } from '../services/cloudinary';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -178,19 +179,27 @@ export default function SellerProfileScreen({ route, navigation }: any) {
   };
 
   const saveNewPhoto = async (uri: string) => {
-    setSellerPhoto(uri);
     try {
-      const db = getFirebaseFirestore();
-      if (db && currentUser?.uid) {
-        await db.collection('users').doc(currentUser.uid).set({
-          photoURL: uri,
-          profilePhoto: uri,
-          updatedAt: Date.now()
-        }, { merge: true });
+      setSellerPhoto(uri);
+      const cloudinaryUrl = await uploadImageToCloudinary(uri, 'profile_photos');
+      if (cloudinaryUrl) {
+        setSellerPhoto(cloudinaryUrl);
+        const db = getFirebaseFirestore();
+        if (db && currentUser?.uid) {
+          await db.collection('users').doc(currentUser.uid).set({
+            photoURL: cloudinaryUrl,
+            profilePhoto: cloudinaryUrl,
+            updatedAt: Date.now()
+          }, { merge: true });
+        }
+        if (currentUser && typeof currentUser.updateProfile === 'function') {
+          await currentUser.updateProfile({ photoURL: cloudinaryUrl });
+        }
         Alert.alert('Success', 'Profile picture updated successfully!');
       }
     } catch (err: any) {
       console.warn('Failed to save profile photo to Firestore:', err);
+      Alert.alert('Error', 'Failed to upload profile photo.');
     }
   };
 
