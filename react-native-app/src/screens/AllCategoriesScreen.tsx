@@ -200,40 +200,41 @@ export default function AllCategoriesScreen({ navigation, route }: any) {
 
     // 1. Default categories
     ALL_AUTOMOTIVE_CATEGORIES.forEach(c => {
-      map.set(c.id.toLowerCase(), c);
-      map.set(c.name.toLowerCase(), c);
+      map.set(c.name.toLowerCase().trim(), c);
     });
 
     // 2. Passed categories from route.params
     const passed = route?.params?.categories || [];
     passed.forEach((c: any) => {
-      if (c.id === 'More') return;
+      if (c.id === 'More' || c.name === 'All Categories') return;
+      const rawName = c.name || c.title || c.id || '';
+      const displayName = rawName.length > 0 ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : rawName;
       const item: CategoryItem = {
-        id: c.id || c.name,
-        name: c.name || c.title,
+        id: c.id || displayName,
+        name: displayName,
         icon: c.icon || 'car-cog',
         bg: c.bg || '#F0F9FF',
         color: c.color || '#0066FF',
         description: c.description || c.subtitle || 'Verified automotive spare parts & OEM components',
         popularParts: c.popularParts || ['OEM Part', 'Spare Part', 'Accessory'],
       };
-      map.set(item.id.toLowerCase(), item);
-      map.set(item.name.toLowerCase(), item);
+      map.set(displayName.toLowerCase().trim(), item);
     });
 
     // 3. Firestore topCategories
     firestoreCategories.forEach((c: any) => {
+      const rawName = c.name || c.title || c.id || '';
+      const displayName = rawName.length > 0 ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : rawName;
       const item: CategoryItem = {
-        id: c.id || c.name,
-        name: c.name || c.title,
+        id: c.id || displayName,
+        name: displayName,
         icon: c.icon || 'car-cog',
         bg: c.bg || '#F0F9FF',
         color: c.color || '#0066FF',
         description: c.description || c.subtitle || 'Verified automotive spare parts & OEM components',
         popularParts: c.popularParts || ['OEM Part', 'Spare Part', 'Accessory'],
       };
-      map.set(item.id.toLowerCase(), item);
-      map.set(item.name.toLowerCase(), item);
+      map.set(displayName.toLowerCase().trim(), item);
     });
 
     return Array.from(map.values());

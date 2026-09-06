@@ -5,6 +5,7 @@ import { Text, Surface, Button, Icon, ActivityIndicator as PaperActivityIndicato
 import { getFirebaseAuth, getFirebaseFirestore, getCurrentUser } from '../services/firebase';
 import ImageView from 'react-native-image-viewing';
 import { UserProfilePopupModal } from '../components/UserProfilePopupModal';
+import { openNativeCamera, openNativeGallery } from '../services/imagePickerService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -119,29 +120,77 @@ export default function SellerProfileScreen({ route, navigation }: any) {
 
     setFollowLoading(true);
     const followId = `${currentUser.uid}_${sellerId}`;
+    const previousState = isFollowing;
+
+    // Optimistic UI update for instant snappy feedback
+    setIsFollowing(!previousState);
+    setFollowersCount(prev => previousState ? Math.max(0, prev - 1) : prev + 1);
+
     try {
       const db = getFirebaseFirestore();
-      if (!db || typeof db.collection !== 'function') return;
-
-      if (isFollowing) {
-        await db.collection('follows').doc(followId).delete();
-        setIsFollowing(false);
-        setFollowersCount(prev => Math.max(0, prev - 1));
-      } else {
-        await db.collection('follows').doc(followId).set({
-          id: followId,
-          followerId: currentUser.uid,
-          followingId: sellerId,
-          followerName: currentUser.displayName || 'Buyer',
-          createdAt: Date.now(),
-        });
-        setIsFollowing(true);
-        setFollowersCount(prev => prev + 1);
+      if (db && typeof db.collection === 'function') {
+        if (previousState) {
+          await db.collection('follows').doc(followId).delete();
+        } else {
+          await db.collection('follows').doc(followId).set({
+            id: followId,
+            followerId: currentUser.uid,
+            followingId: sellerId,
+            followerName: currentUser.displayName || 'Buyer',
+            createdAt: Date.now(),
+          }, { merge: true });
+        }
       }
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to update follow status.');
+      console.warn('Follow update sync warning:', err);
     } finally {
       setFollowLoading(false);
+    }
+  };
+
+  const handleUpdateProfilePhoto = async () => {
+    if (!currentUser || !isOwnProfile) return;
+    Alert.alert(
+      'Update Profile Picture',
+      'Choose source for your new profile picture:',
+      [
+        {
+          text: 'Take Photo (Camera)',
+          onPress: async () => {
+            const uri = await openNativeCamera();
+            if (uri) {
+              await saveNewPhoto(uri);
+            }
+          }
+        },
+        {
+          text: 'Choose from Gallery',
+          onPress: async () => {
+            const uri = await openNativeGallery();
+            if (uri) {
+              await saveNewPhoto(uri);
+            }
+          }
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const saveNewPhoto = async (uri: string) => {
+    setSellerPhoto(uri);
+    try {
+      const db = getFirebaseFirestore();
+      if (db && currentUser?.uid) {
+        await db.collection('users').doc(currentUser.uid).set({
+          photoURL: uri,
+          profilePhoto: uri,
+          updatedAt: Date.now()
+        }, { merge: true });
+        Alert.alert('Success', 'Profile picture updated successfully!');
+      }
+    } catch (err: any) {
+      console.warn('Failed to save profile photo to Firestore:', err);
     }
   };
 
@@ -166,11 +215,17 @@ export default function SellerProfileScreen({ route, navigation }: any) {
       {/* 1. Compact Header Card */}
       <Surface style={styles.headerCard} elevation={1}>
         <View style={styles.profileRow}>
-          {/* Max 64px avatar with social media popup tap capability */}
+          {/* Max 64px avatar with social media popup tap capability or native camera/gallery upload if own profile */}
           <TouchableOpacity 
             style={styles.avatarWrap} 
             activeOpacity={0.8}
-            onPress={() => setIsProfilePopupOpen(true)}
+            onPress={() => {
+              if (isOwnProfile) {
+                handleUpdateProfilePhoto();
+              } else {
+                setIsProfilePopupOpen(true);
+              }
+            }}
           >
             {sellerPhoto ? (
               <Image source={{ uri: sellerPhoto }} style={styles.avatarImg} />
@@ -182,7 +237,7 @@ export default function SellerProfileScreen({ route, navigation }: any) {
               </View>
             )}
             <View style={styles.avatarZoomBadge}>
-              <Icon source="magnify" size={12} color="#FFFFFF" />
+              <Icon source={isOwnProfile ? "camera" : "magnify"} size={12} color="#FFFFFF" />
             </View>
           </TouchableOpacity>
 

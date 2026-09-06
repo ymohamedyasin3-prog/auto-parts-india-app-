@@ -485,38 +485,53 @@ export default function HomeScreen({ navigation, route, user }: any) {
     if (name.includes('brake') || name.includes('rotor') || name.includes('disc') || name.includes('pad')) return { icon: 'car-brake-alert', bg: '#FFF1F2', color: '#E11D48' };
     if (name.includes('filter') || name.includes('oil') || name.includes('air')) return { icon: 'air-filter', bg: '#FFF7ED', color: '#EA580C' };
     if (name.includes('ac') || name.includes('cool') || name.includes('radiator')) return { icon: 'fan', bg: '#F0FDFA', color: '#0D9488' };
+    if (name.includes('maruti') || name.includes('hyundai') || name.includes('tata') || name.includes('mahindra') || name.includes('toyota') || name.includes('honda') || name.includes('audi') || name.includes('bmw') || name.includes('ford') || name.includes('kia') || name.includes('volkswagen') || name.includes('skoda') || name.includes('renault') || name.includes('nissan') || name.includes('mg')) return { icon: 'car-side', bg: '#EFF6FF', color: '#0066FF' };
     if (name.includes('all')) return { icon: 'car-multiple', bg: '#EFF6FF', color: '#0066FF' };
     return { icon: 'apps', bg: '#F1F5F9', color: '#475569' };
   };
 
-  // Dynamic category grid items from Firestore or defaults
+  // Dynamic category grid items combining defaults and Firestore topCategories without duplicates
   const categoryGridItems = React.useMemo(() => {
+    const map = new Map<string, any>();
+
+    // 1. Add default categories first (except 'More')
+    DEFAULT_CATEGORY_GRID_ITEMS.forEach(item => {
+      if (item.id !== 'More') {
+        map.set(item.name.toLowerCase().trim(), item);
+      }
+    });
+
+    // 2. Add or override with Firestore topCategories
     if (topCategories && topCategories.length > 0) {
-      const formatted = topCategories.map((c) => {
+      topCategories.forEach((c) => {
         const meta = getCategoryMeta(c);
-        return {
-          id: c.id || c.name || c.title,
-          name: c.name || c.title,
+        const rawName = c.name || c.title || c.id || '';
+        const displayName = rawName.length > 0 ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : rawName;
+        const item = {
+          id: c.id || rawName,
+          name: displayName,
           icon: c.icon || meta.icon,
           bg: meta.bg,
           color: meta.color,
           imageUrl: c.imageUrl,
+          order: c.order ?? 0,
         };
+        map.set(displayName.toLowerCase().trim(), item);
       });
-      // Ensure 'More' is always present at the end for easy catalog browsing
-      if (!formatted.some(c => c.name?.toLowerCase() === 'more' || c.id === 'More')) {
-        formatted.push({
-          id: 'More',
-          name: 'All Categories',
-          icon: 'apps',
-          bg: '#F1F5F9',
-          color: '#475569',
-          imageUrl: undefined,
-        });
-      }
-      return formatted;
     }
-    return DEFAULT_CATEGORY_GRID_ITEMS;
+
+    const merged = Array.from(map.values());
+    // Always append 'More' at the end
+    merged.push({
+      id: 'More',
+      name: 'All Categories',
+      icon: 'apps',
+      bg: '#F1F5F9',
+      color: '#475569',
+      imageUrl: undefined,
+    });
+
+    return merged;
   }, [topCategories]);
 
   // Brand items for horizontal brand selector matching the reference image
