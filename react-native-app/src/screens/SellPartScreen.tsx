@@ -254,6 +254,19 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
       if (activeUser.phone || activeUser.phoneNumber) {
         setContactPhone(activeUser.phone || activeUser.phoneNumber);
       }
+      // Also fetch live user document to get latest photoURL/profilePhoto from Firestore
+      const db = getFirestoreInstance();
+      if (db && activeUser?.uid) {
+        db.collection('users').doc(activeUser.uid).get().then((docSnap: any) => {
+          if (docSnap.exists) {
+            const uData = docSnap.data();
+            if (uData.photoURL || uData.profilePhoto) {
+              activeUser.photoURL = uData.photoURL || uData.profilePhoto;
+              activeUser.profilePhoto = uData.profilePhoto || uData.photoURL;
+            }
+          }
+        }).catch(() => {});
+      }
     }
 
     // Pre-populate saved location if available

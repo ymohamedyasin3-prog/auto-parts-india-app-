@@ -197,44 +197,18 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Profile Header Block */}
         <View style={styles.profileHeaderCard}>
-          <View style={{ position: 'relative' }}>
-            <TouchableOpacity 
-              onPress={() => {
-                const uid = activeUid || getCurrentUser()?.uid;
-                if (uid) {
-                  navigation.navigate('SellerProfile', { sellerId: uid, sellerName: displayName });
-                }
-              }} 
-              style={styles.avatarWrap}
-            >
-              <Image source={{ uri: displayPhotoUrl }} style={styles.avatarImage} />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={handlePickProfilePhoto}
-              style={{
-                position: 'absolute',
-                bottom: 0,
-                right: 0,
-                backgroundColor: '#0066FF',
-                width: 26,
-                height: 26,
-                borderRadius: 13,
-                justifyContent: 'center',
-                alignItems: 'center',
-                borderWidth: 2,
-                borderColor: '#FFFFFF',
-                elevation: 3,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.2,
-                shadowRadius: 2,
-              }}
-            >
-              <Icon source="camera" size={13} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity 
+            onPress={() => {
+              const uid = activeUid || getCurrentUser()?.uid;
+              if (uid) {
+                navigation.navigate('SellerProfile', { sellerId: uid, sellerName: displayName });
+              }
+            }} 
+            style={styles.avatarWrap}
+          >
+            <Image source={{ uri: displayPhotoUrl }} style={styles.avatarImage} />
+          </TouchableOpacity>
           <View style={styles.profileInfoWrap}>
             <TouchableOpacity onPress={() => {
               const uid = activeUid || getCurrentUser()?.uid;
