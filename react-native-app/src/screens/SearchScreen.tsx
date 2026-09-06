@@ -18,6 +18,7 @@ import { INITIAL_SPARE_PARTS } from '../data/mockData';
 import { getFirebaseFirestore } from '../services/firebase';
 import { useFavorites } from '../services/favorites';
 import { matchesCategoryFilter } from '../utils/categoryMatcher';
+import { matchPartSearch } from '../utils/searchHelper';
 
 export default function SearchScreen({ navigation, route, user }: any) {
   const insets = useSafeAreaInsets();
@@ -150,42 +151,66 @@ export default function SearchScreen({ navigation, route, user }: any) {
   };
 
   const filteredParts = useMemo(() => {
-    return parts.filter((part) => {
+    const scoredList: { part: any; score: number }[] = [];
+
+    for (const part of parts) {
+      // Exclude deleted listings
+      if (part.isDeleted === true || part.status === 'deleted') {
+        continue;
+      }
+
+      let searchScore = 0;
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchTitle = (part.title || '').toLowerCase().includes(q);
-        const matchBrand = (part.carBrand || '').toLowerCase().includes(q);
-        const matchModel = (part.carModel || '').toLowerCase().includes(q);
-        const matchCat = (part.category || '').toLowerCase().includes(q);
-        const matchLoc = (part.location || '').toLowerCase().includes(q);
-        if (!matchTitle && !matchBrand && !matchModel && !matchCat && !matchLoc) {
-          return false;
+        const searchResult = matchPartSearch(part, searchQuery);
+        if (!searchResult.matches) {
+          continue;
         }
+        searchScore = searchResult.score;
       }
 
       if (selectedCategory !== 'All Categories' && selectedCategory !== 'All') {
         if (!matchesCategoryFilter(part, selectedCategory)) {
-          return false;
+          continue;
         }
       }
-      if (selectedBrand !== 'All Brands' && part.carBrand !== selectedBrand) {
-        return false;
+      if (selectedBrand !== 'All Brands' && (part.carBrand !== selectedBrand && part.brand !== selectedBrand)) {
+        continue;
       }
       if (selectedCondition !== 'All Conditions') {
         const isNewSelected = selectedCondition === 'New';
         const isPartNew = (part.condition || '').toLowerCase().includes('new');
-        if (isNewSelected && !isPartNew) return false;
-        if (!isNewSelected && isPartNew) return false;
+        if (isNewSelected && !isPartNew) continue;
+        if (!isNewSelected && isPartNew) continue;
       }
-      if (selectedState !== 'All States' && part.state !== selectedState && part.location !== selectedState) {
-        return false;
+      if (selectedState !== 'All States') {
+        const stateLower = selectedState.toLowerCase();
+        const matchesState = 
+          (part.state && part.state.toLowerCase().includes(stateLower)) ||
+          (part.location && part.location.toLowerCase().includes(stateLower)) ||
+          (part.district && part.district.toLowerCase().includes(stateLower));
+        if (!matchesState) {
+          continue;
+        }
       }
-      return true;
-    }).sort((a, b) => {
-      if (sortBy === 'price_low') return (a.price || 0) - (b.price || 0);
-      if (sortBy === 'price_high') return (b.price || 0) - (a.price || 0);
-      return (b.createdAt || 0) - (a.createdAt || 0);
-    });
+
+      scoredList.push({ part, score: searchScore });
+    }
+
+    return scoredList.sort((a, b) => {
+      // If user typed a search query and hasn't explicitly chosen price sort, prioritize search relevance!
+      if (searchQuery.trim() && sortBy === 'newest') {
+        if (b.score !== a.score) {
+          return b.score - a.score;
+        }
+      }
+      if (sortBy === 'price_low') {
+        return (Number(a.part.price || a.part.partPrice) || 0) - (Number(b.part.price || b.part.partPrice) || 0);
+      }
+      if (sortBy === 'price_high') {
+        return (Number(b.part.price || b.part.partPrice) || 0) - (Number(a.part.price || a.part.partPrice) || 0);
+      }
+      return (b.part.createdAt || 0) - (a.part.createdAt || 0);
+    }).map(item => item.part);
   }, [parts, searchQuery, selectedCategory, selectedBrand, selectedCondition, selectedState, sortBy]);
 
   const renderPartItem = ({ item }: { item: any }) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -67,6 +67,291 @@ const DEFAULT_BRAND_MODELS: Record<string, string[]> = {
   'BMW': ['3 Series', '5 Series', '7 Series', 'X1', 'X3', 'X5', 'X7', 'M3', 'M5'],
   'Mercedes-Benz': ['A-Class', 'C-Class', 'E-Class', 'S-Class', 'GLA', 'GLC', 'GLE', 'GLS'],
   'Audi': ['A4', 'A6', 'A8', 'Q3', 'Q5', 'Q7', 'Q8'],
+};
+
+// Brand-specific canonical variants for accurate automotive fitment
+export const DEFAULT_BRAND_VARIANTS: Record<string, string[]> = {
+  'Maruti Suzuki': [
+    'All Variants (Fits All)',
+    'LXI',
+    'VXI',
+    'ZXI',
+    'ZXI Plus',
+    'LDI',
+    'VDI',
+    'ZDI',
+    'ZDI Plus',
+    'Sigma',
+    'Delta',
+    'Zeta',
+    'Alpha',
+    'Tour',
+    'Base Model',
+    'Top Model',
+  ],
+  'Hyundai': [
+    'All Variants (Fits All)',
+    'E',
+    'EX',
+    'S',
+    'S(O)',
+    'SX',
+    'SX(O)',
+    'SX Tech',
+    'Era',
+    'Magna',
+    'Sportz',
+    'Asta',
+    'Asta(O)',
+    'Executive',
+    'Knight Edition',
+    'N Line',
+    'Base Model',
+    'Top Model',
+  ],
+  'Tata': [
+    'All Variants (Fits All)',
+    'Smart',
+    'Smart+',
+    'Pure',
+    'Pure+',
+    'Creative',
+    'Creative+',
+    'Fearless',
+    'Fearless+',
+    'XE',
+    'XM',
+    'XT',
+    'XZ',
+    'XZ+',
+    'XZA+',
+    'Dark Edition',
+    'Red Dark',
+    'Base Model',
+    'Top Model',
+  ],
+  'Mahindra': [
+    'All Variants (Fits All)',
+    'Z2',
+    'Z4',
+    'Z6',
+    'Z8',
+    'Z8 Select',
+    'Z8L',
+    'AX3',
+    'AX5',
+    'AX7',
+    'AX7L',
+    'MX',
+    'S3',
+    'S5',
+    'S7',
+    'S9',
+    'S11',
+    'Classic',
+    'B4',
+    'B6',
+    'B6(O)',
+    'Base Model',
+    'Top Model',
+  ],
+  'Toyota': [
+    'All Variants (Fits All)',
+    'E',
+    'G',
+    'GX',
+    'GX+',
+    'VX',
+    'ZX',
+    'ZX(O)',
+    'V',
+    'Z',
+    'Legender',
+    'GR Sport',
+    'Touring Sport',
+    'Base Model',
+    'Top Model',
+  ],
+  'Honda': [
+    'All Variants (Fits All)',
+    'E',
+    'S',
+    'V',
+    'VX',
+    'ZX',
+    'SV',
+    'Elegance',
+    'Exclusive',
+    'e:HEV Hybrid',
+    'Base Model',
+    'Top Model',
+  ],
+  'Kia': [
+    'All Variants (Fits All)',
+    'HTE',
+    'HTK',
+    'HTK+',
+    'HTX',
+    'HTX+',
+    'GTX',
+    'GTX+',
+    'X-Line',
+    'Base Model',
+    'Top Model',
+  ],
+  'Volkswagen': [
+    'All Variants (Fits All)',
+    'Trendline',
+    'Comfortline',
+    'Highline',
+    'Highline Plus',
+    'Topline',
+    'GT',
+    'GT Plus',
+    'Dynamic Line',
+    'Base Model',
+    'Top Model',
+  ],
+  'Skoda': [
+    'All Variants (Fits All)',
+    'Active',
+    'Ambition',
+    'Style',
+    'Prestige',
+    'Monte Carlo',
+    'Onyx',
+    'L&K',
+    'RS',
+    'Base Model',
+    'Top Model',
+  ],
+  'Ford': [
+    'All Variants (Fits All)',
+    'Ambiente',
+    'Trend',
+    'Trend+',
+    'Titanium',
+    'Titanium+',
+    'Sports',
+    'S Edition',
+    'Base Model',
+    'Top Model',
+  ],
+  'Renault': [
+    'All Variants (Fits All)',
+    'RXE',
+    'RXL',
+    'RXT',
+    'RXZ',
+    'Climber',
+    'RXT(O)',
+    'Base Model',
+    'Top Model',
+  ],
+  'Nissan': [
+    'All Variants (Fits All)',
+    'XE',
+    'XL',
+    'XV',
+    'XV Premium',
+    'Geza Edition',
+    'Base Model',
+    'Top Model',
+  ],
+  'MG': [
+    'All Variants (Fits All)',
+    'Style',
+    'Super',
+    'Smart',
+    'Smart Pro',
+    'Sharp',
+    'Sharp Pro',
+    'Savvy',
+    'Savvy Pro',
+    'Blackstorm',
+    'Base Model',
+    'Top Model',
+  ],
+  'Jeep': [
+    'All Variants (Fits All)',
+    'Sport',
+    'Longitude',
+    'Night Eagle',
+    'Limited',
+    'Model S',
+    'Trailhawk',
+  ],
+  'BMW': [
+    'All Variants (Fits All)',
+    'Sport',
+    'Luxury Line',
+    'M Sport',
+    'xDrive',
+    'sDrive',
+  ],
+  'Mercedes-Benz': [
+    'All Variants (Fits All)',
+    'Progressive',
+    'AMG Line',
+    'Exclusive',
+    'Avantgarde',
+    '4MATIC',
+  ],
+  'Audi': [
+    'All Variants (Fits All)',
+    'Premium',
+    'Premium Plus',
+    'Technology',
+    'quattro',
+  ],
+};
+
+// Model-specific popular trim definitions
+export const MODEL_SPECIFIC_VARIANTS: Record<string, string[]> = {
+  // Maruti Popular
+  'Maruti Suzuki Swift': ['All Variants (Fits All)', 'LXI', 'VXI', 'ZXI', 'ZXI Plus', 'LDI (Diesel)', 'VDI (Diesel)', 'ZDI (Diesel)'],
+  'Maruti Suzuki Dzire': ['All Variants (Fits All)', 'LXI', 'VXI', 'ZXI', 'ZXI Plus', 'Tour S', 'VDI (Diesel)', 'ZDI (Diesel)'],
+  'Maruti Suzuki Baleno': ['All Variants (Fits All)', 'Sigma', 'Delta', 'Zeta', 'Alpha'],
+  'Maruti Suzuki Brezza': ['All Variants (Fits All)', 'LXI', 'VXI', 'ZXI', 'ZXI Plus', 'LDI', 'VDI', 'ZDI'],
+  'Maruti Suzuki Ertiga': ['All Variants (Fits All)', 'LXI', 'VXI', 'ZXI', 'ZXI Plus', 'Tour M'],
+  'Maruti Suzuki Wagon R': ['All Variants (Fits All)', 'LXI (1.0L)', 'VXI (1.0L)', 'ZXI (1.2L)', 'ZXI Plus (1.2L)', 'Tour H3'],
+  'Maruti Suzuki Alto': ['All Variants (Fits All)', 'Std', 'LXI', 'VXI', 'VXI Plus', 'Tour H1'],
+  // Hyundai Popular
+  'Hyundai Creta': ['All Variants (Fits All)', 'E', 'EX', 'S', 'S(O)', 'SX', 'SX(O)', 'SX Tech', 'Knight Edition', 'N Line'],
+  'Hyundai i20': ['All Variants (Fits All)', 'Era', 'Magna', 'Sportz', 'Sportz(O)', 'Asta', 'Asta(O)', 'N Line'],
+  'Hyundai Venue': ['All Variants (Fits All)', 'E', 'S', 'S(O)', 'S+', 'SX', 'SX(O)', 'Knight Edition', 'N Line'],
+  'Hyundai Verna': ['All Variants (Fits All)', 'EX', 'S', 'SX', 'SX(O)', 'Turbo SX(O)'],
+  'Hyundai Grand i10': ['All Variants (Fits All)', 'Era', 'Magna', 'Sportz', 'Asta', 'Corporate Edition'],
+  // Tata Popular
+  'Tata Nexon': ['All Variants (Fits All)', 'Smart', 'Smart+', 'Pure', 'Pure+', 'Creative', 'Creative+', 'Fearless', 'Fearless+', 'Dark Edition'],
+  'Tata Punch': ['All Variants (Fits All)', 'Pure', 'Adventure', 'Accomplished', 'Creative', 'Camo Edition'],
+  'Tata Harrier': ['All Variants (Fits All)', 'Smart', 'Pure', 'Adventure', 'Fearless', 'Dark Edition'],
+  'Tata Safari': ['All Variants (Fits All)', 'Smart', 'Pure', 'Adventure', 'Accomplished', 'Dark Edition', 'Gold Edition'],
+  'Tata Altroz': ['All Variants (Fits All)', 'XE', 'XM', 'XM+', 'XT', 'XZ', 'XZ+', 'Racer', 'Dark Edition'],
+  'Tata Tiago': ['All Variants (Fits All)', 'XE', 'XT', 'XZ', 'XZ+', 'NRG'],
+  // Mahindra Popular
+  'Mahindra Scorpio-N': ['All Variants (Fits All)', 'Z2', 'Z4', 'Z6', 'Z8', 'Z8 Select', 'Z8L'],
+  'Mahindra Scorpio Classic': ['All Variants (Fits All)', 'S', 'S11', 'S3', 'S5', 'S7', 'S9'],
+  'Mahindra Thar': ['All Variants (Fits All)', 'AX', 'AX(O)', 'LX Hard Top', 'LX Soft Top', 'RWD', 'Earth Edition'],
+  'Mahindra XUV700': ['All Variants (Fits All)', 'MX', 'AX3', 'AX5', 'AX7', 'AX7L', 'Blaze Edition'],
+  'Mahindra Bolero': ['All Variants (Fits All)', 'B4', 'B6', 'B6(O)', 'Power+', 'Plus'],
+  'Mahindra XUV300': ['All Variants (Fits All)', 'W4', 'W6', 'W8', 'W8(O)'],
+  // Toyota Popular
+  'Toyota Innova Crysta': ['All Variants (Fits All)', 'G', 'GX', 'GX+', 'VX', 'ZX', 'Touring Sport'],
+  'Toyota Innova Hycross': ['All Variants (Fits All)', 'G', 'GX', 'GX(O)', 'VX', 'ZX', 'ZX(O)'],
+  'Toyota Fortuner': ['All Variants (Fits All)', '4x2 MT', '4x2 AT', '4x4 MT', '4x4 AT', 'Legender', 'GR Sport'],
+  'Toyota Glanza': ['All Variants (Fits All)', 'E', 'S', 'G', 'V'],
+  // Honda Popular
+  'Honda City': ['All Variants (Fits All)', 'SV', 'V', 'VX', 'ZX', 'e:HEV Hybrid', 'Type 1', 'Type 2'],
+  'Honda Amaze': ['All Variants (Fits All)', 'E', 'S', 'V', 'VX'],
+  // Kia Popular
+  'Kia Seltos': ['All Variants (Fits All)', 'HTE', 'HTK', 'HTK+', 'HTX', 'HTX+', 'GTX+', 'X-Line'],
+  'Kia Sonet': ['All Variants (Fits All)', 'HTE', 'HTK', 'HTK+', 'HTX', 'HTX+', 'GTX+', 'X-Line'],
+  // VW & Skoda Popular
+  'Volkswagen Polo': ['All Variants (Fits All)', 'Trendline', 'Comfortline', 'Highline', 'Highline Plus', 'GT TSI', 'GT TDI'],
+  'Volkswagen Virtus': ['All Variants (Fits All)', 'Comfortline', 'Highline', 'Topline', 'GT', 'GT Plus'],
+  'Skoda Slavia': ['All Variants (Fits All)', 'Active', 'Ambition', 'Style', 'Prestige', 'Monte Carlo'],
+  'Skoda Rapid': ['All Variants (Fits All)', 'Active', 'Ambition', 'Style', 'Onyx', 'Monte Carlo', 'Rider'],
 };
 
 const DEFAULT_CATEGORY_PARTS: Record<string, string[]> = {
@@ -193,6 +478,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
   const [finalBrand, setCarBrand] = useState('');
   const [finalModel, setCarModel] = useState('');
   const [carVariant, setCarVariant] = useState('');
+  const [fuelType, setFuelType] = useState('All / Any');
   const [carYear, setCarYear] = useState('2023');
   const [finalCategory, setCategory] = useState('');
   const [finalPartName, setPartName] = useState('');
@@ -283,7 +569,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
     // Check user active ads count in Firestore
     const db = getFirestoreInstance();
     if (db && activeUser?.uid) {
-      db.collection('products/listings/items')
+      db.collection('spareParts')
         .where('sellerId', '==', activeUser.uid)
         .get()
         .then((snapshot: any) => {
@@ -344,6 +630,33 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
   const availableModels = finalBrand && taxonomyBrands[finalBrand] ? taxonomyBrands[finalBrand] : [];
   const availableCategories = Object.keys(taxonomyCategories);
   const availablePartNames = finalCategory && taxonomyCategories[finalCategory] ? taxonomyCategories[finalCategory] : [];
+
+  const availableVariants = useMemo(() => {
+    if (!finalBrand && !finalModel) {
+      return ['All Variants (Fits All)', 'Base Model', 'Mid Model', 'Top Model'];
+    }
+
+    const brandKey = finalBrand.trim();
+    const modelKey = `${brandKey} ${finalModel}`.trim();
+
+    // Check if model-specific variant list exists
+    if (MODEL_SPECIFIC_VARIANTS[modelKey]) {
+      return MODEL_SPECIFIC_VARIANTS[modelKey];
+    }
+
+    // Check if brand-specific variant list exists
+    if (DEFAULT_BRAND_VARIANTS[brandKey]) {
+      return DEFAULT_BRAND_VARIANTS[brandKey];
+    }
+
+    // Default fallback
+    return [
+      'All Variants (Fits All)',
+      'Base Model',
+      'Mid Model',
+      'Top Model',
+    ];
+  }, [finalBrand, finalModel]);
 
   const availableStates = INDIAN_STATES_AND_DISTRICTS.map((s) => s.state);
   const finalStateObj = INDIAN_STATES_AND_DISTRICTS.find((s) => s.state === finalState);
@@ -644,6 +957,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
         carModel: resolvedModel,
         finalModel: resolvedModel,
         carVariant: carVariant.trim() || null,
+        fuelType: fuelType && fuelType !== 'All / Any' ? fuelType : null,
         carYear: carYear || '2023',
         category: resolvedCategory,
         finalCategory: resolvedCategory,
@@ -651,6 +965,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
         finalPartName: resolvedPartName,
         condition,
         location: readableLoc,
+        city: resolvedDistrict,
         state: resolvedState,
         district: resolvedDistrict,
         area: selectedArea.trim() || null,
@@ -673,6 +988,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
         sellerAvatar: activeUser?.photoURL || activeUser?.profilePhoto || '',
         sellerName: resolvedContactName || activeUser?.displayName || 'Auto Seller',
         sold: false,
+        isDeleted: false,
         status: 'active',
         approved: true,
         verified: true,
@@ -710,6 +1026,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
     setCarBrand('');
     setCarModel('');
     setCarVariant('');
+    setFuelType('All / Any');
     setCategory('');
     setPartName('');
     setCondition('New');
@@ -815,13 +1132,12 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
         return years.filter((y) => y.includes(q));
       }
       case 'carVariant': {
-        const variants = [
-          'Petrol', 'Diesel', 'CNG', 'Hybrid', 'Electric (EV)',
-          'Manual', 'Automatic',
-          'VXI', 'ZXI', 'SX', 'LXI', 'VDI', 'ZDI', 'EXi',
-          'VXi (O)', 'ZXi (O)', 'SX (O)', 'Base', 'Mid', 'Top End'
-        ];
-        return variants.filter((v) => v.toLowerCase().includes(q));
+        const filtered = availableVariants.filter((v) => v.toLowerCase().includes(q));
+        // If user typed a search query that isn't already an exact match, allow selecting as custom variant
+        if (q && !availableVariants.some((v) => v.toLowerCase() === q)) {
+          return [pickerSearchQuery.trim(), ...filtered];
+        }
+        return filtered;
       }
       default:
         return [];
@@ -1123,11 +1439,14 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
             <View style={styles.halfField}>
               <Text style={styles.fieldLabel}>VARIANT</Text>
               <TouchableOpacity
-                onPress={() => setPickerModalType('carVariant')}
+                onPress={() => {
+                  setPickerSearchQuery('');
+                  setPickerModalType('carVariant');
+                }}
                 style={[styles.nativeTextInput, { justifyContent: 'center', backgroundColor: '#F8FAFC' }]}
               >
-                <Text style={{ color: carVariant ? '#0F172A' : '#94A3B8', fontSize: 15, fontWeight: '500' }}>
-                  {carVariant || 'Select Variant'}
+                <Text style={{ color: carVariant ? '#0F172A' : '#94A3B8', fontSize: 14, fontWeight: '500' }} numberOfLines={1}>
+                  {carVariant || (finalBrand ? `Select ${finalBrand} variant` : 'Select Variant')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1135,7 +1454,10 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
             <View style={styles.halfField}>
               <Text style={styles.fieldLabel}>YEAR</Text>
               <TouchableOpacity
-                onPress={() => setPickerModalType('carYear')}
+                onPress={() => {
+                  setPickerSearchQuery('');
+                  setPickerModalType('carYear');
+                }}
                 style={[styles.nativeTextInput, { justifyContent: 'center', backgroundColor: '#F8FAFC' }]}
               >
                 <Text style={{ color: carYear ? '#0F172A' : '#94A3B8', fontSize: 15, fontWeight: '500' }}>
@@ -1143,6 +1465,40 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
                 </Text>
               </TouchableOpacity>
             </View>
+          </View>
+
+          {/* FUEL TYPE */}
+          <View style={{ marginTop: 12 }}>
+            <Text style={styles.fieldLabel}>FUEL TYPE</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
+              {['All / Any', 'Petrol', 'Diesel', 'CNG', 'Electric (EV)', 'Hybrid'].map((fuel) => {
+                const isSelected = (fuelType || 'All / Any') === fuel;
+                return (
+                  <TouchableOpacity
+                    key={fuel}
+                    onPress={() => setFuelType(fuel)}
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingVertical: 7,
+                      borderRadius: 20,
+                      backgroundColor: isSelected ? '#1565FF' : '#F1F5F9',
+                      borderWidth: 1,
+                      borderColor: isSelected ? '#1565FF' : '#E2E8F0',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: isSelected ? '700' : '500',
+                        color: isSelected ? '#FFFFFF' : '#475569',
+                      }}
+                    >
+                      {fuel}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         </View>
 
@@ -1389,7 +1745,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
                 {pickerModalType === 'state' && 'Select State'}
                 {pickerModalType === 'district' && `Select District in ${finalState}`}
                 {pickerModalType === 'carYear' && 'Select Manufacturing Year'}
-                {pickerModalType === 'carVariant' && 'Select Car Variant / Fuel'}
+                {pickerModalType === 'carVariant' && (finalModel ? `Select Variant for ${finalBrand} ${finalModel}` : finalBrand ? `Select Variant for ${finalBrand}` : 'Select Car Variant')}
               </Text>
               <TouchableOpacity onPress={() => setPickerModalType(null)}>
                 <IconButton icon="close" size={20} iconColor="#0F172A" style={{ margin: 0 }} />
@@ -1401,7 +1757,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
               <RNTextInput
                 value={pickerSearchQuery}
                 onChangeText={setPickerSearchQuery}
-                placeholder="Search..."
+                placeholder={pickerModalType === 'carVariant' ? 'Search or type custom variant...' : 'Search...'}
                 placeholderTextColor="#94A3B8"
                 style={styles.modalSearchInput}
                 autoFocus
@@ -1461,7 +1817,31 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
               }}
               ListEmptyComponent={() => (
                 <View style={{ padding: 28, alignItems: 'center' }}>
-                  <Text style={{ color: '#94A3B8', fontSize: 13 }}>No matching results found</Text>
+                  {pickerModalType === 'carVariant' && pickerSearchQuery.trim() ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        const custom = pickerSearchQuery.trim();
+                        setCarVariant(custom);
+                        updateAutoTitle(finalBrand, finalModel, custom, finalPartName);
+                        setPickerModalType(null);
+                      }}
+                      style={{
+                        paddingVertical: 10,
+                        paddingHorizontal: 16,
+                        backgroundColor: '#EFF6FF',
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: '#BFDBFE',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text style={{ color: '#1D4ED8', fontWeight: '600', fontSize: 14 }}>
+                        Use "{pickerSearchQuery.trim()}" as custom variant
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={{ color: '#94A3B8', fontSize: 13 }}>No matching results found</Text>
+                  )}
                 </View>
               )}
             />

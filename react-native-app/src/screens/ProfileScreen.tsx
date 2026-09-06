@@ -226,28 +226,6 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
     }
   };
 
-  const handleAvatarPress = () => {
-    Alert.alert(
-      'Profile Picture',
-      'Choose an action:',
-      [
-        {
-          text: 'Take Photo (Camera)',
-          onPress: () => pickAndUploadPhoto('camera'),
-        },
-        {
-          text: 'Choose from Gallery',
-          onPress: () => pickAndUploadPhoto('gallery'),
-        },
-        {
-          text: 'View Full Picture',
-          onPress: () => setIsPopupModalVisible(true),
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
-
   const handlePickProfilePhoto = async () => {
     await pickAndUploadPhoto('prompt');
   };
@@ -342,60 +320,35 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.profileHeaderCard}>
           <TouchableOpacity 
-            onPress={handleAvatarPress} 
-            style={styles.avatarContainer}
+            onPress={() => setIsPopupModalVisible(true)} 
+            style={styles.avatarWrap}
             activeOpacity={0.85}
           >
-            <View style={styles.avatarWrap}>
-              <Image 
-                source={{ uri: displayPhotoUrl }} 
-                style={styles.avatarImage} 
-                key={displayPhotoUrl}
-              />
-              {uploadingPhoto && (
-                <View style={styles.avatarLoadingOverlay}>
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                </View>
-              )}
-            </View>
-            <View style={styles.cameraBadge}>
-              <Icon source="camera" size={13} color="#FFFFFF" />
-            </View>
+            <Image 
+              source={{ uri: displayPhotoUrl }} 
+              style={styles.avatarImage} 
+              key={displayPhotoUrl}
+            />
+            {uploadingPhoto && (
+              <View style={styles.avatarLoadingOverlay}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              </View>
+            )}
           </TouchableOpacity>
 
-          <View style={styles.profileInfoWrap}>
-            <TouchableOpacity onPress={() => {
+          <TouchableOpacity 
+            style={styles.profileInfoWrap}
+            activeOpacity={0.7}
+            onPress={() => {
               const uid = activeUid || getCurrentUser()?.uid;
               if (uid) {
                 navigation.navigate('SellerProfile', { sellerId: uid, sellerName: displayName });
               }
-            }}>
-              <Text style={styles.profileName}>{displayName}</Text>
-            </TouchableOpacity>
-            <Text style={styles.profileEmail}>{userEmail}</Text>
-
-            <View style={styles.actionButtonsRow}>
-              <TouchableOpacity 
-                style={[styles.editProfileBtn, { flex: 1, backgroundColor: '#0066FF', borderColor: '#0066FF' }]} 
-                onPress={openEditModal}
-              >
-                <Icon source="pencil-outline" size={14} color="#FFFFFF" />
-                <Text style={[styles.editProfileBtnText, { color: '#FFFFFF' }]}>Edit Profile</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.editProfileBtn, { flex: 1, backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]} 
-                onPress={() => {
-                  const uid = activeUid || getCurrentUser()?.uid;
-                  if (uid) {
-                    navigation.navigate('SellerProfile', { sellerId: uid, sellerName: displayName });
-                  }
-                }}
-              >
-                <Icon source="eye-outline" size={14} color="#0066FF" />
-                <Text style={[styles.editProfileBtnText, { color: '#0066FF' }]}>View Public</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+            }}
+          >
+            <Text style={styles.profileName} numberOfLines={1}>{displayName}</Text>
+            <Text style={styles.profileEmail} numberOfLines={1}>{userEmail}</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Menu Options List */}
@@ -490,6 +443,7 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
         visible={isPopupModalVisible}
         onDismiss={() => setIsPopupModalVisible(false)}
         userPhoto={displayPhotoUrl}
+        userName={displayName}
       />
 
       {/* Edit Profile Details Modal */}
@@ -580,15 +534,6 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
         </View>
       </Modal>
 
-      {/* User Profile Round Popup Photo Modal */}
-      <UserProfilePopupModal
-        visible={isPopupModalVisible}
-        onDismiss={() => setIsPopupModalVisible(false)}
-        userPhoto={displayPhotoUrl}
-        userName={displayName}
-        onChangePhoto={() => pickAndUploadPhoto('prompt')}
-      />
-
     </View>
   );
 }
@@ -644,19 +589,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
-  avatarContainer: {
-    position: 'relative',
-    width: 76,
-    height: 76,
-  },
   avatarWrap: { 
-    width: 76, 
-    height: 76, 
-    borderRadius: 38, 
+    width: 72, 
+    height: 72, 
+    borderRadius: 36, 
     overflow: 'hidden', 
-    borderWidth: 2.5, 
-    borderColor: '#0066FF',
-    backgroundColor: '#E2E8F0',
+    borderWidth: 2, 
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F1F5F9',
     position: 'relative',
   },
   avatarImage: { width: '100%', height: '100%' },
@@ -666,44 +606,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cameraBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#0066FF',
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-  },
-  profileInfoWrap: { flex: 1 },
-  profileName: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 2 },
-  profileEmail: { fontSize: 13, color: '#64748B', marginBottom: 8 },
-  actionButtonsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
-  },
-  editProfileBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center',
-    gap: 6, 
-    paddingVertical: 7, 
-    paddingHorizontal: 10, 
-    borderRadius: 8, 
-    borderWidth: 1,
-  },
-  editProfileBtnText: { fontSize: 12, fontWeight: '700' },
+  profileInfoWrap: { flex: 1, justifyContent: 'center' },
+  profileName: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 4 },
+  profileEmail: { fontSize: 13, color: '#64748B' },
   
   menuContainer: { backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden' },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, gap: 12 },

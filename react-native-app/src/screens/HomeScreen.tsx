@@ -43,6 +43,7 @@ import { LanguageSelectorModal } from '../components/LanguageSelectorModal';
 import { UpdateDialogModal } from '../components/UpdateDialogModal';
 import { InAppNotification, InAppNotificationData } from '../components/InAppNotification';
 import { matchesCategoryFilter } from '../utils/categoryMatcher';
+import { matchPartSearch } from '../utils/searchHelper';
 import { Category3DIcon } from '../components/Category3DIcon';
 import { BannerPartsCollage } from '../components/BannerPartsCollage';
 import { subscribeToUnreadNotificationCount } from '../services/notifications';
@@ -305,6 +306,24 @@ export default function HomeScreen({ navigation, route, user }: any) {
     };
     loadSavedLocation();
   }, []);
+
+  // Update selected city if returned from LocationSelectScreen via route params or on screen focus
+  useEffect(() => {
+    if (route?.params?.selectedCity) {
+      setSelectedCity(route.params.selectedCity);
+    }
+  }, [route?.params?.selectedCity]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      getUserSavedLocation().then((saved) => {
+        if (saved && saved.city) {
+          setSelectedCity(saved.city);
+        }
+      });
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const handleSelectCity = async (
     cityName: string,
@@ -776,35 +795,66 @@ export default function HomeScreen({ navigation, route, user }: any) {
     }
   };
 
-  const strictFilteredParts = parts.filter((part) => {
-    const queryLower = searchQuery.toLowerCase().trim();
-    const matchesSearch = !queryLower || 
-      part.title?.toLowerCase().includes(queryLower) ||
-      part.carBrand?.toLowerCase().includes(queryLower) ||
-      part.carModel?.toLowerCase().includes(queryLower) ||
-      part.category?.toLowerCase().includes(queryLower) ||
-      part.subCategory?.toLowerCase().includes(queryLower) ||
-      part.location?.toLowerCase().includes(queryLower);
+  const strictFilteredParts = useMemo(() => {
+    const scoredList: { part: any; score: number }[] = [];
 
-    const matchesCategory = matchesCategoryFilter(part, selectedCategory);
-    
-    const matchesBrand = selectedBrand === 'All' || 
-      (part.carBrand && part.carBrand.toLowerCase().includes(selectedBrand.toLowerCase()));
+    for (const part of parts) {
+      // Exclude deleted listings
+      if (part.isDeleted === true || part.status === 'deleted') {
+        continue;
+      }
 
-    const isAllIndia = !selectedCity || selectedCity.toLowerCase() === 'all india' || selectedCity.toLowerCase() === 'all';
-    const matchesCity = isAllIndia || 
-      (part.location && part.location.toLowerCase().includes(selectedCity.toLowerCase())) ||
-      (part.city && part.city.toLowerCase().includes(selectedCity.toLowerCase())) ||
-      (part.district && part.district.toLowerCase().includes(selectedCity.toLowerCase())) ||
-      (part.state && part.state.toLowerCase().includes(selectedCity.toLowerCase())) ||
-      (part.area && part.area.toLowerCase().includes(selectedCity.toLowerCase()));
+      let searchScore = 0;
+      if (searchQuery.trim()) {
+        const searchResult = matchPartSearch(part, searchQuery);
+        if (!searchResult.matches) {
+          continue;
+        }
+        searchScore = searchResult.score;
+      }
 
-    const partPrice = Number(part.price || part.partPrice) || 0;
-    const isAboveMin = minPrice ? partPrice >= Number(minPrice) : true;
-    const isBelowMax = maxPrice ? partPrice <= Number(maxPrice) : true;
+      const matchesCategory = matchesCategoryFilter(part, selectedCategory);
+      if (!matchesCategory) {
+        continue;
+      }
+      
+      const matchesBrand = selectedBrand === 'All' || 
+        (part.carBrand && part.carBrand.toLowerCase().includes(selectedBrand.toLowerCase())) ||
+        (part.brand && part.brand.toLowerCase().includes(selectedBrand.toLowerCase()));
+      if (!matchesBrand) {
+        continue;
+      }
 
-    return matchesSearch && matchesCategory && matchesBrand && matchesCity && isAboveMin && isBelowMax;
-  });
+      const isAllIndia = !selectedCity || selectedCity.toLowerCase() === 'all india' || selectedCity.toLowerCase() === 'all';
+      const matchesCity = isAllIndia || 
+        (part.location && part.location.toLowerCase().includes(selectedCity.toLowerCase())) ||
+        (part.city && part.city.toLowerCase().includes(selectedCity.toLowerCase())) ||
+        (part.district && part.district.toLowerCase().includes(selectedCity.toLowerCase())) ||
+        (part.state && part.state.toLowerCase().includes(selectedCity.toLowerCase())) ||
+        (part.area && part.area.toLowerCase().includes(selectedCity.toLowerCase()));
+      if (!matchesCity) {
+        continue;
+      }
+
+      const partPrice = Number(part.price || part.partPrice) || 0;
+      const isAboveMin = minPrice ? partPrice >= Number(minPrice) : true;
+      const isBelowMax = maxPrice ? partPrice <= Number(maxPrice) : true;
+      if (!isAboveMin || !isBelowMax) {
+        continue;
+      }
+
+      scoredList.push({ part, score: searchScore });
+    }
+
+    if (searchQuery.trim()) {
+      // Prioritize high relevance search matches (e.g. matched in title > brand > description)
+      return scoredList
+        .sort((a, b) => b.score - a.score)
+        .map((item) => item.part);
+    }
+
+    return scoredList.map((item) => item.part);
+  }, [parts, searchQuery, selectedCategory, selectedBrand, selectedCity, minPrice, maxPrice]);
 
   const filteredParts = strictFilteredParts;
 
@@ -819,7 +869,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
           <TouchableOpacity 
             style={styles.locationPill} 
             activeOpacity={0.85}
-            onPress={() => setShowLocationModal(true)}
+            onPress={() => navigation.navigate('LocationSelectScreen', { currentCity: selectedCity })}
           >
             <Icon source="map-marker" size={15} color="#FFFFFF" />
             <Text style={styles.locationPillText} numberOfLines={1}>
@@ -1238,73 +1288,6 @@ export default function HomeScreen({ navigation, route, user }: any) {
           </View>
         )}
       </ScrollView>
-
-      {/* Location Selector Modal */}
-      <Modal visible={showLocationModal} animationType="slide" transparent>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalOverlay}
-        >
-          <TouchableOpacity 
-            style={{ flex: 1 }} 
-            activeOpacity={1} 
-            onPress={() => setShowLocationModal(false)} 
-          />
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>Select Your Location</Text>
-              <TouchableOpacity onPress={() => setShowLocationModal(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Icon source="close" size={22} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity 
-              style={styles.gpsLocationBtn} 
-              activeOpacity={0.8}
-              onPress={handleGPSDetect}
-              disabled={isDetectingGPS}
-            >
-              {isDetectingGPS ? (
-                <ActivityIndicator size="small" color="#1565FF" />
-              ) : (
-                <Icon source="crosshairs-gps" size={20} color="#1565FF" />
-              )}
-              <Text style={styles.gpsLocationText}>
-                {isDetectingGPS ? 'Detecting your GPS location...' : 'Use Current GPS Location'}
-              </Text>
-            </TouchableOpacity>
-
-            <View style={styles.locationSearchBox}>
-              <Icon source="magnify" size={20} color="#94A3B8" />
-              <TextInput
-                placeholder="Search state, district, or city..."
-                placeholderTextColor="#94A3B8"
-                value={locationSearchQuery}
-                onChangeText={setLocationSearchQuery}
-                style={styles.locationSearchInput}
-              />
-            </View>
-
-            <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
-              {filteredLocationsList.map((loc) => {
-                const isActive = selectedCity.toLowerCase() === loc.toLowerCase();
-                return (
-                  <TouchableOpacity
-                    key={loc}
-                    style={[styles.locationItem, isActive && styles.locationItemHighlight]}
-                    onPress={() => handleSelectCity(loc)}
-                  >
-                    <Text style={[styles.locationItemText, isActive && styles.locationItemTextActive]}>
-                      {loc}
-                    </Text>
-                    {isActive && <Icon source="check" size={18} color="#1565FF" />}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* Filter Modal */}
       <Modal visible={showFilterModal} animationType="slide" transparent>

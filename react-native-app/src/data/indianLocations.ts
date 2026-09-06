@@ -338,3 +338,50 @@ export const POPULAR_CITIES = [
   "Indore",
   "Surat"
 ];
+
+export interface LocationSearchItem {
+  id: string;
+  name: string;
+  state: string;
+  type: 'all' | 'city' | 'district' | 'state';
+  isPopular?: boolean;
+}
+
+// Pre-computed flat list of all searchable Indian locations
+export const ALL_INDIAN_LOCATIONS: LocationSearchItem[] = [
+  { id: 'all_india', name: 'All India', state: 'Pan India', type: 'all', isPopular: true },
+  ...INDIAN_STATES_AND_DISTRICTS.flatMap((item) => {
+    const stateItem: LocationSearchItem = {
+      id: `state_${item.state.toLowerCase().replace(/\s+/g, '_')}`,
+      name: item.state,
+      state: item.state,
+      type: 'state',
+    };
+    const districtItems: LocationSearchItem[] = item.districts.map((d) => ({
+      id: `district_${item.state.toLowerCase()}_${d.toLowerCase().replace(/\s+/g, '_')}`,
+      name: d,
+      state: item.state,
+      type: 'district',
+      isPopular: POPULAR_CITIES.includes(d),
+    }));
+    return [stateItem, ...districtItems];
+  }),
+];
+
+/**
+ * Searches across all Indian states, districts, and popular cities
+ */
+export function searchIndianLocations(query: string): LocationSearchItem[] {
+  const clean = query.trim().toLowerCase();
+  if (!clean) return [];
+
+  return ALL_INDIAN_LOCATIONS.filter((item) => {
+    if (item.type === 'all') {
+      return 'all india'.includes(clean) || 'pan india'.includes(clean);
+    }
+    const nameMatch = item.name.toLowerCase().includes(clean);
+    const stateMatch = item.state.toLowerCase().includes(clean);
+    return nameMatch || stateMatch;
+  }).slice(0, 50); // limit to 50 for smooth render
+}
+

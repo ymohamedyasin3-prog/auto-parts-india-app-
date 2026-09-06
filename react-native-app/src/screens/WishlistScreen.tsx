@@ -40,7 +40,7 @@ export default function WishlistScreen({ navigation }: any) {
     };
   }, []);
 
-  const savedParts = allParts.filter(p => favorites.includes(p.id));
+  const savedParts = allParts.filter(p => favorites.includes(p.id) && !p.isDeleted && p.status !== 'deleted');
 
   const handleRemoveFavorite = async (partId: string) => {
     await toggleFavorite(partId);

@@ -24,6 +24,7 @@ import WishlistScreen from '../screens/WishlistScreen';
 import RecentlyViewedScreen from '../screens/RecentlyViewedScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import HelpSupportScreen from '../screens/HelpSupportScreen';
+import LocationSelectScreen from '../screens/LocationSelectScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -293,6 +294,15 @@ export default function AppNavigator({ user }: { user?: any } = {}) {
         name="HelpSupportScreen" 
         component={HelpSupportScreen}
         options={{ title: 'Help & Support', headerShown: false }}
+      />
+
+      <Stack.Screen 
+        name="LocationSelectScreen" 
+        component={LocationSelectScreen}
+        options={{ 
+          headerShown: false,
+          cardStyleInterpolator: CardStyleInterpolators.forVerticalIOS,
+        }}
       />
     </Stack.Navigator>
 

@@ -197,6 +197,14 @@ export default function MyAdsScreen({ navigation, user: initialUser }: any) {
         style: isCurrentlySold ? 'default' : 'destructive',
         onPress: async () => {
           try {
+            // Optimistic update
+            setMyParts((prev) =>
+              prev.map((p) =>
+                p.id === part.id
+                  ? { ...p, sold: !isCurrentlySold, status: !isCurrentlySold ? 'sold' : 'active' }
+                  : p
+              )
+            );
             const db = getFirebaseFirestore();
             if (db && typeof db.collection === 'function') {
               await db.collection('spareParts').doc(part.id).update({
@@ -225,6 +233,13 @@ export default function MyAdsScreen({ navigation, user: initialUser }: any) {
           text: 'Renew for 90 Days',
           onPress: async () => {
             try {
+              setMyParts((prev) =>
+                prev.map((p) =>
+                  p.id === part.id
+                    ? { ...p, sold: false, status: 'active', createdAt: Date.now() }
+                    : p
+                )
+              );
               const db = getFirebaseFirestore();
               if (db && typeof db.collection === 'function') {
                 await db.collection('spareParts').doc(part.id).update({
@@ -256,6 +271,8 @@ export default function MyAdsScreen({ navigation, user: initialUser }: any) {
           style: 'destructive',
           onPress: async () => {
             try {
+              // Optimistic deletion
+              setMyParts((prev) => prev.filter((p) => p.id !== part.id));
               const db = getFirebaseFirestore();
               if (db && typeof db.collection === 'function') {
                 await db.collection('spareParts').doc(part.id).delete();

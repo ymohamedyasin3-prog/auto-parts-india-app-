@@ -22,6 +22,8 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
   const [price, setPrice] = useState('');
   const [carBrand, setCarBrand] = useState('');
   const [carModel, setCarModel] = useState('');
+  const [carVariant, setCarVariant] = useState('');
+  const [fuelType, setFuelType] = useState('All / Any');
   const [category, setCategory] = useState('');
   const [condition, setCondition] = useState('Used');
   const [location, setLocation] = useState('');
@@ -36,6 +38,8 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
       setPrice(listing.price ? String(listing.price) : '');
       setCarBrand(listing.carBrand || '');
       setCarModel(listing.carModel || '');
+      setCarVariant(listing.carVariant || '');
+      setFuelType(listing.fuelType || 'All / Any');
       setCategory(listing.category || 'Engine Components');
       setCondition(listing.condition || 'Used');
       setLocation(listing.location || '');
@@ -88,6 +92,8 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
         price: Number(price) || 0,
         carBrand: carBrand.trim(),
         carModel: carModel.trim(),
+        carVariant: carVariant.trim() || null,
+        fuelType: fuelType && fuelType !== 'All / Any' ? fuelType.trim() : null,
         category,
         condition,
         location: location.trim(),
@@ -173,6 +179,30 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
                   value={carModel}
                   onChangeText={setCarModel}
                   placeholder="e.g. Swift"
+                  placeholderTextColor="#94A3B8"
+                />
+              </View>
+            </View>
+
+            {/* Car Variant & Fuel Type */}
+            <View style={styles.row}>
+              <View style={styles.flexHalf}>
+                <Text style={styles.label}>Variant / Trim</Text>
+                <TextInput
+                  style={styles.input}
+                  value={carVariant}
+                  onChangeText={setCarVariant}
+                  placeholder="e.g. ZXI / VXI"
+                  placeholderTextColor="#94A3B8"
+                />
+              </View>
+              <View style={[styles.flexHalf, { marginLeft: 12 }]}>
+                <Text style={styles.label}>Fuel Type</Text>
+                <TextInput
+                  style={styles.input}
+                  value={fuelType}
+                  onChangeText={setFuelType}
+                  placeholder="e.g. Petrol / Diesel"
                   placeholderTextColor="#94A3B8"
                 />
               </View>
