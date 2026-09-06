@@ -86,29 +86,28 @@ const AnimatedPartCard = React.memo(({
 }: any) => {
   const [imgError, setImgError] = useState(false);
 
-  const titleLower = String(item.title || '').toLowerCase();
-  const isHeadlight = item.id === 'demo-part-1' || titleLower.includes('headlight') || titleLower.includes('i20');
-  const isTurbo = item.id === 'demo-part-2' || titleLower.includes('turbo') || titleLower.includes('scorpio');
+  // Prioritize the actual uploaded image URL from the part item
+  const rawImageUri = item.imageUrl || (Array.isArray(item.images) && item.images[0]) || (Array.isArray(item.imageUrls) && item.imageUrls[0]);
 
   let resolvedImageSource: any = null;
-  if (isHeadlight) {
+  if (!imgError && rawImageUri && typeof rawImageUri === 'string' && rawImageUri.trim().length > 0) {
+    resolvedImageSource = { uri: rawImageUri.trim() };
+  } else if (item.id === 'demo-part-1') {
     resolvedImageSource = require('../assets/products/headlight.jpg');
-  } else if (isTurbo) {
+  } else if (item.id === 'demo-part-2') {
     resolvedImageSource = require('../assets/products/turbocharger.jpg');
-  } else if (!imgError && item.imageUrl) {
-    resolvedImageSource = { uri: item.imageUrl };
-  } else if (!imgError && (item.images?.[0] || item.imageUrls?.[0])) {
-    resolvedImageSource = { uri: item.images?.[0] || item.imageUrls?.[0] };
+  } else {
+    resolvedImageSource = { uri: 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&w=600&q=80' };
   }
 
-  const isVerified = Boolean(item.isVerifiedSeller || item.verified || (item.sellerRating && item.sellerRating >= 4.5) || isTurbo);
-  const activeFavorited = isFavorited !== undefined ? isFavorited : (isHeadlight ? true : false);
+  const isVerified = Boolean(item.isVerifiedSeller || item.verified || (item.sellerRating && item.sellerRating >= 4.5) || item.id === 'demo-part-2');
+  const activeFavorited = Boolean(isFavorited);
 
   // Calculate authentic distance dynamically based on user's selected city
   const itemCity = (item.location || item.district || '').toLowerCase();
   const selectedCityLower = (selectedCity || 'Chennai').toLowerCase();
 
-  let distanceDisplay = item.distance || (isTurbo ? '12 km away' : '3 km away');
+  let distanceDisplay = item.distance || (item.id === 'demo-part-2' ? '12 km away' : '3 km away');
   if (selectedCity && selectedCity !== 'All India') {
     if (itemCity.includes(selectedCityLower) || selectedCityLower.includes(itemCity)) {
       distanceDisplay = item.distance || '4 km away';
@@ -1384,11 +1383,13 @@ export default function HomeScreen({ navigation, route, user }: any) {
             <View style={styles.actionPartPreviewRow}>
               <Image 
                 source={
-                  selectedActionPart?.id === 'demo-part-1' 
+                  (selectedActionPart?.imageUrl || selectedActionPart?.images?.[0] || selectedActionPart?.imageUrls?.[0])
+                    ? { uri: selectedActionPart.imageUrl || selectedActionPart.images?.[0] || selectedActionPart.imageUrls?.[0] }
+                    : selectedActionPart?.id === 'demo-part-1' 
                     ? require('../assets/products/headlight.jpg')
                     : selectedActionPart?.id === 'demo-part-2'
                     ? require('../assets/products/turbocharger.jpg')
-                    : { uri: selectedActionPart?.imageUrl || selectedActionPart?.images?.[0] || 'https://images.unsplash.com/photo-1508974239320-0a029497e820?auto=format&fit=crop&w=400&q=80' }
+                    : { uri: 'https://images.unsplash.com/photo-1508974239320-0a029497e820?auto=format&fit=crop&w=400&q=80' }
                 }
                 style={styles.actionPartThumb}
               />

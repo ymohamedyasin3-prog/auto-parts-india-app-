@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, Alert, Linking, Image, Share, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Text, Button, Card, Avatar, Divider, Chip, IconButton, Icon, useTheme } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { INITIAL_SPARE_PARTS } from '../data/mockData';
 import GMap from '../components/GMap';
 import { EditListingModal } from '../components/EditListingModal';
-import RatingModal from '../components/RatingModal';
 import { ImageGalleryModal } from '../components/ImageGalleryModal';
 import { UserProfilePopupModal } from '../components/UserProfilePopupModal';
 import ImageView from 'react-native-image-viewing';
@@ -19,6 +19,7 @@ import {
 } from '../services/location';
 
 export default function ProductDetailScreen({ route, navigation, user: initialUser }: any) {
+  const insets = useSafeAreaInsets();
   const { part: initialPart, partId: routePartId } = route.params || {};
   const [part, setPart] = useState<any>(initialPart || null);
   const [loadingDoc, setLoadingDoc] = useState<boolean>(!initialPart && Boolean(routePartId));
@@ -49,7 +50,6 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
     };
   }, [part?.sellerId, part?.ownerId, part?.userId]);
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [ratingModalVisible, setRatingModalVisible] = useState(false);
   const [galleryVisible, setGalleryVisible] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [profilePopupVisible, setProfilePopupVisible] = useState(false);
@@ -343,7 +343,12 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
   const partLng = part.longitude || part.lng;
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.screenWrapper}>
+      <ScrollView 
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.imageHeader}>
         <TouchableOpacity
           activeOpacity={0.9}
@@ -538,72 +543,6 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
             )}
           />
         </Card>
-
-        {/* Action Row: Owner (Edit/Delete) vs Buyer (Chat/Call) */}
-        {isOwner ? (
-          <View style={styles.actionRow}>
-            <Button 
-              mode="contained" 
-              icon="pencil" 
-              onPress={() => setEditModalVisible(true)} 
-              style={[styles.actionBtn, { flex: 1, marginRight: 8 }]}
-              buttonColor="#4F46E5"
-              textColor="#FFFFFF"
-              disabled={isDeleting}
-            >
-              Edit Listing
-            </Button>
-            <Button 
-              mode="contained" 
-              icon="delete-outline" 
-              onPress={handleDelete} 
-              style={[styles.actionBtn, { flex: 1 }]}
-              buttonColor="#DC2626"
-              textColor="#FFFFFF"
-              loading={isDeleting}
-              disabled={isDeleting}
-            >
-              Delete Listing
-            </Button>
-          </View>
-        ) : (
-          <View style={styles.actionColumn}>
-            <View style={styles.actionRow}>
-              <Button 
-                mode="contained" 
-                icon="message-text" 
-                onPress={handleChat} 
-                style={[styles.actionBtn, { flex: 1, marginRight: 8 }]}
-                buttonColor="#1565FF"
-                textColor="#FFFFFF"
-              >
-                Chat
-              </Button>
-              <Button 
-                mode="contained" 
-                icon="phone" 
-                onPress={handleCall} 
-                style={[styles.actionBtn, { flex: 1 }]}
-                buttonColor="#0B1220"
-                textColor="#FFFFFF"
-              >
-                Call Seller
-              </Button>
-            </View>
-
-            <View style={styles.secondaryActionRow}>
-              <Button
-                mode="outlined"
-                icon="star-outline"
-                onPress={() => setRatingModalVisible(true)}
-                style={{ flex: 1, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' }}
-                textColor="#475569"
-              >
-                Rate Seller
-              </Button>
-            </View>
-          </View>
-        )}
       </View>
 
       {/* Similar & Related Parts Section */}
@@ -705,16 +644,69 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
         </View>
       )}
 
-      {/* Rating Modal */}
-      <RatingModal
-        isOpen={ratingModalVisible}
-        onClose={() => setRatingModalVisible(false)}
-        sellerId={part.sellerId || 'seller'}
-        sellerName={part.contactName || part.sellerEmail || 'Auto Seller'}
-        partId={part.id}
-        partTitle={part.title}
-        onSuccess={() => Alert.alert('Success', 'Thank you for your rating!')}
-      />
+      </ScrollView>
+
+      {/* FIXED BOTTOM ACTION BAR - Non-scrollable */}
+      <View style={[styles.fixedBottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        {isOwner ? (
+          <View style={styles.actionRow}>
+            <Button 
+              mode="contained" 
+              icon="pencil" 
+              onPress={() => setEditModalVisible(true)} 
+              style={[styles.actionBtn, { marginRight: 10 }]}
+              contentStyle={styles.actionBtnContent}
+              labelStyle={styles.actionBtnLabel}
+              buttonColor="#1565FF"
+              textColor="#FFFFFF"
+              disabled={isDeleting}
+            >
+              Edit Listing
+            </Button>
+            <Button 
+              mode="contained" 
+              icon="delete-outline" 
+              onPress={handleDelete} 
+              style={styles.actionBtn}
+              contentStyle={styles.actionBtnContent}
+              labelStyle={styles.actionBtnLabel}
+              buttonColor="#0B1220"
+              textColor="#FFFFFF"
+              loading={isDeleting}
+              disabled={isDeleting}
+            >
+              Delete Listing
+            </Button>
+          </View>
+        ) : (
+          <View style={styles.actionRow}>
+            <Button 
+              mode="contained" 
+              icon="message-text" 
+              onPress={handleChat} 
+              style={[styles.actionBtn, { marginRight: 10 }]}
+              contentStyle={styles.actionBtnContent}
+              labelStyle={styles.actionBtnLabel}
+              buttonColor="#1565FF"
+              textColor="#FFFFFF"
+            >
+              Chat
+            </Button>
+            <Button 
+              mode="contained" 
+              icon="phone" 
+              onPress={handleCall} 
+              style={styles.actionBtn}
+              contentStyle={styles.actionBtnContent}
+              labelStyle={styles.actionBtnLabel}
+              buttonColor="#0B1220"
+              textColor="#FFFFFF"
+            >
+              Call Seller
+            </Button>
+          </View>
+        )}
+      </View>
 
       {/* Edit Listing Modal for Owner */}
       {isOwner && (
@@ -745,14 +737,22 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
         onDismiss={() => setProfilePopupVisible(false)}
         userPhoto={liveSellerPhoto || part.sellerPhotoURL || part.sellerPhoto || part.sellerAvatar || part.photoURL || null}
       />
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenWrapper: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    position: 'relative',
+  },
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  scrollContent: {
+    paddingBottom: 96,
   },
   errorContainer: {
     flex: 1,
@@ -929,22 +929,48 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     borderRadius: 12,
-    marginBottom: 20,
+    marginBottom: 8,
+  },
+  fixedBottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 12,
+    zIndex: 99,
   },
   actionRow: {
     flexDirection: 'row',
-    marginTop: 8,
-  },
-  actionColumn: {
-    marginTop: 8,
-  },
-  secondaryActionRow: {
-    flexDirection: 'row',
-    marginTop: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   actionBtn: {
-    borderRadius: 8,
-    paddingVertical: 4,
+    flex: 1,
+    borderRadius: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+  },
+  actionBtnContent: {
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBtnLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   relatedSection: {
     paddingHorizontal: 16,

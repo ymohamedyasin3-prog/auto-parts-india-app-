@@ -75,7 +75,7 @@ export default function SplashScreen({ navigation }: any) {
 
     const timer = setTimeout(() => {
       checkAuthAndNavigate();
-    }, 1800);
+    }, 1400);
 
     return () => clearTimeout(timer);
   }, [navigation]);

@@ -947,29 +947,18 @@ export default function App() {
 
   return (
     <div className="h-[100dvh] w-full overflow-hidden bg-slate-950 text-slate-900 flex flex-col items-center justify-center font-sans relative" id="app-root">
-      {/* Native Mobile High-Quality Splash Screen */}
+      {/* Native Mobile High-Quality Splash Screen - Single Unified Screen */}
       <AnimatePresence>
         {showSplashScreen && (
           <SplashScreen 
-            minDurationMs={2500} 
+            minDurationMs={1500} 
             isReady={!authLoading} 
             onFinish={() => setShowSplashScreen(false)} 
           />
         )}
       </AnimatePresence>
 
-      {authLoading && !showSplashScreen ? (
-        <div className="w-full max-w-md h-[100dvh] flex flex-col items-center justify-center bg-[#070D18] text-white relative overflow-hidden border-x border-slate-800/20 shadow-2xl" id="splash-loading-fallback">
-          <div className="flex flex-col items-center justify-center text-center z-10">
-            <BrandLogo size="xl" variant="full" theme="dark" showTagline={true} className="mb-6" />
-          </div>
-          <div className="absolute bottom-12 flex flex-col items-center z-10">
-            <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest font-bold">
-              Connecting Marketplace...
-            </span>
-          </div>
-        </div>
-      ) : !currentUser ? (
+      {!currentUser ? (
         <div className="w-full max-w-md h-[100dvh] flex flex-col relative overflow-hidden border-x border-slate-800/20 shadow-2xl">
           <AuthScreen 
             onAuthSuccess={handleAuthSuccess} 
