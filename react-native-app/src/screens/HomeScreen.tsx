@@ -26,6 +26,7 @@ import {
   Button,
   Icon
 } from 'react-native-paper';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
 import { useFavorites } from '../services/favorites';
 import { 
