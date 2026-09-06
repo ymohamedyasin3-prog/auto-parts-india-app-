@@ -143,6 +143,39 @@ function CarBrandImage({ brandKey, size }: { brandKey: string; size: number }) {
   );
 }
 
+export function AutoPartsRoundLogo({
+  size = 40,
+  className = '',
+  border = true,
+  bgColor = '#0075FF',
+}: {
+  size?: number;
+  className?: string;
+  border?: boolean;
+  bgColor?: string;
+}) {
+  return (
+    <div
+      className={`rounded-full flex items-center justify-center shrink-0 overflow-hidden shadow-md select-none ${
+        border ? 'ring-2 ring-white/40' : ''
+      } ${className}`}
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: bgColor,
+      }}
+    >
+      <img
+        src="/assets/splash_logo.png"
+        alt="Auto Parts India"
+        style={{ width: size * 0.88, height: size * 0.88, objectFit: 'contain' }}
+        className="pointer-events-none"
+        draggable={false}
+      />
+    </div>
+  );
+}
+
 export function BrandLogo({ 
   name = '', 
   brand = '', 
@@ -165,34 +198,24 @@ export function BrandLogo({
     );
   }
 
+  // Round Brand Emblem
+  if (variant === 'round') {
+    return <AutoPartsRoundLogo size={safeSize} className={className} />;
+  }
+
   // APP BRANDING LOGO: Use Official Auto Parts India Logo
   if (variant === 'icon') {
-    return (
-      <div className={`flex items-center justify-center shrink-0 ${className}`}>
-        <img
-          src="/assets/logo_icon.svg"
-          alt="Auto Parts India"
-          style={{ width: safeSize, height: safeSize, objectFit: 'contain' }}
-          className="drop-shadow-sm select-none"
-        />
-      </div>
-    );
+    return <AutoPartsRoundLogo size={safeSize} className={className} border={false} />;
   }
 
   // Full / Horizontal / Default App Logo
   return (
     <div className={`flex items-center gap-2 select-none ${className}`}>
-      <img
-        src="/assets/logo.svg"
-        alt="Auto Parts India"
-        style={{ 
-          height: safeSize, 
-          width: 'auto', 
-          maxHeight: safeSize,
-          objectFit: 'contain' 
-        }}
-        className="drop-shadow-md transition-transform duration-200 hover:scale-[1.02]"
-      />
+      <AutoPartsRoundLogo size={Math.min(safeSize, 36)} border={true} />
+      <div className="flex flex-col justify-center leading-none">
+        <span className="font-black text-xs sm:text-sm tracking-tight text-white font-sans">AUTO PARTS</span>
+        <span className="font-extrabold text-[9px] sm:text-[10px] tracking-widest text-sky-400 font-sans">INDIA</span>
+      </div>
     </div>
   );
 }

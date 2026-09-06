@@ -134,40 +134,56 @@ const BRAND_URLS: Record<string, string> = {
 };
 
 /**
+ * 100% Native Vector & High-Res Auto Parts India Round Circular Brand Emblem
+ */
+export function AutoPartsRoundLogo({
+  size = 40,
+  style,
+  border = true,
+  bgColor = '#0075FF',
+  showText = true,
+}: {
+  size?: number;
+  style?: StyleProp<ViewStyle>;
+  border?: boolean;
+  bgColor?: string;
+  showText?: boolean;
+}) {
+  const s = size;
+  const radius = s / 2;
+
+  return (
+    <View
+      style={[
+        styles.roundLogoWrapper,
+        {
+          width: s,
+          height: s,
+          borderRadius: radius,
+          backgroundColor: bgColor,
+          borderColor: border ? 'rgba(255, 255, 255, 0.4)' : 'transparent',
+          borderWidth: border ? 1.5 : 0,
+        },
+        style,
+      ]}
+    >
+      <Image
+        source={require('../assets/logo.png')}
+        style={{
+          width: s * 0.88,
+          height: s * 0.88,
+          resizeMode: 'contain',
+        }}
+      />
+    </View>
+  );
+}
+
+/**
  * 100% Native Vector Auto Parts India Square App Icon
  */
 export function AutoPartsIcon({ size = 48, style }: { size?: number; style?: StyleProp<ViewStyle> }) {
-  const s = size;
-  return (
-    <View style={[styles.center, { width: s, height: s }, style]}>
-      <Svg width={s} height={s} viewBox="0 0 200 200">
-        <Defs>
-          <LinearGradient id="apBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor="#0F1F38" />
-            <Stop offset="50%" stopColor="#0A1526" />
-            <Stop offset="100%" stopColor="#050B14" />
-          </LinearGradient>
-          <LinearGradient id="apRimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor="#38BDF8" />
-            <Stop offset="40%" stopColor="#0066FF" />
-            <Stop offset="80%" stopColor="#003B95" />
-            <Stop offset="100%" stopColor="#0284C7" />
-          </LinearGradient>
-          <LinearGradient id="apCarStream" x1="0%" y1="0%" x2="100%" y2="0%">
-            <Stop offset="0%" stopColor="#38BDF8" />
-            <Stop offset="50%" stopColor="#FFFFFF" />
-            <Stop offset="100%" stopColor="#60A5FA" />
-          </LinearGradient>
-          <LinearGradient id="apGearGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor="#38BDF8" />
-            <Stop offset="50%" stopColor="#0066FF" />
-            <Stop offset="100%" stopColor="#003B95" />
-          </LinearGradient>
-        </Defs>
-        <Rect x="8" y="8" width="184" height="184" rx="42" fill="url(#apBgGrad)" stroke="url(#apRimGrad)" strokeWidth="3.5" />
-      </Svg>
-    </View>
-  );
+  return <AutoPartsRoundLogo size={size} style={style} />;
 }
 
 /**
@@ -182,22 +198,21 @@ export function AutoPartsLogo({
   theme?: 'dark' | 'light';
   style?: StyleProp<ViewStyle>; 
 }) {
-  const width = height * 4.6;
   const isLight = theme === 'light';
+  const logoHeight = height;
+  const logoWidth = height * 3.4;
 
   return (
-    <View style={[styles.center, { width, height }, style]}>
-      <Svg width={width} height={height} viewBox="0 0 580 130">
-        <Defs>
-          <LinearGradient id="apHIconBg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor="#0F1F38" />
-            <Stop offset="50%" stopColor="#0A1526" />
-            <Stop offset="100%" stopColor="#050B14" />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="580" height="130" rx="20" fill={isLight ? '#FFFFFF' : '#0B1220'} />
-        <SvgText x="50" y="75" fontFamily="sans-serif" fontWeight="900" fontSize="48" fill={isLight ? '#0F172A' : '#FFFFFF'}>AUTO PARTS</SvgText>
-      </Svg>
+    <View style={[styles.horizontalLogoRow, { height: logoHeight }, style]}>
+      <AutoPartsRoundLogo size={logoHeight} border={false} />
+      <View style={styles.horizontalLogoTextCol}>
+        <Text style={[styles.horizontalLogoTitle, { color: isLight ? '#0B1220' : '#FFFFFF' }]}>
+          AUTO PARTS
+        </Text>
+        <Text style={[styles.horizontalLogoSubtitle, { color: isLight ? '#0066FF' : '#38BDF8' }]}>
+          INDIA
+        </Text>
+      </View>
     </View>
   );
 }
@@ -348,5 +363,37 @@ const styles = StyleSheet.create({
   center: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  roundLogoWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  horizontalLogoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  horizontalLogoTextCol: {
+    justifyContent: 'center',
+  },
+  horizontalLogoTitle: {
+    fontFamily: 'sans-serif',
+    fontWeight: '900',
+    fontSize: 14,
+    letterSpacing: -0.3,
+    lineHeight: 16,
+  },
+  horizontalLogoSubtitle: {
+    fontFamily: 'sans-serif',
+    fontWeight: '800',
+    fontSize: 10,
+    letterSpacing: 2.2,
+    lineHeight: 12,
   },
 });

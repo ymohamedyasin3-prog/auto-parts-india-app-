@@ -811,7 +811,13 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
     let success = false;
     try {
       const firstImage = finalImagesToUse[0] || null;
-      const res = await fetch('/api/ai/autofill-listing', {
+      
+      // Determine backend URL (Support Web relative URLs and Native absolute backend URLs)
+      const backendUrl = typeof window !== 'undefined' && window.location?.origin 
+        ? `${window.location.origin}/api/ai/autofill-listing`
+        : 'https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing';
+
+      const res = await fetch(backendUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

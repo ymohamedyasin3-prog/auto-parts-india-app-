@@ -36,7 +36,7 @@ import {
   getUserSavedLocation
 } from '../services/location';
 import { INDIAN_STATES_AND_DISTRICTS } from '../data/indianLocations';
-import { CarBrandBadge } from '../components/BrandLogo';
+import { CarBrandBadge, AutoPartsRoundLogo } from '../components/BrandLogo';
 import { INITIAL_SPARE_PARTS } from '../data/mockData';
 import { useLanguage } from '../context/LanguageContext';
 import { LanguageSelectorModal } from '../components/LanguageSelectorModal';
@@ -864,18 +864,25 @@ export default function HomeScreen({ navigation, route, user }: any) {
       {/* Top Header - Royal Blue Bar matching user mockup */}
       <View style={styles.topHeaderWrapper}>
         <Animated.View style={[styles.headerRow, { opacity: headerFade }]}>
-          {/* Location Selector Pill */}
-          <TouchableOpacity 
-            style={styles.locationPill} 
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('LocationSelectScreen', { currentCity: selectedCity })}
-          >
-            <Icon source="map-marker" size={15} color="#FFFFFF" />
-            <Text style={styles.locationPillText} numberOfLines={1}>
-              {selectedCity || 'All India'}
-            </Text>
-            <Icon source="chevron-down" size={15} color="#FFFFFF" />
-          </TouchableOpacity>
+          {/* Brand Round Emblem & Location Selector Pill */}
+          <View style={styles.headerLeftBrandGroup}>
+            <View style={styles.headerLogoCircleContainer}>
+              <AutoPartsRoundLogo size={36} border={true} />
+            </View>
+
+            {/* Location Selector Pill */}
+            <TouchableOpacity 
+              style={styles.locationPill} 
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('LocationSelectScreen', { currentCity: selectedCity })}
+            >
+              <Icon source="map-marker" size={14} color="#FFFFFF" />
+              <Text style={styles.locationPillText} numberOfLines={1}>
+                {selectedCity || 'All India'}
+              </Text>
+              <Icon source="chevron-down" size={14} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
 
           {/* Right Controls: Language & Notification */}
           <View style={styles.headerRightGroup}>
@@ -1562,15 +1569,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
+  headerLeftBrandGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    paddingRight: 6,
+  },
+  headerLogoCircleContainer: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
   locationPill: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 20,
-    gap: 6,
-    maxWidth: '68%',
+    gap: 5,
+    maxWidth: '72%',
   },
   locationPillText: {
     color: '#FFFFFF',

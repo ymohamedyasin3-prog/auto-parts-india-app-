@@ -348,7 +348,11 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
 
       // Push Notification trigger
       try {
-        fetch('https://ais-dev-7edqjbzlqrmbdqv4rx3rez-572875732715.asia-southeast1.run.app/api/notifications/send', {
+        const backendUrl = typeof window !== 'undefined' && window.location?.origin 
+          ? `${window.location.origin}/api/notifications/send`
+          : 'https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/notifications/send';
+
+        fetch(backendUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
