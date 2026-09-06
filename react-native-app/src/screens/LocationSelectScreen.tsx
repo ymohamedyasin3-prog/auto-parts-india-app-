@@ -335,7 +335,9 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
                       {item.name}
                     </Text>
                     {isSelected && (
-                      <Icon source="check" size={14} color="#0066FF" style={{ marginLeft: 2 }} />
+                      <View style={{ marginLeft: 2 }}>
+                        <Icon source="check" size={14} color="#0066FF" />
+                      </View>
                     )}
                   </TouchableOpacity>
                 );

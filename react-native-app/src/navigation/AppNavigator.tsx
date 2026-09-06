@@ -182,7 +182,6 @@ export default function AppNavigator({ user }: { user?: any } = {}) {
         headerStyle: { backgroundColor: '#0B1220' },
         headerTintColor: '#FFFFFF',
         headerTitleStyle: { fontWeight: 'bold' },
-        animationEnabled: true,
         cardStyleInterpolator: CardStyleInterpolators.forFadeFromBottomAndroid,
         transitionSpec: {
           open: {

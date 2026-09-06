@@ -8,6 +8,7 @@ import {
   Image,
   StatusBar,
   Alert,
+  Platform,
 } from 'react-native';
 import {
   Text,

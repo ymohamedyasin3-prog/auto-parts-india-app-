@@ -152,6 +152,8 @@ export default function AdminScreen({ navigation }: any) {
   useEffect(() => {
     let unsubListings = () => {};
     let unsubBanners = () => {};
+    let unsubTopCategories = () => {};
+    let unsubCarBrands = () => {};
     let unsubUsers = () => {};
     let unsubAnnouncements = () => {};
 
@@ -192,7 +194,6 @@ export default function AdminScreen({ navigation }: any) {
       );
 
       // 2b. Listen to Top Categories
-      let unsubTopCategories = () => {};
       const qTopCat = db.collection('topCategories');
       unsubTopCategories = qTopCat.onSnapshot(
         (snap: any) => {
@@ -207,7 +208,6 @@ export default function AdminScreen({ navigation }: any) {
       );
 
       // 2c. Listen to Car Brands
-      let unsubCarBrands = () => {};
       const qCarBrands = db.collection('carBrands');
       unsubCarBrands = qCarBrands.onSnapshot(
         (snap: any) => {
@@ -791,7 +791,7 @@ export default function AdminScreen({ navigation }: any) {
 
   const handlePickCarBrandImage = async () => {
     try {
-      const res = await launchImageLibrary({ mediaType: 'photo', quality: 0.85 });
+      const res = await launchImageLibrary({ mediaType: 'photo', quality: 0.8 as any });
       if (res.assets && res.assets[0]?.uri) {
         setUploadingCarBrandImage(true);
         const uploadedUrl = await uploadImageToCloudinary(res.assets[0].uri, 'brands');

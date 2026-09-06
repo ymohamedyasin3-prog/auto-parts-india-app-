@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   View, 
   StyleSheet, 
@@ -680,6 +680,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
     let unsubscribeParts = () => {};
     let unsubscribeBanners = () => {};
     let unsubscribeCategories = () => {};
+    let unsubscribeBrands = () => {};
 
     try {
       const db = getFirebaseFirestore();
@@ -742,7 +743,6 @@ export default function HomeScreen({ navigation, route, user }: any) {
       }
 
       // 4. Listen for Admin Car Brands (carBrands collection)
-      let unsubscribeBrands = () => {};
       try {
         const qBrands = db.collection('carBrands');
         unsubscribeBrands = qBrands.onSnapshot((snapshot: any) => {

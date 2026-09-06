@@ -126,7 +126,7 @@ export async function signInWithGoogleNative() {
     const userName = user.displayName || userFromGoogle?.name || 'Auto Parts User';
     const userPhoto = user.photoURL || userFromGoogle?.photo || '';
 
-    const sessionUser = {
+    const sessionUser: any = {
       uid: finalUserId,
       id: finalUserId,
       email: userEmail,
