@@ -46,7 +46,6 @@ import { InAppNotification, InAppNotificationData } from '../components/InAppNot
 import { matchesCategoryFilter } from '../utils/categoryMatcher';
 import { matchPartSearch } from '../utils/searchHelper';
 import { Category3DIcon } from '../components/Category3DIcon';
-import { BannerPartsCollage } from '../components/BannerPartsCollage';
 import { subscribeToUnreadNotificationCount } from '../services/notifications';
 import { getOptimizedImageUrl } from '../services/cloudinary';
 import { 
@@ -220,7 +219,6 @@ export default function HomeScreen({ navigation, route, user }: any) {
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [parts, setParts] = useState<any[]>([]);
-  const [banners, setBanners] = useState<any[]>([]);
   const [topCategories, setTopCategories] = useState<any[]>([]);
   const [carBrands, setCarBrands] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -232,7 +230,6 @@ export default function HomeScreen({ navigation, route, user }: any) {
   const [inAppNotification, setInAppNotification] = useState<InAppNotificationData | null>(null);
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
   const [updateConfig, setUpdateConfig] = useState<any>(null);
-  const [activeBannerIndex, setActiveBannerIndex] = useState(0);
 
   // Responsive calculations
   // 4 Columns for compact category cards as requested
@@ -404,54 +401,6 @@ export default function HomeScreen({ navigation, route, user }: any) {
       useNativeDriver: true,
     }).start();
   }, []);
-
-  // Default Promotional Banners Carousel Data (4 Slides matching 4 pagination dots)
-  const DEFAULT_PROMO_BANNERS = [
-    {
-      id: 'mega-deals',
-      badge: 'MEGA DEALS',
-      badgeColor: '#0066FF',
-      headline1: 'UP TO',
-      discount: '50% OFF',
-      headline2: 'ON GENUINE PARTS',
-      features: ['100% Genuine Parts', 'Best Price Guaranteed', 'Fast & Safe Delivery'],
-      cta: 'SHOP NOW',
-      targetCategory: 'All',
-    },
-    {
-      id: 'turbo-performance',
-      badge: 'PERFORMANCE',
-      badgeColor: '#EF4444',
-      headline1: 'UP TO',
-      discount: '40% OFF',
-      headline2: 'TURBOCHARGERS',
-      features: ['Precision Balanced', 'OEM Grade Build', '1 Year Warranty'],
-      cta: 'SHOP NOW',
-      targetCategory: 'Engine & Parts',
-    },
-    {
-      id: 'brakes-suspension',
-      badge: 'SAFETY & COMFORT',
-      badgeColor: '#10B981',
-      headline1: 'FLAT',
-      discount: '30% OFF',
-      headline2: 'BRAKES & SUSPENSION',
-      features: ['Ceramic Brake Pads', 'Heavy Duty Shocks', 'Factory Tested'],
-      cta: 'EXPLORE',
-      targetCategory: 'Brakes & Suspension',
-    },
-    {
-      id: 'headlights-electrical',
-      badge: 'LIGHTING SPECIAL',
-      badgeColor: '#F59E0B',
-      headline1: 'SAVE',
-      discount: '₹1,500',
-      headline2: 'LED HEADLIGHTS',
-      features: ['Ultra Bright Beam', 'Plug & Play Fit', 'Waterproof IP68'],
-      cta: 'VIEW DEALS',
-      targetCategory: 'Electrical & Lighting',
-    },
-  ];
 
   // Fetch Parts from Firestore
   const fetchParts = useCallback(() => {
@@ -736,47 +685,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
           />
         }
       >
-        {/* 1. HERO PROMO BANNERS CAROUSEL */}
-        <View style={styles.bannerSection}>
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(e) => {
-              const index = Math.round(e.nativeEvent.contentOffset.x / (screenWidth - 32));
-              setActiveBannerIndex(index);
-            }}
-            contentContainerStyle={styles.bannerScroll}
-          >
-            {displayBanners.map((item: any, idx: number) => (
-              <View key={item.id || idx} style={[styles.bannerSlide, { width: screenWidth - 32 }]}>
-                <BannerPartsCollage 
-                  banner={item}
-                  onPress={() => {
-                    if (item.targetCategory && item.targetCategory !== 'All') {
-                      setSelectedCategory(item.targetCategory);
-                    }
-                  }}
-                />
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Carousel Pagination Dots */}
-          <View style={styles.paginationRow}>
-            {displayBanners.map((_: any, dotIdx: number) => (
-              <View
-                key={dotIdx}
-                style={[
-                  styles.paginationDot,
-                  activeBannerIndex === dotIdx && styles.paginationDotActive,
-                ]}
-              />
-            ))}
-          </View>
-        </View>
-
-        {/* 2. TOP CATEGORIES (4-Column Grid) */}
+        {/* 1. TOP CATEGORIES (4-Column Grid) */}
         <View style={styles.sectionHeaderRow}>
           <Text variant="titleMedium" style={styles.sectionTitle}>
             Top Categories
@@ -1087,34 +996,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 32,
-  },
-  bannerSection: {
-    marginTop: 8,
-    paddingHorizontal: 16,
-  },
-  bannerScroll: {
-    gap: 12,
-  },
-  bannerSlide: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  paginationRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 10,
-  },
-  paginationDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#334155',
-  },
-  paginationDotActive: {
-    width: 18,
-    backgroundColor: '#0066FF',
   },
   sectionHeaderRow: {
     flexDirection: 'row',
