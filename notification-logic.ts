@@ -69,7 +69,7 @@ export const sendChatNotification = async (req: any, res: any) => {
         ttl: 3600 * 1000,
         notification: {
           sound: "default",
-          channelId: "auto_parts_notifications",
+          channelId: "auto_parts_alerts_v2",
           priority: "max" as const,
           defaultSound: true,
           defaultVibrateTimings: true,

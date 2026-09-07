@@ -40,7 +40,7 @@ function getMessagingSafely() {
 export async function ensureNotificationChannel(): Promise<void> {
   try {
     await notifee.createChannel({
-      id: 'auto_parts_notifications',
+      id: 'auto_parts_alerts_v2',
       name: 'Auto Parts Messages & Alerts',
       importance: AndroidImportance.HIGH,
       sound: 'default',
@@ -286,7 +286,7 @@ export function setupFcmListeners(userId?: string): () => void {
           body,
           data: remoteMessage.data,
           android: {
-            channelId: 'auto_parts_notifications',
+            channelId: 'auto_parts_alerts_v2',
             importance: AndroidImportance.HIGH,
             sound: 'default',
             pressAction: {

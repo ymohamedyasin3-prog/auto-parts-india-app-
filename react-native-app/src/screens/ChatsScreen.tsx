@@ -48,8 +48,15 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
         return () => {};
       }
 
-      // Query chats collection where activeUid is a participant or buyer or seller
-      const chatsRef = db.collection('chats');
+      // Query chats collection where activeUid is a participant, buyer, or seller
+      const { Filter } = require('@react-native-firebase/firestore');
+      const chatsRef = db.collection('chats').where(
+        Filter.or(
+          Filter('participants', 'array-contains', activeUid),
+          Filter('buyerId', '==', activeUid),
+          Filter('sellerId', '==', activeUid)
+        )
+      );
       
       const unsubscribe = chatsRef.onSnapshot(
         (snapshot: any) => {
@@ -73,8 +80,8 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
 
           // Sort by latest message time
           list.sort((a, b) => {
-            const timeA = a.lastMessageAt || a.updatedAt || a.createdAt || 0;
-            const timeB = b.lastMessageAt || b.updatedAt || b.createdAt || 0;
+            const timeA = parseTimestamp(a.lastMessageAt || a.updatedAt || a.createdAt || 0);
+            const timeB = parseTimestamp(b.lastMessageAt || b.updatedAt || b.createdAt || 0);
             return timeB - timeA;
           });
 

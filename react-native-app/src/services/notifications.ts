@@ -261,9 +261,16 @@ export function subscribeToUserUnreadCounts(
     }
 
     // 1. Listen to unread chats
+    const { Filter } = require('@react-native-firebase/firestore');
     unsubChats = db
       .collection('chats')
-      .where('participants', 'array-contains', userId)
+      .where(
+        Filter.or(
+          Filter('participants', 'array-contains', userId),
+          Filter('buyerId', '==', userId),
+          Filter('sellerId', '==', userId)
+        )
+      )
       .onSnapshot(
         (snapshot: any) => {
           let count = 0;

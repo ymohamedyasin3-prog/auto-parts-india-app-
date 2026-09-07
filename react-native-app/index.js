@@ -65,7 +65,7 @@ try {
             
             // Ensure high-priority sound channel exists
             await notifee.createChannel({
-              id: 'auto_parts_notifications',
+              id: 'auto_parts_alerts_v2',
               name: 'Auto Parts Messages & Alerts',
               importance: AndroidImportance.HIGH,
               sound: 'default',
@@ -80,7 +80,7 @@ try {
               body,
               data: remoteMessage.data,
               android: {
-                channelId: 'auto_parts_notifications',
+                channelId: 'auto_parts_alerts_v2',
                 importance: AndroidImportance.HIGH,
                 sound: 'default',
                 pressAction: { id: 'default' },
