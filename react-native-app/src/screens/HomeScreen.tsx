@@ -244,11 +244,13 @@ const PartCard = React.memo(({ item, navigation, cardWidth, isFavorited, toggleF
               toggleFavorite(item.id);
             }}
           >
-            <Icon
-              source={activeFavorited ? "heart" : "heart-outline"}
-              size={22}
-              color={activeFavorited ? "#EF4444" : "#FFFFFF"}
-            />
+            <View style={styles.favoriteCircle}>
+              <Icon
+                source={activeFavorited ? "heart" : "heart-outline"}
+                size={18}
+                color={activeFavorited ? "#EF4444" : "#334155"}
+              />
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -715,9 +717,10 @@ export default function HomeScreen({ navigation, route, user }: any) {
 
   // Display Categories: Prefer Firestore topCategories if populated, otherwise fallback to defaults
   const displayCategories = useMemo(() => {
+    let rawList: any[] = [];
     if (topCategories && topCategories.length > 0) {
       const activeList = topCategories.filter((c: any) => c.active !== false);
-      const list = activeList.map((c: any) => ({
+      rawList = activeList.map((c: any) => ({
         id: c.id || c.name,
         name: c.name || c.title,
         icon: c.icon || 'car-cog',
@@ -725,13 +728,24 @@ export default function HomeScreen({ navigation, route, user }: any) {
         iconUrl: c.iconUrl || c.imageUrl,
         order: typeof c.order === 'number' ? c.order : 0,
       }));
-      list.sort((a, b) => a.order - b.order);
-      if (list.length > 0 && !list.some((c: any) => c.name?.toLowerCase() === 'more' || c.id === 'More')) {
-        list.push({ id: 'More', name: 'More', icon: 'apps', imageUrl: undefined, iconUrl: undefined, order: 999 });
-      }
-      return list;
+      rawList.sort((a, b) => a.order - b.order);
+    } else {
+      rawList = HOME_DEFAULT_CATEGORIES;
     }
-    return HOME_DEFAULT_CATEGORIES;
+
+    // Filter out any existing 'More'
+    const withoutMore = rawList.filter((c: any) => c.name?.toLowerCase() !== 'more' && c.id !== 'More');
+    // Take at most 7 categories, and put 'More' as the 8th item
+    const top7 = withoutMore.slice(0, 7);
+    const moreItem = {
+      id: 'More',
+      name: 'More',
+      icon: 'dots-grid',
+      imageUrl: undefined,
+      iconUrl: undefined,
+      order: 999,
+    };
+    return [...top7, moreItem];
   }, [topCategories]);
 
   // Display Brands: Prefer Firestore carBrands if populated, otherwise fallback to defaults
@@ -984,7 +998,11 @@ export default function HomeScreen({ navigation, route, user }: any) {
                         isSelected && styles.categoryCardBoxActive,
                       ]}
                     >
-                      {cat.imageUrl ? (
+                      {isMore ? (
+                        <View style={[styles.categoryFallbackCenter, { backgroundColor: '#EFF6FF' }]}>
+                          <Icon source="dots-grid" size={Math.round(catCardWidth * 0.45)} color="#0066FF" />
+                        </View>
+                      ) : cat.imageUrl ? (
                         <Image
                           source={{ uri: cat.imageUrl }}
                           style={styles.categoryFullImage}
@@ -1003,7 +1021,11 @@ export default function HomeScreen({ navigation, route, user }: any) {
 
                     {/* Outside Text Label Below Card */}
                     <Text
-                      style={[styles.categoryLabel, isSelected && styles.categoryLabelActive]}
+                      style={[
+                        styles.categoryLabel, 
+                        isSelected && styles.categoryLabelActive,
+                        isMore && { color: '#0066FF', fontWeight: '700' }
+                      ]}
                       numberOfLines={2}
                     >
                       {cat.name}
@@ -1697,15 +1719,22 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    padding: 4,
+    zIndex: 10,
+  },
+  favoriteCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.65,
-    shadowRadius: 3,
+    shadowOpacity: 0.2,
+    shadowRadius: 2.5,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   cardContent: {
     padding: 10,
