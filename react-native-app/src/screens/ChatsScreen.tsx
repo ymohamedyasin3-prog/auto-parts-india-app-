@@ -217,12 +217,14 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
 
   const filteredChats = chats.filter((chat) => {
     const activeUid = activeUser.uid || activeUser.id;
-    const isUserBuyer = activeUid === chat.buyerId;
+    const isUserBuyer = chat.buyerId ? activeUid === chat.buyerId : activeUid !== chat.sellerId;
     const partnerName = isUserBuyer ? chat.sellerName : chat.buyerName;
     const query = searchQuery.trim().toLowerCase();
     if (!query) return true;
     return (
       (partnerName || '').toLowerCase().includes(query) ||
+      (chat.buyerName || '').toLowerCase().includes(query) ||
+      (chat.sellerName || '').toLowerCase().includes(query) ||
       (chat.partTitle || '').toLowerCase().includes(query) ||
       (chat.lastMessageText || '').toLowerCase().includes(query)
     );
@@ -230,13 +232,15 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
 
   const renderChatItem = ({ item }: { item: any }) => {
     const activeUid = activeUser.uid || activeUser.id;
-    const isUserBuyer = activeUid === item.buyerId;
+    const isUserBuyer = item.buyerId ? activeUid === item.buyerId : activeUid !== item.sellerId;
     const partnerName = isUserBuyer
       ? item.sellerName || 'Verified Seller'
       : item.buyerName || 'Buyer';
     const partnerRole = isUserBuyer ? 'Seller' : 'Buyer';
     const partnerPhoto = isUserBuyer ? item.sellerPhoto : item.buyerPhoto;
-    const partnerId = isUserBuyer ? item.sellerId : item.buyerId;
+    const partnerId = isUserBuyer 
+      ? item.sellerId || (Array.isArray(item.participants) ? item.participants.find((p: string) => p !== activeUid) : 'seller')
+      : item.buyerId || (Array.isArray(item.participants) ? item.participants.find((p: string) => p !== activeUid) : 'buyer');
 
     const unreadCount =
       item.unreadCount?.[activeUid] ||

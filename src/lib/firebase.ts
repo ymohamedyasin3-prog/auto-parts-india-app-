@@ -1912,6 +1912,7 @@ export function subscribeToUserChats(
   if (useFirebase && auth && db) {
     let unsubBuyer: (() => void) | null = null;
     let unsubSeller: (() => void) | null = null;
+    let unsubPart: (() => void) | null = null;
     let isUnsubscribed = false;
 
     // Helper to start the actual Firestore listeners
@@ -1923,33 +1924,27 @@ export function subscribeToUserChats(
         const chatsRef = collection(db, "chats");
         const qBuyer = query(chatsRef, where("buyerId", "==", authenticatedUid));
         const qSeller = query(chatsRef, where("sellerId", "==", authenticatedUid));
+        const qPart = query(chatsRef, where("participants", "array-contains", authenticatedUid));
         
         let buyerChats: Chat[] = [];
         let sellerChats: Chat[] = [];
+        let partChats: Chat[] = [];
         let buyerLoaded = false;
         let sellerLoaded = false;
+        let partLoaded = false;
         let buyerError: any = null;
         let sellerError: any = null;
+        let partError: any = null;
         
         const emit = () => {
           if (isUnsubscribed) return;
           
-          if (buyerError || sellerError) {
-            const error = buyerError || sellerError;
-            console.error(`[Firestore Listener Error] subscribeToUserChats error:`, error);
-            if (onError) {
-              onError(error instanceof Error ? error : new Error(String(error)));
-            } else {
-              callback([]);
-            }
-            return;
-          }
-
-          if (buyerLoaded && sellerLoaded) {
+          if (buyerLoaded || sellerLoaded || partLoaded) {
             const chatsMap = new Map<string, Chat>();
             buyerChats.forEach(c => chatsMap.set(c.id, c));
             sellerChats.forEach(c => chatsMap.set(c.id, c));
-            const sorted = Array.from(chatsMap.values()).sort((a, b) => b.lastMessageAt - a.lastMessageAt);
+            partChats.forEach(c => chatsMap.set(c.id, c));
+            const sorted = Array.from(chatsMap.values()).sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
             console.log(`[Firestore Query] subscribeToUserChats successfully emitted ${sorted.length} chats.`);
             callback(sorted);
           }
@@ -1957,7 +1952,6 @@ export function subscribeToUserChats(
         
         console.log(`[Firestore Listener] Subscribing to buyer chats (buyerId == "${authenticatedUid}")...`);
         unsubBuyer = onSnapshot(qBuyer, (snapshot) => {
-          console.log(`[Firestore Listener Callback] Received buyer chats update. Document count: ${snapshot.size}`);
           buyerChats = [];
           snapshot.forEach((d) => {
             buyerChats.push({ id: d.id, ...d.data() } as Chat);
@@ -1966,16 +1960,13 @@ export function subscribeToUserChats(
           buyerError = null;
           emit();
         }, (err) => {
-          console.error(`[Firestore Listener Error] Failed on qBuyer snapshot subscription:`, err);
-          handleFirestoreError(err, OperationType.LIST, `chats (buyerId == ${authenticatedUid})`);
+          console.warn(`[Firestore Listener Warning] Failed on qBuyer snapshot:`, err);
           buyerLoaded = true;
-          buyerError = err;
           emit();
         });
         
         console.log(`[Firestore Listener] Subscribing to seller chats (sellerId == "${authenticatedUid}")...`);
         unsubSeller = onSnapshot(qSeller, (snapshot) => {
-          console.log(`[Firestore Listener Callback] Received seller chats update. Document count: ${snapshot.size}`);
           sellerChats = [];
           snapshot.forEach((d) => {
             sellerChats.push({ id: d.id, ...d.data() } as Chat);
@@ -1984,10 +1975,21 @@ export function subscribeToUserChats(
           sellerError = null;
           emit();
         }, (err) => {
-          console.error(`[Firestore Listener Error] Failed on qSeller snapshot subscription:`, err);
-          handleFirestoreError(err, OperationType.LIST, `chats (sellerId == ${authenticatedUid})`);
+          console.warn(`[Firestore Listener Warning] Failed on qSeller snapshot:`, err);
           sellerLoaded = true;
-          sellerError = err;
+          emit();
+        });
+
+        const unsubPart = onSnapshot(qPart, (snapshot) => {
+          partChats = [];
+          snapshot.forEach((d) => {
+            partChats.push({ id: d.id, ...d.data() } as Chat);
+          });
+          partLoaded = true;
+          emit();
+        }, (err) => {
+          console.warn(`[Firestore Listener Warning] Failed on qPart snapshot:`, err);
+          partLoaded = true;
           emit();
         });
       } catch (err: any) {
@@ -2010,12 +2012,14 @@ export function subscribeToUserChats(
         // Stop any old listeners just in case
         if (unsubBuyer) { unsubBuyer(); unsubBuyer = null; }
         if (unsubSeller) { unsubSeller(); unsubSeller = null; }
+        if (unsubPart) { unsubPart(); unsubPart = null; }
         
         startListeners(firebaseUser.uid);
       } else {
         console.warn(`[Firestore Auth Watch] User is NOT authenticated in Firebase. Delaying chat queries.`);
         if (unsubBuyer) { unsubBuyer(); unsubBuyer = null; }
         if (unsubSeller) { unsubSeller(); unsubSeller = null; }
+        if (unsubPart) { unsubPart(); unsubPart = null; }
         // For security, if they are not authenticated, we return empty list and stop loader
         callback([]);
       }
@@ -2027,6 +2031,7 @@ export function subscribeToUserChats(
       unsubAuth();
       if (unsubBuyer) unsubBuyer();
       if (unsubSeller) unsubSeller();
+      if (unsubPart) unsubPart();
     };
   }
   
@@ -2220,21 +2225,41 @@ export async function sendChatMessage(
       const chatDoc = await getDoc(chatDocRef);
       
       // If chat document does not exist, initialize it with metadata
+      const participantsList = Array.from(new Set([
+        chatMeta?.buyerId, 
+        chatMeta?.sellerId, 
+        senderId,
+        ...(Array.isArray(chatMeta?.participants) ? chatMeta.participants : [])
+      ].filter(Boolean)));
+
       if (!chatDoc.exists()) {
         if (!chatMeta) {
           throw new Error("Chat metadata is required to initialize a new conversation document");
         }
         await setDoc(chatDocRef, {
           ...chatMeta,
+          participants: participantsList,
           lastMessageText: displayMessageText,
           lastMessageAt: timestamp,
-          lastSenderId: senderId
+          lastSenderId: senderId,
+          unread: true
         });
       } else {
+        const existingData = chatDoc.data() || {};
+        const mergedParticipants = Array.from(new Set([
+          ...(Array.isArray(existingData.participants) ? existingData.participants : []),
+          existingData.buyerId,
+          existingData.sellerId,
+          senderId,
+          ...participantsList
+        ].filter(Boolean)));
+
         await updateDoc(chatDocRef, {
+          participants: mergedParticipants,
           lastMessageText: displayMessageText,
           lastMessageAt: timestamp,
-          lastSenderId: senderId
+          lastSenderId: senderId,
+          unread: true
         });
       }
       

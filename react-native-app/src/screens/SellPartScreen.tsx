@@ -816,24 +816,74 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
     }
 
     try {
-      // Determine backend URL (Support Web relative URLs and Native absolute backend URLs)
-      const backendUrl = typeof window !== 'undefined' && window.location?.origin 
-        ? `${window.location.origin}/api/ai/autofill-listing`
-        : 'https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing';
+      let imageToSend = firstImage;
 
-      const res = await fetch(backendUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          image: firstImage,
-          currentBrand: finalBrand,
-          currentModel: finalModel,
-          currentCategory: finalCategory,
-          currentPartName: finalPartName,
-        }),
-      });
+      // If local device file URI (from Android Camera/Gallery), upload to Cloudinary first so the AI backend can access the real image
+      if (firstImage && (firstImage.startsWith('file://') || firstImage.startsWith('content://'))) {
+        try {
+          const uploadedUrl = await uploadImageToCloudinary(firstImage, 'spare_parts');
+          if (uploadedUrl && (uploadedUrl.startsWith('http://') || uploadedUrl.startsWith('https://'))) {
+            imageToSend = uploadedUrl;
+            // Update local state so slot 0 is already in Cloudinary (speeds up final ad posting)
+            setUploadedImages((prev) => {
+              if (prev.length > 0) {
+                const copy = [...prev];
+                copy[0] = uploadedUrl;
+                return copy;
+              }
+              return [uploadedUrl];
+            });
+          }
+        } catch (uploadErr) {
+          console.warn('[AI AutoFill] Cloudinary pre-upload warning:', uploadErr);
+        }
+      }
+
+      // Backend API Endpoints (prioritize direct origin in web, fallback to live Cloud Run endpoints in Android/iOS APK)
+      const endpoints = [
+        'https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing',
+        'https://ais-pre-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing',
+      ];
+      if (typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')) {
+        endpoints.unshift(`${window.location.origin}/api/ai/autofill-listing`);
+      }
+
+      let res: Response | null = null;
+      let lastFetchErr: any = null;
+
+      for (const endpoint of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+          const candidateRes = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            signal: controller.signal,
+            body: JSON.stringify({
+              image: imageToSend,
+              currentBrand: finalBrand,
+              currentModel: finalModel,
+              currentCategory: finalCategory,
+              currentPartName: finalPartName,
+            }),
+          });
+          clearTimeout(timeoutId);
+
+          if (candidateRes.ok) {
+            res = candidateRes;
+            break;
+          }
+        } catch (err) {
+          lastFetchErr = err;
+        }
+      }
+
+      if (!res) {
+        throw new Error(lastFetchErr?.message || 'Unable to connect to AI server');
+      }
 
       const data = await res.json();
 
@@ -846,7 +896,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
         if (aiData.partName) setPartName(aiData.partName);
         if (aiData.condition) setCondition(aiData.condition);
         if (aiData.description) setDescription(aiData.description);
-        // Note: Price is deliberately left for the seller to specify manually.
+        // CRITICAL: Price / Rate is intentionally NEVER filled by AI, preserving seller's choice.
 
         setAiSuccessMessage('✨ AI analyzed your vehicle/part photo and auto-filled details!');
         setTimeout(() => setAiSuccessMessage(null), 4000);
@@ -857,7 +907,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
         );
       } else {
         const errMsg = data?.error || 'AI could not identify details from this photo. Please enter details manually.';
-        Alert.alert('AI Analysis Notice', errMsg);
+        Alert.alert('AI Auto-Fill Notice', errMsg);
       }
     } catch (err: any) {
       console.warn('Backend AI auto-fill error:', err?.message);

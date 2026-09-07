@@ -39,29 +39,40 @@ export default function NotificationsScreen({ navigation }: any) {
       // 1. Fetch personal chat/inquiry notifications
       let unsubNotifs = () => {};
       if (currentUid) {
-        unsubNotifs = db
+        const notifQuery = db
           .collection('notifications')
-          .where('recipientId', '==', currentUid)
-          .orderBy('createdAt', 'desc')
-          .limit(40)
-          .onSnapshot(
-            (snapshot: any) => {
-              const list: any[] = [];
-              if (snapshot && typeof snapshot.forEach === 'function') {
-                snapshot.forEach((doc: any) => {
-                  list.push({ id: doc.id, ...(doc.data ? doc.data() : doc) });
-                });
-              }
-              setPersonalNotifs(list);
-              setLoading(false);
-              setRefreshing(false);
-            },
+          .where('recipientId', '==', currentUid);
+
+        const handleNotifSnapshot = (snapshot: any) => {
+          const list: any[] = [];
+          if (snapshot && typeof snapshot.forEach === 'function') {
+            snapshot.forEach((doc: any) => {
+              list.push({ id: doc.id, ...(doc.data ? doc.data() : doc) });
+            });
+          }
+          list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          setPersonalNotifs(list);
+          setLoading(false);
+          setRefreshing(false);
+        };
+
+        try {
+          unsubNotifs = notifQuery.onSnapshot(
+            handleNotifSnapshot,
             (err: any) => {
               console.warn('[NotificationsScreen] Personal notifs snapshot error:', err);
+              // Fallback to plain get if snapshot failed
+              notifQuery.get().then(handleNotifSnapshot).catch(() => {});
               setLoading(false);
               setRefreshing(false);
             }
           );
+        } catch (e) {
+          console.warn('[NotificationsScreen] onSnapshot exception:', e);
+        }
+      } else {
+        setPersonalNotifs([]);
+        setLoading(false);
       }
 
       // 2. Fetch platform announcements

@@ -131,11 +131,15 @@ export async function sendChatMessageNotification(params: {
 
   // 2. Trigger server-side push notification
   try {
-    const backendUrl = typeof window !== 'undefined' && window.location?.origin 
-      ? `${window.location.origin}/api/notifications/send`
-      : 'https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/notifications/send';
+    const endpoints = [
+      typeof window !== 'undefined' && window.location?.origin ? `${window.location.origin}/api/notifications/send` : null,
+      'https://ais-pre-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/notifications/send',
+      'https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/notifications/send'
+    ].filter(Boolean) as string[];
 
-    fetch(backendUrl, {
+    const targetUrl = endpoints[0];
+
+    fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -147,7 +151,24 @@ export async function sendChatMessageNotification(params: {
         partTitle,
         partImageUrl,
       })
-    }).catch(() => {});
+    }).catch(() => {
+      // Fallback try preview/dev url
+      if (endpoints[1]) {
+        fetch(endpoints[1], {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            senderId,
+            senderName,
+            receiverId: recipientId,
+            text,
+            chatId,
+            partTitle,
+            partImageUrl,
+          })
+        }).catch(() => {});
+      }
+    });
   } catch (_) {}
 }
 

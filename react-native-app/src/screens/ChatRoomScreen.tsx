@@ -62,17 +62,57 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
 
   const chatId = routeChatId || (part && currentUid ? `${currentUid}_${part.sellerId || 'seller'}_${part.id || 'item'}` : 'default_chat');
 
+  // Loaded chat document state from Firestore (in case routeChat wasn't fully populated)
+  const [remoteChatDoc, setRemoteChatDoc] = useState<any>(null);
+
+  // Subscribe to the chat document itself so participants/names/photos are always accurate in real-time
+  useEffect(() => {
+    if (!chatId) return;
+    let unsub = () => {};
+    try {
+      const db = getFirebaseFirestore();
+      if (db && typeof db.collection === 'function') {
+        unsub = db.collection('chats').doc(chatId).onSnapshot((docSnap: any) => {
+          if (docSnap && docSnap.exists) {
+            const data = docSnap.data();
+            setRemoteChatDoc(data);
+          }
+        }, () => {});
+      }
+    } catch (_) {}
+    return () => { try { unsub(); } catch (_) {} };
+  }, [chatId]);
+
+  const mergedChat = remoteChatDoc || routeChat;
+
   // Partner Identification logic
-  const isCurrentUserBuyer = routeChat?.buyerId === currentUid || (part && part.sellerId !== currentUid);
-  const partnerId = routeChat 
-    ? (isCurrentUserBuyer ? routeChat.sellerId : routeChat.buyerId)
-    : (part ? (part.sellerId === currentUid ? 'buyer' : part.sellerId) : 'seller');
-  const partnerName = routeChat
-    ? (isCurrentUserBuyer ? (routeChat.sellerName || 'Verified Seller') : (routeChat.buyerName || 'Buyer'))
+  const isCurrentUserBuyer = mergedChat?.buyerId
+    ? mergedChat.buyerId === currentUid
+    : (part?.sellerId ? part.sellerId !== currentUid : true);
+
+  // Compute partnerId accurately
+  let resolvedPartnerId = 'seller';
+  if (mergedChat) {
+    if (mergedChat.buyerId === currentUid) {
+      resolvedPartnerId = mergedChat.sellerId || 'seller';
+    } else if (mergedChat.sellerId === currentUid) {
+      resolvedPartnerId = mergedChat.buyerId || 'buyer';
+    } else if (Array.isArray(mergedChat.participants)) {
+      const other = mergedChat.participants.find((p: string) => p && p !== currentUid);
+      if (other) resolvedPartnerId = other;
+    }
+  } else if (part) {
+    resolvedPartnerId = part.sellerId === currentUid ? 'buyer' : (part.sellerId || 'seller');
+  }
+
+  const partnerId = resolvedPartnerId;
+
+  const partnerName = mergedChat
+    ? (isCurrentUserBuyer ? (mergedChat.sellerName || 'Verified Seller') : (mergedChat.buyerName || 'Buyer'))
     : (part ? (part.sellerName || 'Verified Seller') : 'Seller');
   const partnerRole = isCurrentUserBuyer ? 'Seller' : 'Buyer';
-  const partnerPhoto = routeChat
-    ? (isCurrentUserBuyer ? routeChat.sellerPhoto : routeChat.buyerPhoto)
+  const partnerPhoto = mergedChat
+    ? (isCurrentUserBuyer ? mergedChat.sellerPhoto : mergedChat.buyerPhoto)
     : (part ? part.sellerPhoto : '');
 
   const [livePartnerPhoto, setLivePartnerPhoto] = useState<string | null>(null);
@@ -151,23 +191,25 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
 
           setMessages(list);
 
-          // Mark incoming unread messages as read
-          list.forEach(async (msg) => {
-            if (msg.senderId !== currentUid && msg.status !== 'read') {
-              try {
-                await messagesRef.doc(msg.id).set({ status: 'read' }, { merge: true });
-              } catch (_) {}
-            }
-          });
+          // If there are unread messages sent by the partner, mark them as read and reset unread status
+          const hasIncomingUnread = list.some((msg) => msg.senderId !== currentUid && msg.status !== 'read');
+          if (hasIncomingUnread) {
+            list.forEach(async (msg) => {
+              if (msg.senderId !== currentUid && msg.status !== 'read') {
+                try {
+                  await messagesRef.doc(msg.id).set({ status: 'read' }, { merge: true });
+                } catch (_) {}
+              }
+            });
 
-          // Reset unread count on the chat document for current user and clear notification
-          try {
-            db.collection('chats').doc(chatId).set({
-              unreadCount: { [currentUid]: 0 },
-              unread: false,
-            }, { merge: true });
-            markNotificationAsRead(`${chatId}_${currentUid}`);
-          } catch (_) {}
+            try {
+              db.collection('chats').doc(chatId).set({
+                unreadCount: { [currentUid]: 0 },
+                unread: false,
+              }, { merge: true });
+              markNotificationAsRead(`${chatId}_${currentUid}`);
+            } catch (_) {}
+          }
         },
         (err: any) => {
           console.warn('[ChatRoomScreen] Messages snapshot error:', err);
@@ -322,22 +364,28 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
       });
 
       // Update parent Chat document for inbox previews
+      const resolvedBuyerId = mergedChat?.buyerId || (isCurrentUserBuyer ? currentUid : partnerId);
+      const resolvedBuyerName = mergedChat?.buyerName || (isCurrentUserBuyer ? currentName : partnerName);
+      const resolvedSellerId = mergedChat?.sellerId || (isCurrentUserBuyer ? partnerId : currentUid);
+      const resolvedSellerName = mergedChat?.sellerName || (isCurrentUserBuyer ? partnerName : currentName);
+      const participantsList = Array.from(new Set([currentUid, partnerId, resolvedBuyerId, resolvedSellerId].filter(Boolean)));
+
       const chatDocRef = db.collection('chats').doc(chatId);
       await chatDocRef.set(
         {
           id: chatId,
-          partId: part?.id || '',
-          partTitle: part?.title || part?.partTitle || 'Spare Part',
-          partImageUrl: part?.imageUrl || part?.partImageUrl || '',
-          partPrice: Number(part?.price || part?.partPrice) || 0,
-          buyerId: routeChat?.buyerId || (isCurrentUserBuyer ? currentUid : partnerId),
-          buyerName: routeChat?.buyerName || (isCurrentUserBuyer ? currentName : partnerName),
-          sellerId: routeChat?.sellerId || (isCurrentUserBuyer ? partnerId : currentUid),
-          sellerName: routeChat?.sellerName || (isCurrentUserBuyer ? partnerName : currentName),
+          partId: part?.id || mergedChat?.partId || '',
+          partTitle: part?.title || part?.partTitle || mergedChat?.partTitle || 'Spare Part',
+          partImageUrl: part?.imageUrl || part?.partImageUrl || mergedChat?.partImageUrl || '',
+          partPrice: Number(part?.price || part?.partPrice || mergedChat?.partPrice) || 0,
+          buyerId: resolvedBuyerId,
+          buyerName: resolvedBuyerName,
+          sellerId: resolvedSellerId,
+          sellerName: resolvedSellerName,
           lastMessageText: imageUrl ? '📷 Photo Attachment' : cleanText,
           lastMessageAt: now,
           lastSenderId: currentUid,
-          participants: [currentUid, partnerId],
+          participants: participantsList,
           unread: true,
         },
         { merge: true }
@@ -356,14 +404,14 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
         senderName: currentName,
         senderPhoto: currentUserPhoto,
         text: cleanText || (imageUrl ? '📷 Photo Attachment' : 'New message'),
-        partId: part?.id || '',
-        partTitle: part?.title || part?.partTitle || 'Spare Part',
-        partPrice: Number(part?.price || part?.partPrice) || 0,
-        partImageUrl: part?.imageUrl || part?.partImageUrl || '',
-        buyerId: routeChat?.buyerId || (isCurrentUserBuyer ? currentUid : partnerId),
-        buyerName: routeChat?.buyerName || (isCurrentUserBuyer ? currentName : partnerName),
-        sellerId: routeChat?.sellerId || (isCurrentUserBuyer ? partnerId : currentUid),
-        sellerName: routeChat?.sellerName || (isCurrentUserBuyer ? partnerName : currentName),
+        partId: part?.id || mergedChat?.partId || '',
+        partTitle: part?.title || part?.partTitle || mergedChat?.partTitle || 'Spare Part',
+        partPrice: Number(part?.price || part?.partPrice || mergedChat?.partPrice) || 0,
+        partImageUrl: part?.imageUrl || part?.partImageUrl || mergedChat?.partImageUrl || '',
+        buyerId: resolvedBuyerId,
+        buyerName: resolvedBuyerName,
+        sellerId: resolvedSellerId,
+        sellerName: resolvedSellerName,
       }).catch((e) => console.warn('[ChatRoomScreen] sendChatMessageNotification warning:', e));
 
     } catch (err: any) {
