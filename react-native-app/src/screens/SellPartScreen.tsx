@@ -449,8 +449,8 @@ const DEFAULT_CATEGORY_PARTS: Record<string, string[]> = {
 };
 
 const CONDITION_OPTIONS = [
-  { id: 'New', label: 'New' },
-  { id: 'Used', label: 'Used' },
+  { id: 'New', label: '✨ Brand New', color: '#10B981' },
+  { id: 'Used', label: '🔧 Used / Pre-owned', color: '#0B1426' },
 ] as const;
 
 function formatIndianCurrency(numStr: string | number): string {
@@ -802,16 +802,20 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
     setShowDirectUrlInput(false);
   };
 
-  // AI Auto-Fill Function calling backend Gemini API with seamless client fallback
+  // AI Auto-Fill Function calling backend Gemini API with real multimodal automotive recognition
   const handleAutoFillAI = async () => {
     setIsAutoFilling(true);
     setErrorMessage(null);
     setAiSuccessMessage(null);
 
-    let success = false;
+    const firstImage = finalImagesToUse[0] || null;
+    if (!firstImage && !finalBrand && !finalModel && !finalPartName) {
+      setIsAutoFilling(false);
+      Alert.alert('Photo or Details Needed', 'Please upload at least one photo of the vehicle/spare part, or provide brand/model hints for AI analysis.');
+      return;
+    }
+
     try {
-      const firstImage = finalImagesToUse[0] || null;
-      
       // Determine backend URL (Support Web relative URLs and Native absolute backend URLs)
       const backendUrl = typeof window !== 'undefined' && window.location?.origin 
         ? `${window.location.origin}/api/ai/autofill-listing`
@@ -840,32 +844,27 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
         if (aiData.carModel) setCarModel(aiData.carModel);
         if (aiData.category) setCategory(aiData.category);
         if (aiData.partName) setPartName(aiData.partName);
-        if (aiData.suggestedPrice) setPrice(String(aiData.suggestedPrice));
+        if (aiData.condition) setCondition(aiData.condition);
         if (aiData.description) setDescription(aiData.description);
-        success = true;
+        // Note: Price is deliberately left for the seller to specify manually.
+
+        setAiSuccessMessage('✨ AI analyzed your vehicle/part photo and auto-filled details!');
+        setTimeout(() => setAiSuccessMessage(null), 4000);
+      } else if (data && data.isAutomotive === false) {
+        Alert.alert(
+          'Non-Automotive Image',
+          data.message || 'The uploaded image does not appear to be an automotive vehicle or spare part. Please upload a clear photo of an automobile or car part.'
+        );
+      } else {
+        const errMsg = data?.error || 'AI could not identify details from this photo. Please enter details manually.';
+        Alert.alert('AI Analysis Notice', errMsg);
       }
     } catch (err: any) {
-      console.log('Backend AI auto-fill network fallback triggered:', err?.message);
+      console.warn('Backend AI auto-fill error:', err?.message);
+      Alert.alert('AI Auto-Fill Notice', 'Unable to reach AI service. Please check your internet connection and enter details manually.');
+    } finally {
+      setIsAutoFilling(false);
     }
-
-    // If backend fetch failed or didn't return data, use robust smart client-side generation
-    if (!success) {
-      const detectedBrand = finalBrand || 'Maruti Suzuki';
-      const detectedModel = finalModel || 'Swift';
-      const detectedCategory = finalCategory || 'Body & Exterior';
-      const detectedPart = finalPartName || 'Headlight Assembly';
-      setTitle(`${detectedBrand} ${detectedModel} ${detectedPart}`);
-      if (!finalBrand) setCarBrand(detectedBrand);
-      if (!finalModel) setCarModel(detectedModel);
-      if (!finalCategory) setCategory(detectedCategory);
-      if (!finalPartName) setPartName(detectedPart);
-      if (!price) setPrice('3500');
-      setDescription(`Genuine OEM ${detectedBrand} ${detectedModel} ${detectedPart}. Verified factory fitment in good working condition with warranty.`);
-    }
-
-    setAiSuccessMessage('✨ AI analyzed your part photo and auto-filled details successfully!');
-    setIsAutoFilling(false);
-    setTimeout(() => setAiSuccessMessage(null), 4000);
   };
 
   // GPS Location Detection
@@ -1291,13 +1290,14 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
           <View style={styles.conditionSegmentContainer}>
             {CONDITION_OPTIONS.map((opt) => {
               const active = condition === opt.id;
+              const isNewOpt = opt.id === 'New';
               return (
                 <TouchableOpacity
                   key={opt.id}
                   activeOpacity={0.85}
                   style={[
                     styles.conditionTab,
-                    active && styles.conditionTabActive,
+                    active && (isNewOpt ? styles.conditionTabActiveNew : styles.conditionTabActive),
                   ]}
                   onPress={() => setCondition(opt.id as 'New' | 'Used')}
                 >
@@ -2262,6 +2262,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 2,
     elevation: 2,
+  },
+  conditionTabActiveNew: {
+    backgroundColor: '#059669',
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
   conditionTabText: {
     color: '#64748B',

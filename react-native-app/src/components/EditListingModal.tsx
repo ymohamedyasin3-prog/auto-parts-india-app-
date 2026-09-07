@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Modal, StyleSheet, TextInput, Button, Text, Alert, ScrollView, TouchableOpacity, Image, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { Icon } from 'react-native-paper';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { uploadImageToCloudinary } from '../services/cloudinary';
+import { uploadImageToCloudinary, deleteImageFromCloudinary } from '../services/cloudinary';
 import { getFirebaseFirestore } from '../services/firebase';
 
 export interface EditListingModalProps {
@@ -102,6 +102,11 @@ export const EditListingModal: React.FC<EditListingModalProps> = ({
         imageUrl: finalImageUrl,
         updatedAt: Date.now(),
       });
+
+      // If image changed, delete old Cloudinary image in background
+      if (listing?.imageUrl && listing.imageUrl !== finalImageUrl) {
+        deleteImageFromCloudinary(listing.imageUrl);
+      }
 
       Alert.alert('Saved', 'Listing updated successfully!');
       if (onSuccess) onSuccess();

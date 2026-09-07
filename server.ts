@@ -11,7 +11,14 @@ function getGeminiAI(): GoogleGenAI | null {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
   if (!aiClient) {
-    aiClient = new GoogleGenAI({ apiKey });
+    aiClient = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
   }
   return aiClient;
 }
@@ -144,143 +151,154 @@ async function startServer() {
     }
   });
 
-  // Gemini AI Smart Listing Auto-Fill Endpoint
+  // Gemini AI Smart Listing Auto-Fill & Image Verification Endpoint
   app.post("/api/ai/autofill-listing", async (req, res) => {
     try {
       const { image, currentBrand, currentModel, currentCategory, currentPartName } = req.body || {};
       
       const ai = getGeminiAI();
-      let generatedData: any = null;
+      if (!ai) {
+        return res.status(503).json({
+          success: false,
+          error: "Gemini AI service is not initialized or API key is missing. Please enter details manually."
+        });
+      }
 
-      if (ai) {
-        try {
-          const contents: any[] = [];
-          let imagePart: any = null;
+      const promptParts: any[] = [];
+      let hasImage = false;
 
-          if (image && typeof image === "string") {
-            if (image.startsWith("data:")) {
-              const match = image.match(/^data:([^;]+);base64,(.+)$/);
-              if (match) {
-                imagePart = {
-                  inlineData: {
-                    mimeType: match[1],
-                    data: match[2]
-                  }
-                };
+      if (image && typeof image === "string" && image.trim().length > 0) {
+        if (image.startsWith("data:")) {
+          const match = image.match(/^data:([^;]+);base64,(.+)$/);
+          if (match) {
+            promptParts.push({
+              inlineData: {
+                mimeType: match[1],
+                data: match[2]
               }
-            } else if (image.startsWith("http")) {
-              // Fetch remote image if needed
-              try {
-                const imgRes = await fetch(image);
-                const arrayBuffer = await imgRes.arrayBuffer();
-                const buffer = Buffer.from(arrayBuffer);
-                const contentType = imgRes.headers.get("content-type") || "image/jpeg";
-                imagePart = {
-                  inlineData: {
-                    mimeType: contentType,
-                    data: buffer.toString("base64")
-                  }
-                };
-              } catch (e) {
-                console.warn("[Gemini AutoFill] Remote image fetch error:", e);
-              }
+            });
+            hasImage = true;
+          }
+        } else if (image.startsWith("http://") || image.startsWith("https://")) {
+          try {
+            const imgRes = await fetch(image);
+            if (imgRes.ok) {
+              const arrayBuffer = await imgRes.arrayBuffer();
+              const buffer = Buffer.from(arrayBuffer);
+              const contentType = imgRes.headers.get("content-type") || "image/jpeg";
+              promptParts.push({
+                inlineData: {
+                  mimeType: contentType,
+                  data: buffer.toString("base64")
+                }
+              });
+              hasImage = true;
             }
+          } catch (imgFetchErr) {
+            console.warn("[Gemini AutoFill] Remote image fetch warning:", imgFetchErr);
           }
+        }
+      }
 
-          const promptParts: any[] = [];
-          if (imagePart) {
-            promptParts.push(imagePart);
-          }
+      const contextHint = [
+        currentBrand ? `Provided Car Brand: "${currentBrand}"` : "",
+        currentModel ? `Provided Car Model: "${currentModel}"` : "",
+        currentCategory ? `Provided Category: "${currentCategory}"` : "",
+        currentPartName ? `Provided Part Name: "${currentPartName}"` : "",
+      ].filter(Boolean).join(", ");
 
-          const contextHint = [
-            currentBrand ? `Car Brand hint: ${currentBrand}` : "",
-            currentModel ? `Car Model hint: ${currentModel}` : "",
-            currentCategory ? `Category hint: ${currentCategory}` : "",
-            currentPartName ? `Part Name hint: ${currentPartName}` : "",
-          ].filter(Boolean).join(", ");
+      const analysisPrompt = `You are a professional automotive technical expert and catalog specialist for the Indian automobile market.
+Carefully analyze ${hasImage ? "the provided photo and any user hints" : "the provided text context"}.
 
-          promptParts.push({
-            text: `You are an expert Indian automotive spare parts catalog specialist.
-Analyze this car spare part ${imagePart ? "from the photo" : "with the given context: " + contextHint}.
-${contextHint ? `Context provided by user: ${contextHint}` : ""}
+Context: ${contextHint || "No prior hints provided."}
 
-Identify and generate accurate, realistic listing fields for the Indian automotive market:
-1. "title": A clear, high-converting product title (e.g., "Mahindra XUV700 Front Bumper Assembly", "Hyundai Creta Right Headlight (LED)", "Maruti Swift Brake Caliper Set").
-2. "carBrand": Identified or probable car brand in India (e.g., Maruti Suzuki, Hyundai, Mahindra, Tata, Toyota, Honda, Kia, Ford, Volkswagen, Skoda).
-3. "carModel": Specific popular car model in India (e.g., Swift, Creta, XUV700, Nexon, Innova, City, Seltos, Scorpio).
-4. "category": One of standard categories: "Body & Panels", "Lighting & Electrical", "Engine & Transmission", "Brakes & Suspension", "Interior & Dashboard", "Wheels & Tyres", "AC & Heating", "Exhaust & Cooling", "Mirrors & Glass".
-5. "partName": Specific spare part name (e.g., "Front Bumper", "Headlight Assembly", "Tail Light", "Side Mirror", "Brake Pad Set", "Alternator", "Radiator", "Alloy Wheel").
-6. "condition": One of "Brand New", "Like New", "Used (Good)", "For Scrap/Spares".
-7. "suggestedPrice": A realistic market price integer in INR (e.g., 2500, 4800, 8500, 12000).
-8. "description": A 2-3 sentence professional seller description highlighting genuine fitment, condition, and compatibility for Indian car owners.
+VERIFICATION & CLASSIFICATION RULES:
+1. "isAutomotive" (boolean):
+   - Set to TRUE if the image/context represents a vehicle, car, bike, truck, automotive spare part, body panel, mechanical component, interior trim, electrical item, alloy wheel, tire, or an accidental/scrap car for dismantling.
+   - Set to FALSE if the image is unrelated to vehicles/parts (such as food, selfies/faces, animals, landscapes, clothes, general non-automotive electronics).
+2. If "isAutomotive" is false:
+   - Provide "rejectionReason": A polite sentence explaining that the image does not appear to be an automotive part or vehicle.
+3. If "isAutomotive" is true, extract and classify:
+   - "itemType": One of "spare_part", "full_vehicle", "accidental_scrap_vehicle".
+   - "carBrand": Exact identified car brand popular in India (e.g. Maruti Suzuki, Hyundai, Tata, Mahindra, Toyota, Honda, Kia, Volkswagen, Skoda, Ford, Renault, Nissan, MG, BMW, Mercedes-Benz, Audi, etc.). If the user already provided a brand hint, respect and lock to it.
+   - "carModel": Specific model in India (e.g. Swift, Baleno, Creta, i20, Nexon, Harrier, XUV700, Thar, Scorpio, Innova, City, Seltos, Kwid, etc.). If user gave a model hint, strictly prioritize it.
+   - "category": Must be EXACTLY ONE of these standard app categories:
+     ["Body & Exterior", "Engine & Mechanical", "Lights & Electricals", "Suspension & Brakes", "Interior & Wheels", "Cooling & AC", "Transmission & Clutch", "Exhaust & Fuel", "Accidental & Scrap Cars", "Full Vehicles / Cars"]
+   - "partName": Precise part name or vehicle description (e.g., "Front Bumper Assembly", "LED Headlight Unit", "Alloy Wheel Set", "Clutch Plate", "Side View Mirror", "Radiator", "Brake Caliper", "Total-Loss Accidental Car For Parts").
+   - "title": A clear, professional listing title for Indian buyers (e.g. "Maruti Suzuki Swift Front Bumper (OEM)", "Hyundai Creta Left Headlight Assembly", "Tata Nexon Front End Accidental - All Spares Available").
+   - "condition": One of ["Brand New", "Like New", "Used (Good)", "Refurbished", "For Scrap/Spares"].
+   - "description": A concise, 2-3 sentence realistic seller description highlighting genuine fitment, condition, and compatibility for Indian car owners.
+4. CRITICAL: DO NOT return, estimate, or fill any price. Price must be decided exclusively by the seller.
 
-Respond STRICTLY with a valid JSON object matching this schema:
+Respond strictly in valid JSON format matching this schema:
 {
+  "isAutomotive": true,
+  "rejectionReason": null,
+  "itemType": "spare_part",
   "title": "string",
   "carBrand": "string",
   "carModel": "string",
   "category": "string",
   "partName": "string",
   "condition": "string",
-  "suggestedPrice": 3500,
   "description": "string"
-}`
-          });
+}`;
 
-          const response = await ai.models.generateContent({
-            model: "gemini-3.7-flash",
-            contents: [{ role: "user", parts: promptParts }],
-            config: {
-              responseMimeType: "application/json"
-            }
-          });
+      promptParts.push({ text: analysisPrompt });
 
-          const responseText = response.text?.trim();
-          if (responseText) {
-            generatedData = JSON.parse(responseText);
-          }
-        } catch (geminiError: any) {
-          console.warn("[Gemini AutoFill Warning] Generation error:", geminiError);
+      const response = await ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: [{ role: "user", parts: promptParts }],
+        config: {
+          responseMimeType: "application/json"
         }
-      }
-
-      // Smart fallback heuristics if Gemini is not configured or fails
-      if (!generatedData) {
-        const brand = currentBrand || "Maruti Suzuki";
-        const model = currentModel || (brand === "Mahindra" ? "XUV700" : brand === "Hyundai" ? "Creta" : brand === "Tata" ? "Nexon" : "Swift");
-        const category = currentCategory || "Body & Panels";
-        const part = currentPartName || "Front Bumper Assembly";
-        
-        generatedData = {
-          title: `${brand} ${model} ${part}`,
-          carBrand: brand,
-          carModel: model,
-          category: category,
-          partName: part,
-          condition: "Used (Good)",
-          suggestedPrice: 3500,
-          description: `Original OEM ${brand} ${model} ${part} in good usable condition. Perfect direct fit with all mounting clips and brackets intact. Genuine part ready for immediate installation.`
-        };
-      }
-
-      return res.json({
-        success: true,
-        data: generatedData
       });
-    } catch (error: any) {
-      console.error("[Gemini AutoFill Error]:", error);
+
+      const responseText = response.text?.trim();
+      if (!responseText) {
+        return res.status(500).json({
+          success: false,
+          error: "AI did not return a response. Please enter details manually."
+        });
+      }
+
+      let generatedData: any = null;
+      try {
+        generatedData = JSON.parse(responseText);
+      } catch (parseErr) {
+        console.warn("[Gemini AutoFill] JSON Parse Warning:", responseText);
+        return res.status(500).json({
+          success: false,
+          error: "Unable to parse AI response. Please enter details manually."
+        });
+      }
+
+      if (generatedData && generatedData.isAutomotive === false) {
+        return res.json({
+          success: false,
+          isAutomotive: false,
+          message: generatedData.rejectionReason || "The uploaded image does not appear to be an automotive part or vehicle. Please upload a clear photo of a car or spare part."
+        });
+      }
+
       return res.json({
         success: true,
         data: {
-          title: "Genuine Automotive Spare Part",
-          carBrand: "Maruti Suzuki",
-          carModel: "Swift",
-          category: "Body & Panels",
-          partName: "Front Bumper",
-          condition: "Used (Good)",
-          suggestedPrice: 3000,
-          description: "Original genuine automotive spare part in good working condition. Compatible with specified models."
+          title: generatedData.title || "",
+          carBrand: generatedData.carBrand || currentBrand || "",
+          carModel: generatedData.carModel || currentModel || "",
+          category: generatedData.category || currentCategory || "",
+          partName: generatedData.partName || currentPartName || "",
+          condition: generatedData.condition || "Used (Good)",
+          description: generatedData.description || ""
+          // Explicitly no price field
         }
+      });
+    } catch (error: any) {
+      console.error("[Gemini AutoFill Error]:", error);
+      return res.status(500).json({
+        success: false,
+        error: error?.message || "Failed to analyze photo with AI. Please enter details manually."
       });
     }
   });

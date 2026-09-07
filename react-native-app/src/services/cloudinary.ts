@@ -134,12 +134,74 @@ export function getOptimizedImageUrl(
 }
 
 /**
- * Simulates Cloudinary image deletion flow (Client side confirmation)
+ * Extracts Cloudinary public_id from a full URL or returns publicId
  */
-export async function deleteImageFromCloudinary(publicId: string): Promise<boolean> {
+export function extractCloudinaryPublicId(urlOrPublicId: string): string {
+  if (!urlOrPublicId || typeof urlOrPublicId !== 'string') return '';
+  if (!urlOrPublicId.includes('cloudinary.com')) return urlOrPublicId;
+
+  const uploadIndex = urlOrPublicId.indexOf('/image/upload/');
+  if (uploadIndex === -1) return '';
+
+  const path = urlOrPublicId.substring(uploadIndex + '/image/upload/'.length);
+  const segments = path.split('/').filter(Boolean);
+  const cleanSegments = segments.filter(
+    (seg) =>
+      !seg.includes(',') &&
+      !/^(c|w|h|q|f|e|b|r|a|dpr|fl|co|l|u|pg|so|eo|s|bo|o|x|y|g|p|m|t|ar|cs|d|ki|dl)_/.test(seg) &&
+      !/^v\d+$/.test(seg)
+  );
+
+  if (cleanSegments.length === 0) return '';
+  let publicId = cleanSegments.join('/');
+  const lastDot = publicId.lastIndexOf('.');
+  if (lastDot !== -1) {
+    publicId = publicId.substring(0, lastDot);
+  }
+  return publicId;
+}
+
+/**
+ * Permanently deletes an image from Cloudinary storage via server-side API
+ */
+export async function deleteImageFromCloudinary(urlOrPublicId: string): Promise<boolean> {
+  if (!urlOrPublicId) return false;
+  const publicId = extractCloudinaryPublicId(urlOrPublicId);
+  if (!publicId) return false;
+
   try {
-    return true;
+    const res = await fetch('/api/delete-cloudinary-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicId }),
+    });
+    const data = await res.json().catch(() => null);
+    return Boolean(data?.success);
   } catch (err) {
+    console.log('[Cloudinary Delete Client Notice]', err);
     return false;
   }
 }
+
+/**
+ * Permanently deletes multiple images from Cloudinary storage via server-side API
+ */
+export async function deleteMultipleImagesFromCloudinary(urlsOrPublicIds: string[]): Promise<void> {
+  if (!urlsOrPublicIds || urlsOrPublicIds.length === 0) return;
+  const publicIds = urlsOrPublicIds
+    .map(extractCloudinaryPublicId)
+    .filter(Boolean);
+
+  if (publicIds.length === 0) return;
+
+  try {
+    await fetch('/api/delete-cloudinary-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicIds }),
+    });
+  } catch (err) {
+    console.log('[Cloudinary Batch Delete Notice]', err);
+  }
+}
+

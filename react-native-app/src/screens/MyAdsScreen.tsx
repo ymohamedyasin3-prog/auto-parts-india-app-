@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFirebaseFirestore, getCurrentUser, getFirebaseAuth } from '../services/firebase';
 import { useLanguage } from '../context/LanguageContext';
 import { EditListingModal } from '../components/EditListingModal';
-import { getOptimizedImageUrl } from '../services/cloudinary';
+import { getOptimizedImageUrl, deleteMultipleImagesFromCloudinary } from '../services/cloudinary';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
@@ -277,7 +277,14 @@ export default function MyAdsScreen({ navigation, user: initialUser }: any) {
               const db = getFirebaseFirestore();
               if (db && typeof db.collection === 'function') {
                 await db.collection('spareParts').doc(part.id).delete();
+                await db.collection('parts').doc(part.id).delete().catch(() => null);
                 showSuccessToast('Listing permanently deleted.');
+              }
+
+              // Auto-delete all images of this listing from Cloudinary
+              const allImages = (part.images || part.imageUrls || [part.imageUrl, part.image]).filter(Boolean);
+              if (allImages.length > 0) {
+                deleteMultipleImagesFromCloudinary(allImages);
               }
             } catch (err: any) {
               Alert.alert('Error', 'Failed to delete listing. Please try again.');
@@ -469,8 +476,16 @@ export default function MyAdsScreen({ navigation, user: initialUser }: any) {
             <View style={styles.metaRow}>
               <Text style={styles.adPrice}>{formatPrice(item.price || item.partPrice)}</Text>
               {item.condition && (
-                <View style={styles.conditionPill}>
-                  <Text style={styles.conditionText}>{item.condition}</Text>
+                <View style={[
+                  styles.conditionPill,
+                  item.condition.toLowerCase().includes('new') ? styles.pillNew : styles.pillUsed
+                ]}>
+                  <Text style={[
+                    styles.conditionText,
+                    item.condition.toLowerCase().includes('new') ? styles.textNew : styles.textUsed
+                  ]}>
+                    {item.condition.toLowerCase().includes('new') ? '✨ NEW' : 'USED'}
+                  </Text>
                 </View>
               )}
             </View>
@@ -1019,18 +1034,30 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
   conditionPill: {
-    backgroundColor: '#F1F5F9',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+  },
+  pillNew: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  pillUsed: {
+    backgroundColor: '#F1F5F9',
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
   conditionText: {
     fontSize: 9,
     fontWeight: '700',
-    color: '#475569',
     textTransform: 'uppercase',
+  },
+  textNew: {
+    color: '#059669',
+  },
+  textUsed: {
+    color: '#475569',
   },
   subMetaRow: {
     flexDirection: 'row',

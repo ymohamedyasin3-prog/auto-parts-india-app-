@@ -38,6 +38,10 @@ export default function SellerProfileScreen({ route, navigation }: any) {
     if (!sellerId) return;
 
     let isMounted = true;
+    let unsubFollowers = () => {};
+    let unsubFollowing = () => {};
+    let unsubMyFollow = () => {};
+
     const fetchSellerData = async () => {
       setLoading(true);
       try {
@@ -70,33 +74,47 @@ export default function SellerProfileScreen({ route, navigation }: any) {
           items.push({ id: d.id, ...d.data() });
         });
 
-        // 3. Fetch followers & following counts
-        const followersQ = db.collection('follows').where('followingId', '==', sellerId);
-        const followingQ = db.collection('follows').where('followerId', '==', sellerId);
+        // 3. Fetch reviews
         const reviewsQ = db.collection('sellerReviews').where('sellerId', '==', sellerId);
-        const [followersSnap, followingSnap, reviewsSnap] = await Promise.all([
-          followersQ.get(),
-          followingQ.get(),
-          reviewsQ.get()
-        ]);
-
-        // 4. Check follow status if logged in
-        let followingStatus = false;
-        if (currentUser?.uid && currentUser.uid !== sellerId) {
-          const followDoc = await db.collection('follows').doc(`${currentUser.uid}_${sellerId}`).get();
-          followingStatus = typeof (followDoc as any).exists === 'function' ? (followDoc as any).exists() : Boolean(followDoc.exists);
-        }
+        const reviewsSnap = await reviewsQ.get();
 
         if (isMounted) {
           setActiveListings(items.filter((it: any) => !it.sold));
           const revs: any[] = [];
           if (reviewsSnap) {
-            reviewsSnap.forEach((d: any) => revs.push({id: d.id, ...d.data()}));
+            reviewsSnap.forEach((d: any) => revs.push({ id: d.id, ...d.data() }));
           }
           setReviews(revs);
-          setFollowersCount(followersSnap.size);
-          setFollowingCount(followingSnap.size);
-          setIsFollowing(followingStatus);
+        }
+
+        // 4. Set up real-time listener for Followers count
+        try {
+          unsubFollowers = db.collection('follows').where('followingId', '==', sellerId).onSnapshot((snap: any) => {
+            if (isMounted && snap) {
+              setFollowersCount(snap.size || 0);
+            }
+          }, () => {});
+        } catch (_) {}
+
+        // 5. Set up real-time listener for Following count
+        try {
+          unsubFollowing = db.collection('follows').where('followerId', '==', sellerId).onSnapshot((snap: any) => {
+            if (isMounted && snap) {
+              setFollowingCount(snap.size || 0);
+            }
+          }, () => {});
+        } catch (_) {}
+
+        // 6. Set up real-time listener for current user's follow status
+        if (currentUser?.uid && currentUser.uid !== sellerId) {
+          try {
+            unsubMyFollow = db.collection('follows').doc(`${currentUser.uid}_${sellerId}`).onSnapshot((docSnap: any) => {
+              if (isMounted) {
+                const exists = typeof (docSnap as any)?.exists === 'function' ? (docSnap as any).exists() : Boolean(docSnap?.exists);
+                setIsFollowing(Boolean(exists));
+              }
+            }, () => {});
+          } catch (_) {}
         }
       } catch (err) {
         console.warn('Error fetching seller profile in RN:', err);
@@ -109,6 +127,9 @@ export default function SellerProfileScreen({ route, navigation }: any) {
 
     return () => {
       isMounted = false;
+      try { unsubFollowers(); } catch (_) {}
+      try { unsubFollowing(); } catch (_) {}
+      try { unsubMyFollow(); } catch (_) {}
     };
   }, [sellerId, currentUser?.uid]);
 
@@ -122,8 +143,9 @@ export default function SellerProfileScreen({ route, navigation }: any) {
     setFollowLoading(true);
     const followId = `${currentUser.uid}_${sellerId}`;
     const previousState = isFollowing;
+    const previousFollowersCount = followersCount;
 
-    // Optimistic UI update for instant snappy feedback
+    // Optimistic UI update for snappy and instantaneous feedback
     setIsFollowing(!previousState);
     setFollowersCount(prev => previousState ? Math.max(0, prev - 1) : prev + 1);
 
@@ -137,13 +159,33 @@ export default function SellerProfileScreen({ route, navigation }: any) {
             id: followId,
             followerId: currentUser.uid,
             followingId: sellerId,
-            followerName: currentUser.displayName || 'Buyer',
+            followerName: currentUser.displayName || currentUser.email || 'Buyer',
+            followerPhoto: currentUser.photoURL || currentUser.profilePhoto || '',
             createdAt: Date.now(),
           }, { merge: true });
+
+          // Notify the seller that someone followed them
+          try {
+            await db.collection('notifications').doc(`follow_${followId}`).set({
+              id: `follow_${followId}`,
+              recipientId: sellerId,
+              senderId: currentUser.uid,
+              senderName: currentUser.displayName || currentUser.email || 'A buyer',
+              senderPhoto: currentUser.photoURL || currentUser.profilePhoto || '',
+              text: `${currentUser.displayName || 'A buyer'} started following you.`,
+              type: 'new_follower',
+              createdAt: Date.now(),
+              read: false,
+            }, { merge: true });
+          } catch (_) {}
         }
       }
     } catch (err: any) {
       console.warn('Follow update sync warning:', err);
+      // Rollback to previous state on failure
+      setIsFollowing(previousState);
+      setFollowersCount(previousFollowersCount);
+      Alert.alert('Error', 'Unable to update follow status. Please check your connection.');
     } finally {
       setFollowLoading(false);
     }

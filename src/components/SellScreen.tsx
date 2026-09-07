@@ -294,8 +294,15 @@ export default function SellScreen({ currentUser, onPublishSuccess, parts }: Sel
     setIsAutoFilling(true);
     setError(null);
     setAiSuccessMessage(null);
+
+    const primaryImg = uploadedImages.length > 0 ? uploadedImages[0] : null;
+    if (!primaryImg && !carBrand && !carModel && !partName) {
+      setIsAutoFilling(false);
+      setError("Please upload a photo of the vehicle/spare part or specify brand/model hints first.");
+      return;
+    }
+
     try {
-      const primaryImg = uploadedImages.length > 0 ? uploadedImages[0] : null;
       const response = await fetch("/api/ai/autofill-listing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -316,11 +323,15 @@ export default function SellScreen({ currentUser, onPublishSuccess, parts }: Sel
         if (d.category && !category) setCategory(d.category);
         if (d.partName && !partName) setPartName(d.partName);
         if (d.condition) setCondition(d.condition as any);
-        if (d.suggestedPrice && !price) setPrice(String(d.suggestedPrice));
         if (d.description) setDescription(d.description);
+        // Note: Price is deliberately left for the seller to set manually.
 
-        setAiSuccessMessage("✨ AI analyzed the part and auto-filled details successfully!");
+        setAiSuccessMessage("✨ AI analyzed the vehicle/part photo and auto-filled details!");
         setTimeout(() => setAiSuccessMessage(null), 4000);
+      } else if (result && result.isAutomotive === false) {
+        setError(result.message || "The uploaded image does not appear to be an automotive part or vehicle. Please upload a clear photo of an automobile or car part.");
+      } else {
+        setError(result?.error || "AI could not identify details from this photo. Please enter details manually.");
       }
     } catch (err: any) {
       console.warn("AI Auto-fill error:", err);

@@ -19,7 +19,7 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import EditListingModal from '../components/EditListingModal';
 import { AdminTaxonomyCMS } from '../components/AdminTaxonomyCMS';
 import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
-import { uploadImageToCloudinary } from '../services/cloudinary';
+import { uploadImageToCloudinary, deleteImageFromCloudinary, deleteMultipleImagesFromCloudinary } from '../services/cloudinary';
 import { promptImageSourceDialog } from '../services/imagePickerService';
 import { restoreDefaultCategories, restoreDefaultCarBrands } from '../services/taxonomyDefaults';
 
@@ -361,10 +361,21 @@ export default function AdminScreen({ navigation }: any) {
           style: 'destructive',
           onPress: async () => {
             try {
+              const targetItem = listings.find((l) => l.id === id);
               const db = getFirebaseFirestore();
               if (!db) return;
               await db.collection('spareParts').doc(id).delete();
+              await db.collection('parts').doc(id).delete().catch(() => null);
               setSelectedPartIds((prev) => prev.filter((pId) => pId !== id));
+
+              // Clean up Cloudinary images for deleted listing
+              if (targetItem) {
+                const imgs = (targetItem.images || targetItem.imageUrls || [targetItem.imageUrl, targetItem.image]).filter(Boolean);
+                if (imgs.length > 0) {
+                  deleteMultipleImagesFromCloudinary(imgs);
+                }
+              }
+
               Alert.alert('Deleted', 'Listing permanently removed from database.');
             } catch (err: any) {
               Alert.alert('Error', err.message || 'Failed to delete listing.');
@@ -389,8 +400,18 @@ export default function AdminScreen({ navigation }: any) {
             try {
               const db = getFirebaseFirestore();
               if (!db) return;
+              const allImagesToDelete: string[] = [];
               for (const id of selectedPartIds) {
+                const item = listings.find((l) => l.id === id);
+                if (item) {
+                  const imgs = (item.images || item.imageUrls || [item.imageUrl, item.image]).filter(Boolean);
+                  allImagesToDelete.push(...imgs);
+                }
                 await db.collection('spareParts').doc(id).delete();
+                await db.collection('parts').doc(id).delete().catch(() => null);
+              }
+              if (allImagesToDelete.length > 0) {
+                deleteMultipleImagesFromCloudinary(allImagesToDelete);
               }
               setSelectedPartIds([]);
               Alert.alert('Bulk Deleted', `${selectedPartIds.length} listings deleted.`);
@@ -575,6 +596,9 @@ export default function AdminScreen({ navigation }: any) {
       };
 
       if (editingBanner) {
+        if (editingBanner.imageUrl && editingBanner.imageUrl !== bannerImageUrl.trim()) {
+          deleteImageFromCloudinary(editingBanner.imageUrl);
+        }
         await db.collection('banners').doc(editingBanner.id).update(payload);
         Alert.alert('Success', 'Banner updated successfully!');
       } else {
@@ -618,6 +642,9 @@ export default function AdminScreen({ navigation }: any) {
             const db = getFirebaseFirestore();
             if (!db) return;
             await db.collection('banners').doc(banner.id).delete();
+            if (banner.imageUrl) {
+              deleteImageFromCloudinary(banner.imageUrl);
+            }
             Alert.alert('Deleted', 'Banner deleted successfully.');
           } catch (err: any) {
             Alert.alert('Error', err.message || 'Failed to delete banner.');
@@ -692,6 +719,9 @@ export default function AdminScreen({ navigation }: any) {
       };
 
       if (editingTopCategory) {
+        if (editingTopCategory.imageUrl && editingTopCategory.imageUrl !== topCategoryImageUrl.trim()) {
+          deleteImageFromCloudinary(editingTopCategory.imageUrl);
+        }
         await db.collection('topCategories').doc(editingTopCategory.id).update(payload);
         Alert.alert('Success', 'Top Category updated successfully!');
       } else {
@@ -735,6 +765,9 @@ export default function AdminScreen({ navigation }: any) {
             const db = getFirebaseFirestore();
             if (!db) return;
             await db.collection('topCategories').doc(cat.id).delete();
+            if (cat.imageUrl) {
+              deleteImageFromCloudinary(cat.imageUrl);
+            }
             Alert.alert('Deleted', 'Top Category deleted successfully.');
           } catch (err: any) {
             Alert.alert('Error', err.message || 'Failed to delete category.');
@@ -831,6 +864,10 @@ export default function AdminScreen({ navigation }: any) {
       };
 
       if (editingCarBrand) {
+        const oldImage = editingCarBrand.imageUrl || editingCarBrand.logoUrl;
+        if (oldImage && oldImage !== carBrandImageUrl.trim()) {
+          deleteImageFromCloudinary(oldImage);
+        }
         await db.collection('carBrands').doc(editingCarBrand.id).update(payload);
         Alert.alert('Success', 'Car Brand updated successfully!');
       } else {
@@ -874,6 +911,10 @@ export default function AdminScreen({ navigation }: any) {
             const db = getFirebaseFirestore();
             if (!db) return;
             await db.collection('carBrands').doc(brand.id).delete();
+            const brandImg = brand.imageUrl || brand.logoUrl;
+            if (brandImg) {
+              deleteImageFromCloudinary(brandImg);
+            }
             Alert.alert('Deleted', 'Car Brand deleted successfully.');
           } catch (err: any) {
             Alert.alert('Error', err.message || 'Failed to delete car brand.');

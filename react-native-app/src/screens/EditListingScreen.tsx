@@ -27,7 +27,7 @@ import {
 import {
   promptImageSourceDialog,
 } from '../services/imagePickerService';
-import { uploadMultipleImagesToCloudinary } from '../services/cloudinary';
+import { uploadMultipleImagesToCloudinary, deleteMultipleImagesFromCloudinary } from '../services/cloudinary';
 import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
 
 const CATEGORIES = [
@@ -182,6 +182,13 @@ export default function EditListingScreen({ navigation, route }: any) {
       const finalImages = [...remoteUrls, ...newlyUploadedUrls];
       const primaryImageUrl = finalImages[0] || '';
 
+      // Clean up removed old Cloudinary images in background
+      const originalImages = (part.images || part.imageUrls || [part.imageUrl, part.image]).filter(Boolean);
+      const removedImages = originalImages.filter((oldUrl: string) => !finalImages.includes(oldUrl));
+      if (removedImages.length > 0) {
+        deleteMultipleImagesFromCloudinary(removedImages);
+      }
+
       // 3. Build comprehensive sync update payload
       const updateData = {
         title: title.trim(),
@@ -256,7 +263,15 @@ export default function EditListingScreen({ navigation, route }: any) {
               const db = getFirebaseFirestore();
               if (db && typeof db.collection === 'function' && part?.id) {
                 await db.collection('spareParts').doc(part.id).delete();
+                await db.collection('parts').doc(part.id).delete().catch(() => null);
               }
+
+              // Delete all images associated with this deleted listing from Cloudinary
+              const allListingImages = (part.images || part.imageUrls || [part.imageUrl, part.image]).filter(Boolean);
+              if (allListingImages.length > 0) {
+                deleteMultipleImagesFromCloudinary(allListingImages);
+              }
+
               Alert.alert('Deleted', 'Listing permanently deleted.', [
                 {
                   text: 'OK',

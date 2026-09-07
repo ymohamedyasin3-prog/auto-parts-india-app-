@@ -227,9 +227,12 @@ const PartCard = React.memo(({ item, navigation, cardWidth, isFavorited, toggleF
 
           {/* Condition Badge */}
           {item.condition && (
-            <View style={[styles.conditionBadge, item.condition.toLowerCase() === 'brand new' ? styles.badgeNew : styles.badgeUsed]}>
+            <View style={[
+              styles.conditionBadge, 
+              (item.condition.toLowerCase().includes('new') ? styles.badgeNew : styles.badgeUsed)
+            ]}>
               <Text style={styles.conditionText}>
-                {item.condition.toUpperCase()}
+                {item.condition.toLowerCase().includes('new') ? '✨ NEW' : 'USED'}
               </Text>
             </View>
           )}
@@ -768,7 +771,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
           {/* Brand Title & Location */}
           <View style={styles.brandTitleRow}>
             <View style={styles.brandTextCol}>
-              <Text style={styles.headerBrandTitle}>AutoParts</Text>
+              <Text style={styles.headerBrandTitle}>AutoParts India</Text>
               {/* Location Selector */}
               <TouchableOpacity 
                 style={styles.locationButton}
@@ -1618,17 +1621,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   categoryLabel: {
-    color: '#334155',
-    fontSize: 11,
-    fontWeight: '600',
+    color: '#0F172A',
+    fontSize: 11.5,
+    fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 14,
+    lineHeight: 14.5,
     marginTop: 6,
     paddingHorizontal: 2,
+    letterSpacing: -0.1,
   },
   categoryLabelActive: {
     color: '#0066FF',
-    fontWeight: '700',
+    fontWeight: '800',
   },
   brandsScroll: {
     paddingHorizontal: 16,

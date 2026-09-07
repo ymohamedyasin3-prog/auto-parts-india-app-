@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, ScrollView, StyleSheet, Alert, Linking, Image, Share, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, ScrollView, StyleSheet, Alert, Linking, Image, Share, TouchableOpacity, ActivityIndicator, Animated } from "react-native";
 import { Text, Button, Card, Avatar, Divider, Chip, IconButton, Icon, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { INITIAL_SPARE_PARTS } from '../data/mockData';
@@ -61,6 +61,35 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
   const user = initialUser || getCurrentUser();
   const { favorites, toggleFavorite } = useFavorites();
   const isFav = favorites.includes(part?.id);
+
+  // Parallax Scroll Animation Value
+  const scrollY = useRef(new Animated.Value(0)).current;
+
+  // Parallax Image: Moves up at 1/2 speed (0.55x) when scrolling down, and expands/zooms on pull down (<0)
+  const imageTranslateY = scrollY.interpolate({
+    inputRange: [-300, 0, 300],
+    outputRange: [0, 0, 150],
+    extrapolate: 'clamp',
+  });
+
+  const imageScale = scrollY.interpolate({
+    inputRange: [-200, 0],
+    outputRange: [1.4, 1],
+    extrapolateRight: 'clamp',
+  });
+
+  // Sticky Mini Top Bar Animation (Fades in when scrolled past image)
+  const stickyHeaderOpacity = scrollY.interpolate({
+    inputRange: [200, 270],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const stickyHeaderTranslateY = scrollY.interpolate({
+    inputRange: [200, 270],
+    outputRange: [-20, 0],
+    extrapolate: 'clamp',
+  });
 
   // Fetch device GPS coords for real distance calculation
   useEffect(() => {
@@ -387,26 +416,77 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
 
   return (
     <View style={styles.screenWrapper}>
-      <ScrollView 
+      {/* ANIMATED STICKY HEADER BAR (Appears smoothly when scrolled past image) */}
+      <Animated.View 
+        style={[
+          styles.stickyHeaderBar, 
+          { 
+            paddingTop: Math.max(insets.top, 10),
+            opacity: stickyHeaderOpacity,
+            transform: [{ translateY: stickyHeaderTranslateY }],
+          }
+        ]}
+        pointerEvents="box-none"
+      >
+        <TouchableOpacity 
+          style={styles.stickyHeaderBackBtn} 
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.85}
+        >
+          <Icon source="arrow-left" size={20} color="#0F172A" />
+        </TouchableOpacity>
+
+        <View style={styles.stickyHeaderTitleCol}>
+          <Text numberOfLines={1} style={styles.stickyHeaderTitle}>{part.title}</Text>
+          <Text numberOfLines={1} style={styles.stickyHeaderPrice}>₹ {part.price ? Number(part.price).toLocaleString('en-IN') : '0'}</Text>
+        </View>
+
+        <TouchableOpacity 
+          style={styles.stickyHeaderShareBtn} 
+          onPress={handleShare}
+          activeOpacity={0.85}
+        >
+          <Icon source="share-variant-outline" size={20} color="#0F172A" />
+        </TouchableOpacity>
+      </Animated.View>
+
+      <Animated.ScrollView 
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
       >
-        {/* TOP IMAGE SLIDER & FLOATING ACTIONS */}
+        {/* TOP IMAGE SLIDER WITH PARALLAX & RUBBER-BAND ZOOM */}
         <View style={styles.imageHeader}>
-          <TouchableOpacity
-            activeOpacity={0.92}
-            onPress={() => {
-              setGalleryIndex(activeImageIndex);
-              setGalleryVisible(true);
-            }}
-            style={{ width: '100%', height: '100%' }}
+          <Animated.View 
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                transform: [
+                  { translateY: imageTranslateY },
+                  { scale: imageScale }
+                ]
+              }
+            ]}
           >
-            <Image 
-              source={{ uri: allImages[activeImageIndex] || allImages[0] }} 
-              style={styles.image} 
-            />
-          </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.92}
+              onPress={() => {
+                setGalleryIndex(activeImageIndex);
+                setGalleryVisible(true);
+              }}
+              style={{ width: '100%', height: '100%' }}
+            >
+              <Image 
+                source={{ uri: allImages[activeImageIndex] || allImages[0] }} 
+                style={styles.image} 
+              />
+            </TouchableOpacity>
+          </Animated.View>
 
           {/* Floating Back Button */}
           <TouchableOpacity 
@@ -450,13 +530,9 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
 
         {/* MAIN AD CARD (Elevated with Curved Top) */}
         <View style={styles.mainAdCard}>
-          {/* Featured / OEM Label & Heart Button */}
+          {/* Wishlist Heart Button Row */}
           <View style={styles.topBadgeRow}>
-            <View style={styles.featuredBadge}>
-              <Text style={styles.featuredBadgeText}>
-                {part.condition?.toLowerCase().includes('new') ? 'GENUINE OEM' : 'FEATURED AD'}
-              </Text>
-            </View>
+            <View style={{ flex: 1 }} />
             <TouchableOpacity 
               style={[styles.wishlistBox, isFav && styles.wishlistBoxActive]} 
               onPress={() => toggleFavorite(part.id)}
@@ -631,7 +707,6 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
                   <TouchableOpacity
                     activeOpacity={0.7}
                     onPress={() => setProfilePopupVisible(true)}
-                    style={{ position: 'relative' }}
                   >
                     {sPhoto ? (
                       <Image
@@ -647,23 +722,6 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
                     ) : (
                       <Avatar.Icon {...props} icon="account" size={48} style={{ backgroundColor: "#0066FF" }} />
                     )}
-                    <View
-                      style={{
-                        position: 'absolute',
-                        bottom: -1,
-                        right: -1,
-                        backgroundColor: '#0066FF',
-                        borderRadius: 8,
-                        width: 16,
-                        height: 16,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderWidth: 1.5,
-                        borderColor: '#FFFFFF',
-                      }}
-                    >
-                      <IconButton icon="magnify" size={10} iconColor="#FFFFFF" style={{ margin: 0, padding: 0 }} />
-                    </View>
                   </TouchableOpacity>
                 );
               }}
@@ -715,17 +773,6 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
             ) : null}
           </View>
           <GMap latitude={partLat} longitude={partLng} state={part.state} district={part.district || part.location} title={`${part.title} - ${part.location || 'India'}`} interactive={false} style={{ marginBottom: 8 }} height={140} />
-        </View>
-
-        {/* BUYER SAFETY REMINDER */}
-        <View style={styles.safetyCard}>
-          <Icon source="shield-check" size={20} color="#0D9488" />
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={styles.safetyTitle}>Buyer Safety Guidelines</Text>
-            <Text style={styles.safetyDesc}>
-              Inspect the spare part carefully before finalizing payment. Avoid paying upfront advances.
-            </Text>
-          </View>
         </View>
 
         {/* SIMILAR & RELATED PARTS */}
@@ -826,7 +873,7 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
             </ScrollView>
           </View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* FIXED BOTTOM ACTION BAR (Clean Dual Button Layout from Screenshot) */}
       <View style={[styles.fixedBottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -939,11 +986,66 @@ const styles = StyleSheet.create({
     padding: 24,
   },
 
+  /* Animated Sticky Top Bar */
+  stickyHeaderBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 90,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 8,
+    zIndex: 100,
+  },
+  stickyHeaderBackBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stickyHeaderTitleCol: {
+    flex: 1,
+    marginHorizontal: 12,
+    justifyContent: 'center',
+  },
+  stickyHeaderTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  stickyHeaderPrice: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0066FF',
+    marginTop: 1,
+  },
+  stickyHeaderShareBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   /* Top Image Area */
   imageHeader: {
     position: 'relative',
     height: 320,
     backgroundColor: '#0F172A',
+    overflow: 'hidden',
   },
   image: {
     width: '100%',

@@ -247,8 +247,13 @@ export default function SearchScreen({ navigation, route, user }: any) {
             style={styles.cardImage}
             resizeMode="cover"
           />
-          <View style={styles.badgeContainer}>
-            <Text style={styles.badgeText}>{item.condition || 'Used'}</Text>
+          <View style={[
+            styles.badgeContainer,
+            (item.condition || '').toLowerCase().includes('new') ? styles.badgeNew : styles.badgeUsed
+          ]}>
+            <Text style={styles.badgeText}>
+              {(item.condition || '').toLowerCase().includes('new') ? '✨ NEW' : 'USED'}
+            </Text>
           </View>
           <TouchableOpacity
             style={styles.favBtn}
@@ -260,11 +265,13 @@ export default function SearchScreen({ navigation, route, user }: any) {
               toggleFavorite(item.id);
             }}
           >
-            <Icon
-              source={isFav ? 'heart' : 'heart-outline'}
-              color={isFav ? '#EF4444' : '#FFFFFF'}
-              size={22}
-            />
+            <View style={styles.favoriteCircle}>
+              <Icon
+                source={isFav ? 'heart' : 'heart-outline'}
+                color={isFav ? '#EF4444' : '#334155'}
+                size={18}
+              />
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -653,10 +660,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 6,
     left: 6,
-    backgroundColor: 'rgba(15, 23, 42, 0.85)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+  },
+  badgeNew: {
+    backgroundColor: '#10B981',
+  },
+  badgeUsed: {
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
   },
   badgeText: {
     color: '#FFFFFF',
@@ -667,15 +679,22 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 6,
     right: 6,
-    padding: 4,
+    zIndex: 10,
+  },
+  favoriteCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.65,
-    shadowRadius: 3,
+    shadowOpacity: 0.2,
+    shadowRadius: 2.5,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   cardContent: {
     padding: 10,

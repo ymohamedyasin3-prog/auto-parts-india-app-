@@ -97,8 +97,16 @@ export default function WishlistScreen({ navigation }: any) {
                 </Text>
                 <View style={styles.metaRow}>
                   <Text style={styles.adPrice}>₹{Number(item.price || item.partPrice || 0).toLocaleString('en-IN')}</Text>
-                  <View style={styles.conditionPill}>
-                    <Text style={styles.conditionText}>{item.condition || 'Used'}</Text>
+                  <View style={[
+                    styles.conditionPill,
+                    (item.condition || '').toLowerCase().includes('new') ? styles.pillNew : styles.pillUsed
+                  ]}>
+                    <Text style={[
+                      styles.conditionText,
+                      (item.condition || '').toLowerCase().includes('new') ? styles.textNew : styles.textUsed
+                    ]}>
+                      {(item.condition || '').toLowerCase().includes('new') ? '✨ NEW' : 'USED'}
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.subMetaRow}>
@@ -146,8 +154,12 @@ const styles = StyleSheet.create({
   adTitle: { fontSize: 14, fontWeight: '600', color: '#0F172A', marginBottom: 6 },
   metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   adPrice: { fontSize: 15, fontWeight: '700', color: '#0F172A' },
-  conditionPill: { backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-  conditionText: { fontSize: 10, fontWeight: '700', color: '#475569' },
+  conditionPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  pillNew: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' },
+  pillUsed: { backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
+  conditionText: { fontSize: 10, fontWeight: '700' },
+  textNew: { color: '#059669' },
+  textUsed: { color: '#475569' },
   subMetaRow: { flexDirection: 'row', alignItems: 'center' },
   locationWrap: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   locationText: { fontSize: 11, color: '#64748B' },
