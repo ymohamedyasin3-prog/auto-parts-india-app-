@@ -75,6 +75,76 @@ const CITY_COORDINATES: Record<string, { lat: number; lng: number }> = {
   'hyderabad': { lat: 17.3850, lng: 78.4867 },
 };
 
+export const DEFAULT_BANNERS = [
+  {
+    id: 'mega-deals',
+    badge: 'MEGA DEALS',
+    badgeColor: '#0066FF',
+    headline1: 'UP TO',
+    discount: '50% OFF',
+    headline2: 'ON GENUINE PARTS',
+    features: ['100% Genuine Parts', 'Best Price Guaranteed', 'Fast & Safe Delivery'],
+    cta: 'SHOP NOW',
+    targetCategory: 'All',
+  },
+  {
+    id: 'turbo-performance',
+    badge: 'PERFORMANCE',
+    badgeColor: '#EF4444',
+    headline1: 'UP TO',
+    discount: '40% OFF',
+    headline2: 'TURBOCHARGERS',
+    features: ['Precision Balanced', 'OEM Grade Build', '1 Year Warranty'],
+    cta: 'SHOP NOW',
+    targetCategory: 'Engine & Parts',
+  },
+  {
+    id: 'brakes-suspension',
+    badge: 'SAFETY & COMFORT',
+    badgeColor: '#10B981',
+    headline1: 'UP TO',
+    discount: '45% OFF',
+    headline2: 'DISCS & COILOVERS',
+    features: ['Ceramic Friction Pads', 'Slotted Steel Discs', 'Anti-Fade Durability'],
+    cta: 'SHOP NOW',
+    targetCategory: 'Suspension',
+  },
+  {
+    id: 'body-electricals',
+    badge: 'POPULAR LIGHTING',
+    badgeColor: '#F59E0B',
+    headline1: 'UP TO',
+    discount: '35% OFF',
+    headline2: 'LED HEADLIGHTS',
+    features: ['Plug & Play Harness', 'High Lumen Output', 'Weather Sealed'],
+    cta: 'SHOP NOW',
+    targetCategory: 'Electricals',
+  },
+];
+
+export const HOME_DEFAULT_CATEGORIES = [
+  { id: 'Engine & Parts', name: 'Engine & Parts', icon: 'engine', is3DGraphic: 'engine' },
+  { id: 'Body Parts', name: 'Body Parts', icon: 'car-door', is3DGraphic: 'body' },
+  { id: 'Electricals', name: 'Electricals', icon: 'lightning-bolt', is3DGraphic: 'electrical' },
+  { id: 'Suspension', name: 'Suspension', icon: 'car-brake-alert', is3DGraphic: 'suspension' },
+  { id: 'Exhaust', name: 'Exhaust', icon: 'pipe', is3DGraphic: 'exhaust' },
+  { id: 'Brakes', name: 'Brakes', icon: 'disc', is3DGraphic: 'brakes' },
+  { id: 'Filters', name: 'Filters', icon: 'air-filter', is3DGraphic: 'filters' },
+  { id: 'More', name: 'More', icon: 'apps', is3DGraphic: 'more' },
+];
+
+export const HOME_DEFAULT_BRANDS = [
+  { id: 'maruti', name: 'Maruti Suzuki' },
+  { id: 'hyundai', name: 'Hyundai' },
+  { id: 'tata', name: 'Tata' },
+  { id: 'mahindra', name: 'Mahindra' },
+  { id: 'toyota', name: 'Toyota' },
+  { id: 'honda', name: 'Honda' },
+  { id: 'kia', name: 'Kia' },
+  { id: 'volkswagen', name: 'Volkswagen' },
+  { id: 'ford', name: 'Ford' },
+];
+
 // Memoized Part Card
 const PartCard = React.memo(({ item, navigation, cardWidth, isFavorited, toggleFavorite, selectedCity }: any) => {
   const [imgError, setImgError] = useState(false);
@@ -233,6 +303,25 @@ export default function HomeScreen({ navigation, route, user }: any) {
   const [inAppNotification, setInAppNotification] = useState<InAppNotificationData | null>(null);
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
   const [updateConfig, setUpdateConfig] = useState<any>(null);
+
+  const bannerScrollRef = useRef<ScrollView>(null);
+
+  const activeBanners = useMemo(() => {
+    return banners && banners.length > 0 ? banners : DEFAULT_BANNERS;
+  }, [banners]);
+
+  useEffect(() => {
+    const count = Math.min(activeBanners.length, 4);
+    if (count <= 1) return;
+    const interval = setInterval(() => {
+      setActiveBannerIndex((prev) => {
+        const next = (prev + 1) % count;
+        bannerScrollRef.current?.scrollTo({ x: next * (screenWidth - 32), animated: true });
+        return next;
+      });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [activeBanners.length, screenWidth]);
 
   // Responsive calculations
   // 4 Columns for compact category cards as requested
@@ -585,14 +674,26 @@ export default function HomeScreen({ navigation, route, user }: any) {
 
   // Display Categories
   const displayCategories = useMemo(() => {
-    if (topCategories.length > 0) return topCategories;
-    return INITIAL_DEFAULT_CATEGORIES;
+    if (topCategories.length > 0) {
+      const list = topCategories.map((c: any) => ({
+        id: c.id || c.name,
+        name: c.name || c.title,
+        icon: c.icon || 'car-cog',
+        imageUrl: c.imageUrl,
+        iconUrl: c.iconUrl,
+      }));
+      if (!list.some((c: any) => c.name?.toLowerCase() === 'more')) {
+        list.push({ id: 'More', name: 'More', icon: 'apps', imageUrl: undefined, iconUrl: undefined });
+      }
+      return list;
+    }
+    return HOME_DEFAULT_CATEGORIES;
   }, [topCategories]);
 
   // Display Brands
   const displayBrands = useMemo(() => {
     if (carBrands.length > 0) return carBrands;
-    return INITIAL_DEFAULT_BRANDS;
+    return HOME_DEFAULT_BRANDS;
   }, [carBrands]);
 
   return (
@@ -700,56 +801,119 @@ export default function HomeScreen({ navigation, route, user }: any) {
           />
         }
       >
-        {/* HERO PROMO BANNER: Real Admin Firestore Banners Carousel with High-Quality Fallback */}
-        <View style={styles.bannerSection}>
-          {banners.length > 0 ? (
-            <>
-              <ScrollView
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                onMomentumScrollEnd={(e) => {
-                  const index = Math.round(e.nativeEvent.contentOffset.x / (screenWidth - 32));
-                  setActiveBannerIndex(index);
-                }}
-                contentContainerStyle={styles.bannerScroll}
-              >
-                {banners.map((item: any, idx: number) => (
-                  <TouchableOpacity 
-                    key={item.id || idx} 
-                    style={[styles.bannerSlide, { width: screenWidth - 32 }]}
-                    activeOpacity={0.9}
-                    onPress={() => {
-                      if (item.targetCategory && item.targetCategory !== 'All') {
-                        setSelectedCategory(item.targetCategory);
-                      }
-                    }}
-                  >
-                    <Image 
-                      source={{ uri: getOptimizedImageUrl(item.image || item.imageUrl || item.photoURL, { width: 800 }) || 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=800&auto=format&fit=crop&q=80' }}
-                      style={{ width: '100%', height: '100%', resizeMode: 'cover' }}
-                    />
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+        {/* HERO PROMO BANNER: Real Admin Firestore Banners with Rich Fallback */}
+        <View style={styles.bannerOuterContainer}>
+          <ScrollView
+            ref={bannerScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={(e) => {
+              const slideWidth = screenWidth - 32;
+              const idx = Math.round(e.nativeEvent.contentOffset.x / slideWidth);
+              if (idx >= 0 && idx < activeBanners.length && idx !== activeBannerIndex) {
+                setActiveBannerIndex(idx);
+              }
+            }}
+            contentContainerStyle={{ alignItems: 'center' }}
+          >
+            {activeBanners.slice(0, 4).map((item: any, idx: number) => {
+              const target = item.targetLink || item.targetCategory || item.category || '';
+              const handlePress = () => {
+                if (target && target !== 'All') {
+                  setSelectedCategory(target);
+                } else {
+                  navigation.navigate('Search');
+                }
+              };
 
-              {/* Carousel Pagination Dots */}
-              {banners.length > 1 && (
-                <View style={styles.paginationRow}>
-                  {banners.map((_: any, dotIdx: number) => (
-                    <View
-                      key={dotIdx}
-                      style={[
-                        styles.paginationDot,
-                        activeBannerIndex === dotIdx && styles.paginationDotActive,
-                      ]}
+              const badge = item.badge || 'MEGA DEALS';
+              const head1 = item.headline1 || 'UP TO';
+              const discount = item.discount || '50% OFF';
+              const head2 = item.headline2 || 'ON GENUINE PARTS';
+              const features = Array.isArray(item.features) && item.features.length > 0 
+                ? item.features 
+                : ['100% Genuine Parts', 'Best Price Guaranteed', 'Fast & Safe Delivery'];
+              const cta = item.cta || 'SHOP NOW';
+
+              if (item.imageUrl || item.image || item.photoURL) {
+                const imgUri = getOptimizedImageUrl(item.imageUrl || item.image || item.photoURL, 800) || item.imageUrl || item.image;
+                return (
+                  <TouchableOpacity
+                    key={item.id || `banner-${idx}`}
+                    activeOpacity={0.92}
+                    onPress={handlePress}
+                    style={[styles.fullImageBannerCard, { width: screenWidth - 32 }]}
+                  >
+                    <Image source={{ uri: imgUri }} style={styles.fullBannerImage} resizeMode="cover" />
+                  </TouchableOpacity>
+                );
+              }
+
+              return (
+                <TouchableOpacity
+                  key={item.id || `banner-${idx}`}
+                  activeOpacity={0.92}
+                  onPress={handlePress}
+                  style={[
+                    styles.megaDealBanner,
+                    { width: screenWidth - 32 },
+                    item.backgroundColor ? { backgroundColor: item.backgroundColor } : null
+                  ]}
+                >
+                  <View style={styles.bannerLeftContent}>
+                    <View style={[styles.bannerBadgePill, item.badgeColor ? { backgroundColor: item.badgeColor } : null]}>
+                      <Text style={styles.bannerBadgePillText}>{badge}</Text>
+                    </View>
+                    <Text style={styles.bannerSubHeadSmall}>{head1}</Text>
+                    <Text style={styles.megaDealDiscount}>{discount}</Text>
+                    <Text style={styles.megaDealHeadline}>{head2}</Text>
+                    <View style={styles.bannerFeatureList}>
+                      {features.slice(0, 3).map((feat: string, fIdx: number) => (
+                        <View key={`feat-${fIdx}`} style={styles.bannerFeatureItem}>
+                          <Icon source="check-circle" size={12} color="#60A5FA" />
+                          <Text style={styles.bannerFeatureText} numberOfLines={1}>{feat}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    <View style={styles.shopNowBtn}>
+                      <Text style={styles.shopNowBtnText}>{cta}</Text>
+                      <Icon source="chevron-right" size={13} color="#051433" />
+                    </View>
+                  </View>
+
+                  <View style={styles.bannerRightArt}>
+                    <View style={styles.bannerGlowCircle} />
+                    <Image
+                      source={require('../assets/banner/hero_parts_collage.png')}
+                      style={styles.bannerArtImage}
+                      resizeMode="contain"
                     />
-                  ))}
-                </View>
-              )}
-            </>
-          ) : (
-            <BannerPartsCollage />
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* Carousel Pagination Dots */}
+          {activeBanners.length > 1 && (
+            <View style={styles.dotsRow}>
+              {activeBanners.slice(0, 4).map((_: any, dotIdx: number) => {
+                const isActive = (activeBannerIndex % 4) === dotIdx;
+                return (
+                  <TouchableOpacity
+                    key={`dot-${dotIdx}`}
+                    onPress={() => {
+                      setActiveBannerIndex(dotIdx);
+                      bannerScrollRef.current?.scrollTo({ x: dotIdx * (screenWidth - 32), animated: true });
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  >
+                    <View style={[styles.dot, isActive && styles.activeDot]} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           )}
         </View>
 
@@ -769,13 +933,18 @@ export default function HomeScreen({ navigation, route, user }: any) {
         <View style={styles.categoriesGrid}>
           {displayCategories.slice(0, 8).map((cat: any) => {
             const isSelected = selectedCategory.toLowerCase() === cat.name.toLowerCase();
+            const isMore = cat.id === 'More' || cat.name?.toLowerCase() === 'more';
             return (
               <TouchableOpacity
                 key={cat.id || cat.name}
                 activeOpacity={0.8}
                 style={[styles.categoryCard, { width: catCardWidth }, isSelected && styles.categoryCardActive]}
                 onPress={() => {
-                  setSelectedCategory(isSelected ? 'All' : cat.name);
+                  if (isMore) {
+                    navigation.navigate('AllCategories');
+                  } else {
+                    setSelectedCategory(isSelected ? 'All' : cat.name);
+                  }
                 }}
               >
                 <View style={[styles.categoryIconCircle, isSelected && styles.categoryIconCircleActive]}>
@@ -1094,34 +1263,152 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 36,
   },
-  bannerSection: {
-    marginTop: 12,
-    paddingHorizontal: 16,
+  bannerOuterContainer: {
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 6,
   },
-  bannerScroll: {
-    gap: 12,
-  },
-  bannerSlide: {
-    borderRadius: 16,
+  fullImageBannerCard: {
+    width: '100%',
+    aspectRatio: 2.3,
+    borderRadius: 18,
     overflow: 'hidden',
-    height: 170,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#051433',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  paginationRow: {
+  fullBannerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  megaDealBanner: {
+    backgroundColor: '#051433',
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+    position: 'relative',
+    height: 168,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  bannerLeftContent: {
+    flex: 1.25,
+    paddingRight: 6,
+    justifyContent: 'center',
+  },
+  bannerBadgePill: {
+    backgroundColor: '#0066FF',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 5,
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  bannerBadgePillText: {
+    color: '#FFFFFF',
+    fontSize: 8.5,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  bannerSubHeadSmall: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    marginBottom: 0,
+  },
+  megaDealDiscount: {
+    color: '#FBBF24',
+    fontSize: 26,
+    fontWeight: '900',
+    lineHeight: 30,
+  },
+  megaDealHeadline: {
+    color: '#FFFFFF',
+    fontSize: 12.5,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+    marginTop: 1,
+    marginBottom: 2,
+  },
+  bannerFeatureList: {
+    marginVertical: 4,
+    gap: 3,
+  },
+  bannerFeatureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  bannerFeatureText: {
+    color: '#E2E8F0',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  shopNowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 3,
+    marginTop: 2,
+  },
+  shopNowBtnText: {
+    color: '#051433',
+    fontSize: 10.5,
+    fontWeight: '900',
+  },
+  bannerRightArt: {
+    flex: 1,
+    height: 130,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  bannerGlowCircle: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#1E40AF',
+    opacity: 0.6,
+  },
+  bannerArtImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+  },
+  dotsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
     marginTop: 10,
+    gap: 5,
   },
-  paginationDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#CBD5E1',
   },
-  paginationDotActive: {
-    width: 18,
+  activeDot: {
+    width: 20,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#0066FF',
   },
   sectionHeaderRow: {

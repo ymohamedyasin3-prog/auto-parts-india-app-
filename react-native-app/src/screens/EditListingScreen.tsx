@@ -126,9 +126,10 @@ export default function EditListingScreen({ navigation, route }: any) {
     }
 
     try {
-      const selected = await promptImageSourceDialog();
-      if (selected && selected.uri) {
-        setImages((prev) => [...prev, selected.uri]);
+      const selected: any = await promptImageSourceDialog();
+      const imgUri = typeof selected === 'string' ? selected : selected?.uri;
+      if (imgUri) {
+        setImages((prev) => [...prev, imgUri]);
       }
     } catch (err: any) {
       console.warn('Image picker error:', err);

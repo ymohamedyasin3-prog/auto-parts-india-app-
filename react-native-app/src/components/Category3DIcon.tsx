@@ -3,6 +3,8 @@ import { View, StyleSheet, StyleProp, ViewStyle, Image } from 'react-native';
 
 export interface CategoryIconProps {
   type?: string;
+  categoryName?: string;
+  iconUrl?: string;
   size?: number;
   active?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -27,11 +29,13 @@ const CATEGORY_3D_IMAGES: Record<string, any> = {
  */
 export const Category3DIcon: React.FC<CategoryIconProps> = ({
   type = 'more',
+  categoryName,
+  iconUrl,
   size = 46,
   active = false,
   style,
 }) => {
-  const normType = String(type || '').toLowerCase().trim();
+  const normType = String(categoryName || type || '').toLowerCase().trim();
 
   // Find corresponding 3D image asset
   let imageSource = CATEGORY_3D_IMAGES[normType];

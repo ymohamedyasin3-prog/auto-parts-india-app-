@@ -18,6 +18,7 @@ import Svg, {
 export interface BrandLogoProps {
   name?: string;
   brand?: string;
+  brandName?: string;
   imageUrl?: string;
   logoUrl?: string;
   size?: number;
@@ -318,6 +319,7 @@ function renderBrandVector(brandKey: string, size: number, directImage?: string)
 export function BrandLogo({ 
   name = '', 
   brand = '', 
+  brandName = '',
   imageUrl = '',
   logoUrl = '',
   size = 32, 
@@ -331,7 +333,7 @@ export function BrandLogo({
   }, []);
 
   const safeSize = Number.isFinite(size) && size > 0 ? size : 32;
-  const brandKey = String(brand || name || '').toLowerCase().trim();
+  const brandKey = String(brandName || brand || name || '').toLowerCase().trim();
   const directImage = imageUrl || logoUrl;
 
   if (brandKey && brandKey !== 'all' && brandKey !== 'all brands') {

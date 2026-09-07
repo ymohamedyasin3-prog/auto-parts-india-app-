@@ -6,7 +6,8 @@ import { Language } from '../data/translations';
 
 interface LanguageSelectorModalProps {
   visible: boolean;
-  onDismiss: () => void;
+  onDismiss?: () => void;
+  onClose?: () => void;
 }
 
 interface LanguageOption {
@@ -25,12 +26,14 @@ const LANGUAGES: LanguageOption[] = [
 export const LanguageSelectorModal: React.FC<LanguageSelectorModalProps> = ({
   visible,
   onDismiss,
+  onClose,
 }) => {
   const { language, setLanguage, t } = useLanguage();
+  const dismissModal = onDismiss || onClose || (() => {});
 
   const handleSelect = async (code: Language) => {
     await setLanguage(code);
-    onDismiss();
+    dismissModal();
   };
 
   return (

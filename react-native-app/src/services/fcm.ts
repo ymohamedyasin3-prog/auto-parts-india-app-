@@ -289,7 +289,6 @@ export function setupFcmListeners(userId?: string): () => void {
             channelId: 'auto_parts_notifications',
             importance: AndroidImportance.HIGH,
             sound: 'default',
-            vibration: true,
             pressAction: {
               id: 'default',
             },
