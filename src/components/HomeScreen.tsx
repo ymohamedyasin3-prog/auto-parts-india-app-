@@ -810,11 +810,9 @@ export default function HomeScreen({
     <div className="w-full h-full flex flex-col bg-slate-50 text-slate-900 relative overflow-hidden" id="home-screen-container">
       {/* 1. Top Header (Sticky) */}
       <header className="bg-[#0B1220] text-white pt-2.5 pb-2.5 px-3 sticky top-0 z-30 border-b border-slate-800 shrink-0">
-        {/* Top Row: Brand Logo + Location Chip on Left, Notifications + Language on Right */}
+        {/* Top Row: Location Chip on Left, Notifications + Language on Right */}
         <div className="flex items-center justify-between gap-2 mb-2 w-full">
           <div className="flex flex-row items-center gap-2 min-w-0">
-            <BrandLogo size="sm" theme="dark" showTagline={false} className="shrink-0 max-h-8" />
-
             {/* Location Selector Chip */}
             <button
               onClick={() => {

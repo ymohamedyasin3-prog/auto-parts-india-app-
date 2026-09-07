@@ -864,13 +864,8 @@ export default function HomeScreen({ navigation, route, user }: any) {
       {/* Top Header - Royal Blue Bar matching user mockup */}
       <View style={styles.topHeaderWrapper}>
         <Animated.View style={[styles.headerRow, { opacity: headerFade }]}>
-          {/* Brand Round Emblem & Location Selector Pill */}
+          {/* Location Selector Pill */}
           <View style={styles.headerLeftBrandGroup}>
-            <View style={styles.headerLogoCircleContainer}>
-              <AutoPartsRoundLogo size={36} border={true} />
-            </View>
-
-            {/* Location Selector Pill */}
             <TouchableOpacity 
               style={styles.locationPill} 
               activeOpacity={0.85}
@@ -900,6 +895,13 @@ export default function HomeScreen({ navigation, route, user }: any) {
               onPress={() => navigation.navigate('Notifications')}
             >
               <Icon source="bell-outline" color="#FFFFFF" size={24} />
+              {unreadCount > 0 && (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
         </Animated.View>

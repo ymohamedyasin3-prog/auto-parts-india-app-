@@ -19,6 +19,7 @@ import {
 import { Icon, ActivityIndicator, Appbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
+import { sendChatMessageNotification, markNotificationAsRead } from '../services/notifications';
 import { promptImageSourceDialog } from '../services/imagePickerService';
 import { uploadImageToCloudinary } from '../services/cloudinary';
 import { useLanguage } from '../context/LanguageContext';
@@ -159,12 +160,13 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
             }
           });
 
-          // Reset unread count on the chat document for current user
+          // Reset unread count on the chat document for current user and clear notification
           try {
             db.collection('chats').doc(chatId).set({
               unreadCount: { [currentUid]: 0 },
               unread: false,
             }, { merge: true });
+            markNotificationAsRead(`${chatId}_${currentUid}`);
           } catch (_) {}
         },
         (err: any) => {
@@ -346,24 +348,23 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
         prev.map((m) => (m.id === tempId ? { ...m, id: docRef.id || tempId, status: 'sent' } : m))
       );
 
-      // Push Notification trigger
-      try {
-        const backendUrl = typeof window !== 'undefined' && window.location?.origin 
-          ? `${window.location.origin}/api/notifications/send`
-          : 'https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/notifications/send';
-
-        fetch(backendUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            senderId: currentUid,
-            senderName: currentName,
-            receiverId: partnerId,
-            text: cleanText || 'Sent an image',
-            chatId: chatId,
-          })
-        }).catch(() => {});
-      } catch (_) {}
+      // Real-time Chat Notification & Push dispatch
+      sendChatMessageNotification({
+        chatId,
+        recipientId: partnerId,
+        senderId: currentUid,
+        senderName: currentName,
+        senderPhoto: currentUserPhoto,
+        text: cleanText || (imageUrl ? '📷 Photo Attachment' : 'New message'),
+        partId: part?.id || '',
+        partTitle: part?.title || part?.partTitle || 'Spare Part',
+        partPrice: Number(part?.price || part?.partPrice) || 0,
+        partImageUrl: part?.imageUrl || part?.partImageUrl || '',
+        buyerId: routeChat?.buyerId || (isCurrentUserBuyer ? currentUid : partnerId),
+        buyerName: routeChat?.buyerName || (isCurrentUserBuyer ? currentName : partnerName),
+        sellerId: routeChat?.sellerId || (isCurrentUserBuyer ? partnerId : currentUid),
+        sellerName: routeChat?.sellerName || (isCurrentUserBuyer ? partnerName : currentName),
+      }).catch((e) => console.warn('[ChatRoomScreen] sendChatMessageNotification warning:', e));
 
     } catch (err: any) {
       console.warn('[ChatRoomScreen] Failed to send message:', err);

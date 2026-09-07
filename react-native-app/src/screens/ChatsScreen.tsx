@@ -20,6 +20,7 @@ import {
   Icon,
 } from 'react-native-paper';
 import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
+import { markNotificationAsRead } from '../services/notifications';
 import { useLanguage } from '../context/LanguageContext';
 import BrandLogo from '../components/BrandLogo';
 
@@ -276,7 +277,10 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
         activeOpacity={0.7}
         style={styles.chatCard}
         onLongPress={() => handleDeleteChat(item)}
-        onPress={() =>
+        onPress={() => {
+          if (activeUid && item.id) {
+            markNotificationAsRead(`${item.id}_${activeUid}`);
+          }
           navigation.navigate('ChatRoom', {
             chatId: item.id,
             part: {
@@ -288,8 +292,8 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
               sellerName: item.sellerName,
             },
             chat: item,
-          })
-        }
+          });
+        }}
       >
         {/* Avatar with part thumbnail badge */}
         <View style={styles.avatarContainer}>

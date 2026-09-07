@@ -6,12 +6,17 @@ import fs from 'fs';
 // Initialize only if not already initialized
 if (!admin.getApps().length) {
   try {
-    const serviceAccount = JSON.parse(fs.readFileSync('./firebase-service-account.json', 'utf-8'));
-    admin.initializeApp({
-      credential: admin.cert(serviceAccount),
-      projectId: 'auto-parts-market-place-20312'
-    });
-    console.log("Firebase Admin initialized for notifications");
+    if (fs.existsSync('./firebase-service-account.json')) {
+      const serviceAccount = JSON.parse(fs.readFileSync('./firebase-service-account.json', 'utf-8'));
+      admin.initializeApp({
+        credential: admin.cert(serviceAccount),
+        projectId: 'auto-parts-market-place-20312'
+      });
+      console.log("Firebase Admin initialized for notifications");
+    } else {
+      admin.initializeApp();
+      console.log("Firebase Admin initialized with default credentials");
+    }
   } catch (err) {
     console.warn("Failed to initialize Firebase Admin:", err);
   }
@@ -19,33 +24,43 @@ if (!admin.getApps().length) {
 
 export const sendChatNotification = async (req: any, res: any) => {
   try {
-    const { senderId, senderName, receiverId, text, chatId } = req.body;
+    const { senderId, senderName, receiverId, text, chatId, partTitle, partImageUrl } = req.body || {};
     
     if (!senderId || !receiverId || !text) {
       return res.status(400).json({ error: "Missing parameters" });
     }
     
-    const db = getFirestore('ai-studio-autopartsmarketp-6b6de595-2abc-431d-a6dc-0141a5eff96f');
+    if (!admin.getApps().length) {
+      return res.json({ status: "Admin not initialized, client-side Firestore handling active" });
+    }
+
+    const db = getFirestore();
     
     // Check receiver FCM token
-    const userDoc = await db.collection("users").doc(receiverId).get();
-    if (!userDoc.exists) return res.status(404).json({ error: "Receiver not found" });
+    const userDoc = await db.collection("users").doc(receiverId).get().catch(() => null);
+    if (!userDoc || !userDoc.exists) {
+      return res.json({ status: "Receiver not found or no FCM needed" });
+    }
     
     const fcmToken = userDoc.data()?.fcmToken;
-    if (!fcmToken) return res.status(200).json({ status: "No FCM token for user" });
+    if (!fcmToken) {
+      return res.json({ status: "No FCM token for user" });
+    }
     
-    // Send FCM
+    // Send FCM push
     const payload = {
       token: fcmToken,
       notification: {
-        title: `New message from ${senderName || "someone"}`,
+        title: senderName ? `Message from ${senderName}` : "New message",
         body: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
+        imageUrl: partImageUrl || undefined,
       },
       data: {
         screen: "ChatRoom",
         chatRoomId: chatId || "",
         title: senderName || "New Message",
-        body: text.substring(0, 100)
+        body: text.substring(0, 100),
+        partTitle: partTitle || ""
       },
       android: {
         priority: "high" as const,
@@ -57,9 +72,9 @@ export const sendChatNotification = async (req: any, res: any) => {
     };
 
     await getMessaging().send(payload);
-    res.json({ status: "Sent successfully" });
+    return res.json({ status: "Sent successfully" });
   } catch (err: any) {
-    console.error("FCM Send Error:", err);
-    res.status(500).json({ error: err.message });
+    console.warn("FCM Send Warning:", err?.message || err);
+    return res.json({ status: "Handled", warning: err?.message });
   }
 };

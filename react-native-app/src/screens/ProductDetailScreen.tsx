@@ -246,23 +246,16 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
 
   const handleCall = () => {
     if (part.contactPhone) {
-      Alert.alert(
-        'Call Seller',
-        `Do you want to call ${part.contactName || 'the seller'} at ${part.contactPhone}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Call Now',
-            onPress: () => Linking.openURL(`tel:${part.contactPhone}`),
-          },
-        ]
-      );
+      // Directly launch phone dialer immediately for fast response
+      Linking.openURL(`tel:${part.contactPhone}`).catch(() => {
+        Alert.alert('Error', 'Unable to open phone dialer.');
+      });
     } else {
       Alert.alert('Contact', 'Phone number not listed for this seller.');
     }
   };
 
-  const handleChat = async () => {
+  const handleChat = () => {
     if (!user) {
       navigation.navigate('Auth');
       return;
@@ -273,31 +266,7 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
     const sellerName = part.contactName || part.sellerName || 'Verified Seller';
     const chatId = `${currentUid}_${sellerUid}_${part.id}`;
     
-    try {
-      const db = getFirebaseFirestore();
-      if (db && typeof db.collection === 'function') {
-        const chatDocRef = db.collection('chats').doc(chatId);
-        await chatDocRef.set({
-          id: chatId,
-          partId: part.id || '',
-          partTitle: part.title || 'Spare Part',
-          partImageUrl: part.imageUrl || (part.imageUrls && part.imageUrls[0]) || '',
-          partPrice: Number(part.price) || 0,
-          buyerId: currentUid,
-          buyerName: currentName,
-          buyerPhoto: user.photoURL || '',
-          sellerId: sellerUid,
-          sellerName: sellerName,
-          sellerPhoto: part.sellerPhoto || '',
-          participants: [currentUid, sellerUid],
-          lastMessageText: '',
-          lastMessageAt: Date.now()
-        }, { merge: true });
-      }
-    } catch (e) {
-      console.warn('[ProductDetailScreen] Pre-creating chat doc:', e);
-    }
-
+    // Navigate immediately (Optimistic UI - Zero lag)
     navigation.navigate('ChatRoom', { 
       chatId, 
       part: {
@@ -321,6 +290,31 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
         sellerName: sellerName,
       }
     });
+
+    // Run firestore initialization silently in background without blocking screen transition
+    try {
+      const db = getFirebaseFirestore();
+      if (db && typeof db.collection === 'function') {
+        db.collection('chats').doc(chatId).set({
+          id: chatId,
+          partId: part.id || '',
+          partTitle: part.title || 'Spare Part',
+          partImageUrl: part.imageUrl || (part.imageUrls && part.imageUrls[0]) || '',
+          partPrice: Number(part.price) || 0,
+          buyerId: currentUid,
+          buyerName: currentName,
+          buyerPhoto: user.photoURL || '',
+          sellerId: sellerUid,
+          sellerName: sellerName,
+          sellerPhoto: part.sellerPhoto || '',
+          participants: [currentUid, sellerUid],
+          lastMessageText: '',
+          lastMessageAt: Date.now()
+        }, { merge: true }).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('[ProductDetailScreen] Background chat init error:', e);
+    }
   };
 
   const handleShare = async () => {
