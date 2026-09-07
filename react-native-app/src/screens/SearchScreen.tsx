@@ -18,7 +18,7 @@ import { INITIAL_SPARE_PARTS } from '../data/mockData';
 import { getFirebaseFirestore } from '../services/firebase';
 import { useFavorites } from '../services/favorites';
 import { matchesCategoryFilter } from '../utils/categoryMatcher';
-import { matchPartSearch } from '../utils/searchHelper';
+import { matchPartSearch, parseCreatedAt } from '../utils/searchHelper';
 import { getOptimizedImageUrl } from '../services/cloudinary';
 
 export default function SearchScreen({ navigation, route, user }: any) {
@@ -122,8 +122,13 @@ export default function SearchScreen({ navigation, route, user }: any) {
         const unsub = db.collection('spareParts').onSnapshot((snapshot: any) => {
           const list: any[] = [];
           snapshot.forEach((doc: any) => {
-            list.push({ id: doc.id, ...doc.data() });
+            const data = doc.data ? doc.data() : doc;
+            if (data && (data.isDeleted === true || data.status === 'deleted')) {
+              return;
+            }
+            list.push({ id: doc.id, ...data });
           });
+          list.sort((a, b) => parseCreatedAt(b.createdAt) - parseCreatedAt(a.createdAt));
           setParts(list.length > 0 ? list : INITIAL_SPARE_PARTS);
         }, () => {
           setParts((current) => current.length > 0 ? current : INITIAL_SPARE_PARTS);
@@ -174,8 +179,20 @@ export default function SearchScreen({ navigation, route, user }: any) {
           continue;
         }
       }
-      if (selectedBrand !== 'All Brands' && (part.carBrand !== selectedBrand && part.brand !== selectedBrand)) {
-        continue;
+      if (selectedBrand !== 'All Brands' && selectedBrand !== 'All') {
+        const brandLower = selectedBrand.toLowerCase().trim();
+        const partBrand = (part.brand || part.carBrand || part.make || '').toString().toLowerCase().trim();
+        const partTitle = (part.title || part.name || '').toString().toLowerCase().trim();
+        const partModel = (part.carModel || part.model || '').toString().toLowerCase().trim();
+        const brandMatched = 
+          partBrand === brandLower ||
+          (partBrand && (partBrand.includes(brandLower) || brandLower.includes(partBrand))) ||
+          partTitle.includes(brandLower) ||
+          partModel.includes(brandLower);
+
+        if (!brandMatched) {
+          continue;
+        }
       }
       if (selectedCondition !== 'All Conditions') {
         const isNewSelected = selectedCondition === 'New';
@@ -210,7 +227,7 @@ export default function SearchScreen({ navigation, route, user }: any) {
       if (sortBy === 'price_high') {
         return (Number(b.part.price || b.part.partPrice) || 0) - (Number(a.part.price || a.part.partPrice) || 0);
       }
-      return (b.part.createdAt || 0) - (a.part.createdAt || 0);
+      return parseCreatedAt(b.part.createdAt) - parseCreatedAt(a.part.createdAt);
     }).map(item => item.part);
   }, [parts, searchQuery, selectedCategory, selectedBrand, selectedCondition, selectedState, sortBy]);
 
@@ -237,7 +254,7 @@ export default function SearchScreen({ navigation, route, user }: any) {
             style={styles.favBtn}
             activeOpacity={0.7}
             delayPressIn={0}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             onPress={(e) => {
               e.stopPropagation();
               toggleFavorite(item.id);
@@ -245,8 +262,8 @@ export default function SearchScreen({ navigation, route, user }: any) {
           >
             <Icon
               source={isFav ? 'heart' : 'heart-outline'}
-              color={isFav ? '#EF4444' : '#475569'}
-              size={18}
+              color={isFav ? '#EF4444' : '#FFFFFF'}
+              size={22}
             />
           </TouchableOpacity>
         </View>
@@ -650,19 +667,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 6,
     right: 6,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    width: 30,
-    height: 30,
+    padding: 4,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
+    zIndex: 10,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.65,
     shadowRadius: 3,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    elevation: 3,
   },
   cardContent: {
     padding: 10,

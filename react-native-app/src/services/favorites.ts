@@ -57,8 +57,11 @@ export function useFavorites() {
     return () => unsub();
   }, [userId]);
 
-  const toggleFavorite = useCallback(async (partId: string) => {
+  const toggleFavorite = useCallback(async (arg: any) => {
+    const partId = typeof arg === 'string' ? arg : (arg?.id || '');
     if (!partId) return;
+
+    const currentUid = getCurrentUser()?.uid || getCurrentUser()?.id || userId;
 
     setFavorites(prev => {
       const exists = prev.includes(partId);
@@ -66,18 +69,18 @@ export function useFavorites() {
       AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => {});
 
       // If logged in, sync with Firestore in background
-      if (userId) {
+      if (currentUid) {
         try {
           const db = getFirebaseFirestore();
           if (db && typeof db.collection === 'function') {
-            const favId = `${userId}_${partId}`;
+            const favId = `${currentUid}_${partId}`;
             const ref = db.collection('favorites').doc(favId);
             if (exists) {
               ref.delete().catch((e: any) => console.warn('Failed to delete favorite doc:', e));
             } else {
               ref.set({
                 id: favId,
-                userId,
+                userId: currentUid,
                 partId,
                 createdAt: Date.now()
               }).catch((e: any) => console.warn('Failed to save favorite doc:', e));
@@ -92,8 +95,9 @@ export function useFavorites() {
     });
   }, [userId]);
 
-  const isFavorited = useCallback((partId: string) => {
-    return favorites.includes(partId);
+  const isFavorited = useCallback((arg: any) => {
+    const partId = typeof arg === 'string' ? arg : (arg?.id || '');
+    return Boolean(partId && favorites.includes(partId));
   }, [favorites]);
 
   return { favorites, toggleFavorite, isFavorited };

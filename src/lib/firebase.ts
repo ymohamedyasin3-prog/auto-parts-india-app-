@@ -591,33 +591,58 @@ export async function deduplicateAndCleanupListings(rawParts: SparePart[]): Prom
 export async function fetchSpareParts(): Promise<SparePart[]> {
   let firestoreParts: SparePart[] = [];
   if (useFirebase && db) {
-    const path = "products/listings/items";
     try {
-      const partsRef = collection(db, "products", "listings", "items");
-      const q = query(partsRef);
-      const snapshot = await getDocs(q);
-      
-      if (!snapshot.empty) {
-        snapshot.forEach((docSnapshot) => {
-          const data = docSnapshot.data();
-          const ownerId = data.ownerId || data.sellerId || data.userId || null;
-          firestoreParts.push({ 
-            ...data, 
-            id: docSnapshot.id,
-            ownerId: ownerId || undefined,
-            sellerId: data.sellerId || ownerId || "",
-            createdAt: convertTimestampToNumber(data.createdAt)
-          } as SparePart);
-        });
-      } else {
-        firestoreParts = [...INITIAL_SPARE_PARTS];
+      const docMap = new Map<string, SparePart>();
+
+      // 1. Fetch from spareParts collection (primary mobile/web synced collection)
+      try {
+        const sparePartsRef = collection(db, "spareParts");
+        const spSnapshot = await getDocs(query(sparePartsRef));
+        if (!spSnapshot.empty) {
+          spSnapshot.forEach((docSnapshot) => {
+            const data = docSnapshot.data();
+            if (data && (data.isDeleted === true || data.status === 'deleted')) return;
+            const ownerId = data.ownerId || data.sellerId || data.userId || null;
+            docMap.set(docSnapshot.id, {
+              ...data,
+              id: docSnapshot.id,
+              ownerId: ownerId || undefined,
+              sellerId: data.sellerId || ownerId || "",
+              createdAt: convertTimestampToNumber(data.createdAt)
+            } as SparePart);
+          });
+        }
+      } catch (spErr) {
+        console.warn("Could not query spareParts collection:", spErr);
       }
+
+      // 2. Fetch from products/listings/items (legacy web subcollection)
+      try {
+        const partsRef = collection(db, "products", "listings", "items");
+        const snapshot = await getDocs(query(partsRef));
+        if (!snapshot.empty) {
+          snapshot.forEach((docSnapshot) => {
+            const data = docSnapshot.data();
+            if (data && (data.isDeleted === true || data.status === 'deleted')) return;
+            if (!docMap.has(docSnapshot.id)) {
+              const ownerId = data.ownerId || data.sellerId || data.userId || null;
+              docMap.set(docSnapshot.id, {
+                ...data,
+                id: docSnapshot.id,
+                ownerId: ownerId || undefined,
+                sellerId: data.sellerId || ownerId || "",
+                createdAt: convertTimestampToNumber(data.createdAt)
+              } as SparePart);
+            }
+          });
+        }
+      } catch (itemErr) {
+        console.warn("Could not query items subcollection:", itemErr);
+      }
+
+      firestoreParts = Array.from(docMap.values());
     } catch (err: any) {
-      if (err?.code === "permission-denied" || err?.message?.includes("permission") || err?.message?.includes("Missing or insufficient permissions")) {
-        handleFirestoreError(err, OperationType.GET, path);
-      } else {
-        console.warn("Firestore fetch issue, falling back to LocalStorage:", err);
-      }
+      console.warn("Firestore fetch issue, falling back to LocalStorage:", err);
     }
   }
 
@@ -856,7 +881,7 @@ export function subscribeToSpareParts(
 
   if (useFirebase && db) {
     try {
-      const partsRef = collection(db, "products", "listings", "items");
+      const partsRef = collection(db, "spareParts");
       const q = query(partsRef);
 
       const unsub = onSnapshot(q, (snapshot) => {
@@ -866,6 +891,7 @@ export function subscribeToSpareParts(
         if (!snapshot.empty) {
           snapshot.forEach((docSnapshot) => {
             const data = docSnapshot.data();
+            if (data && (data.isDeleted === true || data.status === 'deleted')) return;
             const ownerId = data.ownerId || data.sellerId || data.userId || null;
             firestoreParts.push({
               ...data,
@@ -881,7 +907,7 @@ export function subscribeToSpareParts(
       }, (err) => {
         console.error(`[Firestore Listener Error] subscribeToSpareParts failed:`, err);
         if (err?.code === "permission-denied" || err?.message?.includes("permission") || err?.message?.includes("Missing or insufficient permissions")) {
-          handleFirestoreError(err, OperationType.LIST, "products/listings/items");
+          handleFirestoreError(err, OperationType.LIST, "spareParts");
         }
         processAndDeliverParts([]);
         if (onError) onError(err);
@@ -1015,13 +1041,17 @@ export async function deleteSparePartListing(partId: string): Promise<boolean> {
         }
       }
 
-      // Step 5: Primary operation: Delete document from Firestore
-      console.log(`[Firestore Delete] Deleting document at ${path}...`);
-      await withTimeout(
-        deleteDoc(docRef),
-        10000,
-        "Firestore document deletion timed out. Please try again."
-      );
+      // Step 5: Primary operation: Delete document from Firestore across all collections
+      console.log(`[Firestore Delete] Deleting document ${partId} across Firestore collections...`);
+      await Promise.all([
+        withTimeout(
+          deleteDoc(docRef),
+          10000,
+          "Firestore document deletion timed out. Please try again."
+        ).catch(() => {}),
+        deleteDoc(doc(db, "spareParts", partId)).catch(() => {}),
+        deleteDoc(doc(db, "products", partId)).catch(() => {}),
+      ]);
 
       // Step 6: Clean up local storage caches
       const localData = localStorage.getItem(LOCAL_STORAGE_PARTS_KEY);

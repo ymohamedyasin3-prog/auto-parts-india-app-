@@ -134,38 +134,31 @@ const TAXONOMY_INITIALIZED_KEY = '@autoparts_taxonomy_initialized_v3';
  */
 export async function initializeTaxonomyDefaults(): Promise<void> {
   try {
-    const isLocalInit = await AsyncStorage.getItem(TAXONOMY_INITIALIZED_KEY);
     const db = getFirebaseFirestore();
     if (!db) return;
 
-    if (!isLocalInit) {
-      // Check if topCategories has documents in Firestore
-      const catSnap = await db.collection('topCategories').get();
-      if (!catSnap || catSnap.empty || catSnap.docs.length === 0) {
-        // Seed default categories
-        for (const cat of INITIAL_DEFAULT_CATEGORIES) {
-          await db.collection('topCategories').doc(cat.id).set({
-            ...cat,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          }, { merge: true });
-        }
+    // Check if topCategories has documents in Firestore
+    const catSnap = await db.collection('topCategories').get();
+    if (!catSnap || catSnap.empty || catSnap.docs.length === 0) {
+      for (const cat of INITIAL_DEFAULT_CATEGORIES) {
+        await db.collection('topCategories').doc(cat.id).set({
+          ...cat,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }, { merge: true });
       }
+    }
 
-      // Check if carBrands has documents in Firestore
-      const brandSnap = await db.collection('carBrands').get();
-      if (!brandSnap || brandSnap.empty || brandSnap.docs.length === 0) {
-        // Seed default car brands
-        for (const brand of INITIAL_DEFAULT_BRANDS) {
-          await db.collection('carBrands').doc(brand.id).set({
-            ...brand,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          }, { merge: true });
-        }
+    // Check if carBrands has documents in Firestore
+    const brandSnap = await db.collection('carBrands').get();
+    if (!brandSnap || brandSnap.empty || brandSnap.docs.length === 0) {
+      for (const brand of INITIAL_DEFAULT_BRANDS) {
+        await db.collection('carBrands').doc(brand.id).set({
+          ...brand,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }, { merge: true });
       }
-
-      await AsyncStorage.setItem(TAXONOMY_INITIALIZED_KEY, 'true');
     }
   } catch (err) {
     console.warn('[TaxonomyDefaults] Init notice:', err);

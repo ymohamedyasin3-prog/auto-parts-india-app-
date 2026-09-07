@@ -37,14 +37,14 @@ import {
 } from '../services/location';
 import { requestNotificationPermission, saveFcmTokenToFirestore } from '../services/fcm';
 import { INDIAN_STATES_AND_DISTRICTS } from '../data/indianLocations';
-import { CarBrandBadge, AutoPartsRoundLogo } from '../components/BrandLogo';
+import { CarBrandBadge } from '../components/BrandLogo';
 import { INITIAL_SPARE_PARTS } from '../data/mockData';
 import { useLanguage } from '../context/LanguageContext';
 import { LanguageSelectorModal } from '../components/LanguageSelectorModal';
 import { UpdateDialogModal } from '../components/UpdateDialogModal';
 import { InAppNotification, InAppNotificationData } from '../components/InAppNotification';
 import { matchesCategoryFilter } from '../utils/categoryMatcher';
-import { matchPartSearch } from '../utils/searchHelper';
+import { matchPartSearch, parseCreatedAt } from '../utils/searchHelper';
 import { Category3DIcon } from '../components/Category3DIcon';
 import { subscribeToUnreadNotificationCount } from '../services/notifications';
 import { getOptimizedImageUrl } from '../services/cloudinary';
@@ -234,15 +234,19 @@ const PartCard = React.memo(({ item, navigation, cardWidth, isFavorited, toggleF
             </View>
           )}
 
-          {/* Favorite Heart Button */}
+          {/* Favorite Simple Heart Icon */}
           <TouchableOpacity
             style={styles.favoriteButton}
-            activeOpacity={0.8}
-            onPress={() => toggleFavorite(item)}
+            activeOpacity={0.7}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            onPress={(e) => {
+              e?.stopPropagation?.();
+              toggleFavorite(item.id);
+            }}
           >
             <Icon
               source={activeFavorited ? "heart" : "heart-outline"}
-              size={18}
+              size={22}
               color={activeFavorited ? "#EF4444" : "#FFFFFF"}
             />
           </TouchableOpacity>
@@ -307,7 +311,10 @@ export default function HomeScreen({ navigation, route, user }: any) {
   const bannerScrollRef = useRef<ScrollView>(null);
 
   const activeBanners = useMemo(() => {
-    return banners && banners.length > 0 ? banners : DEFAULT_BANNERS;
+    if (banners && banners.length > 0) {
+      return banners.filter((b: any) => b.active !== false && b.activeStatus !== false);
+    }
+    return [];
   }, [banners]);
 
   useEffect(() => {
@@ -506,19 +513,22 @@ export default function HomeScreen({ navigation, route, user }: any) {
         return () => {};
       }
 
-      const unsubscribe = db.collection('parts').onSnapshot(
+      const unsubscribe = db.collection('spareParts').onSnapshot(
         (snapshot: any) => {
           const partsList: any[] = [];
           if (snapshot && typeof snapshot.forEach === 'function') {
             snapshot.forEach((doc: any) => {
               const data = doc.data ? doc.data() : doc;
+              if (data && (data.isDeleted === true || data.status === 'deleted')) {
+                return;
+              }
               partsList.push({ id: doc.id, ...data });
             });
           }
           if (partsList.length === 0) {
             setParts(INITIAL_SPARE_PARTS);
           } else {
-            partsList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+            partsList.sort((a, b) => parseCreatedAt(b.createdAt) - parseCreatedAt(a.createdAt));
             setParts(partsList);
           }
           setLoading(false);
@@ -556,10 +566,8 @@ export default function HomeScreen({ navigation, route, user }: any) {
             catList.push({ id: doc.id, ...data });
           });
         }
-        if (catList.length > 0) {
-          catList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-          setTopCategories(catList);
-        }
+        catList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        setTopCategories(catList);
       }, (err: any) => console.warn('Categories sync error:', err));
 
       const unsubBrands = db.collection('carBrands').onSnapshot((snap: any) => {
@@ -570,10 +578,8 @@ export default function HomeScreen({ navigation, route, user }: any) {
             brandList.push({ id: doc.id, ...data });
           });
         }
-        if (brandList.length > 0) {
-          brandList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-          setCarBrands(brandList);
-        }
+        brandList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        setCarBrands(brandList);
       }, (err: any) => console.warn('Car brands sync error:', err));
 
       const unsubBanners = db.collection('banners').onSnapshot((snap: any) => {
@@ -584,10 +590,8 @@ export default function HomeScreen({ navigation, route, user }: any) {
             bannerList.push({ id: doc.id, ...data });
           });
         }
-        if (bannerList.length > 0) {
-          bannerList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-          setBanners(bannerList);
-        }
+        bannerList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        setBanners(bannerList);
       }, (err: any) => console.warn('Banners sync error:', err));
 
       return () => {
@@ -626,73 +630,117 @@ export default function HomeScreen({ navigation, route, user }: any) {
 
   // Filter Parts Based on Search, Category, Brand, Price and Location
   const filteredParts = useMemo(() => {
-    return parts.filter((part) => {
-      // 1. Search filter
+    const scoredList: { part: any; score: number }[] = [];
+
+    for (const part of parts) {
+      // 0. Exclude deleted or inactive parts
+      if (part.isDeleted === true || part.status === 'deleted') {
+        continue;
+      }
+
+      // 1. Search filter & Scoring
+      let searchScore = 0;
       if (searchQuery.trim()) {
-        const matchesSearch = matchPartSearch(part, searchQuery.trim());
-        if (!matchesSearch) return false;
+        const result = matchPartSearch(part, searchQuery.trim());
+        if (!result.matches) {
+          continue;
+        }
+        searchScore = result.score;
       }
 
       // 2. Category filter
-      if (selectedCategory && selectedCategory !== 'All') {
+      if (selectedCategory && selectedCategory !== 'All' && selectedCategory !== 'All Categories') {
         const matchesCat = matchesCategoryFilter(part, selectedCategory);
-        if (!matchesCat) return false;
+        if (!matchesCat) {
+          continue;
+        }
       }
 
       // 3. Brand filter
-      if (selectedBrand && selectedBrand !== 'All') {
-        const brandLower = selectedBrand.toLowerCase();
-        const partBrand = (part.brand || part.carBrand || part.make || '').toString().toLowerCase();
-        const partTitle = (part.title || part.name || '').toString().toLowerCase();
-        const partModel = (part.carModel || part.model || '').toString().toLowerCase();
-        if (!partBrand.includes(brandLower) && !partTitle.includes(brandLower) && !partModel.includes(brandLower)) {
-          return false;
+      if (selectedBrand && selectedBrand !== 'All' && selectedBrand !== 'All Brands') {
+        const brandLower = selectedBrand.toLowerCase().trim();
+        const partBrand = (part.brand || part.carBrand || part.make || '').toString().toLowerCase().trim();
+        const partTitle = (part.title || part.name || '').toString().toLowerCase().trim();
+        const partModel = (part.carModel || part.model || '').toString().toLowerCase().trim();
+        const brandMatched = 
+          partBrand === brandLower ||
+          (partBrand && (partBrand.includes(brandLower) || brandLower.includes(partBrand))) ||
+          partTitle.includes(brandLower) ||
+          partModel.includes(brandLower);
+
+        if (!brandMatched) {
+          continue;
         }
       }
 
       // 4. Price filter
       const price = Number(part.price || part.partPrice || 0);
-      if (minPrice && price < Number(minPrice)) return false;
-      if (maxPrice && price > Number(maxPrice)) return false;
+      if (minPrice && price < Number(minPrice)) continue;
+      if (maxPrice && price > Number(maxPrice)) continue;
 
       // 5. City filter
       if (selectedCity && selectedCity !== 'All India') {
-        const cityLower = selectedCity.toLowerCase();
-        const partLoc = (part.location || part.district || part.city || part.state || '').toString().toLowerCase();
+        const cityLower = selectedCity.toLowerCase().trim();
+        const partLoc = (
+          part.location ||
+          part.district ||
+          part.city ||
+          part.state ||
+          part.area ||
+          ''
+        ).toString().toLowerCase();
+
         if (!partLoc.includes(cityLower)) {
           // Allow nationwide shipping parts or parts without strict location
           const canShip = Boolean(part.deliveryAvailable || part.allIndiaShipping);
-          if (!canShip && !partLoc.includes(cityLower)) {
-            return false;
+          if (!canShip) {
+            continue;
           }
         }
       }
 
-      return true;
-    });
+      scoredList.push({ part, score: searchScore });
+    }
+
+    // Sort: If search query active, sort by relevance score; otherwise by newest
+    return scoredList.sort((a, b) => {
+      if (searchQuery.trim()) {
+        if (b.score !== a.score) {
+          return b.score - a.score;
+        }
+      }
+      return parseCreatedAt(b.part.createdAt) - parseCreatedAt(a.part.createdAt);
+    }).map((item) => item.part);
   }, [parts, searchQuery, selectedCategory, selectedBrand, minPrice, maxPrice, selectedCity]);
 
-  // Display Categories
+  // Display Categories: Prefer Firestore topCategories if populated, otherwise fallback to defaults
   const displayCategories = useMemo(() => {
-    if (topCategories.length > 0) {
-      const list = topCategories.map((c: any) => ({
+    if (topCategories && topCategories.length > 0) {
+      const activeList = topCategories.filter((c: any) => c.active !== false);
+      const list = activeList.map((c: any) => ({
         id: c.id || c.name,
         name: c.name || c.title,
         icon: c.icon || 'car-cog',
         imageUrl: c.imageUrl,
-        iconUrl: c.iconUrl,
+        iconUrl: c.iconUrl || c.imageUrl,
+        order: typeof c.order === 'number' ? c.order : 0,
       }));
-      if (!list.some((c: any) => c.name?.toLowerCase() === 'more')) {
-        list.push({ id: 'More', name: 'More', icon: 'apps', imageUrl: undefined, iconUrl: undefined });
+      list.sort((a, b) => a.order - b.order);
+      if (list.length > 0 && !list.some((c: any) => c.name?.toLowerCase() === 'more' || c.id === 'More')) {
+        list.push({ id: 'More', name: 'More', icon: 'apps', imageUrl: undefined, iconUrl: undefined, order: 999 });
       }
       return list;
     }
     return HOME_DEFAULT_CATEGORIES;
   }, [topCategories]);
 
-  // Display Brands
+  // Display Brands: Prefer Firestore carBrands if populated, otherwise fallback to defaults
   const displayBrands = useMemo(() => {
-    if (carBrands.length > 0) return carBrands;
+    if (carBrands && carBrands.length > 0) {
+      const activeList = carBrands.filter((b: any) => b.active !== false);
+      activeList.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
+      return activeList;
+    }
     return HOME_DEFAULT_BRANDS;
   }, [carBrands]);
 
@@ -703,9 +751,8 @@ export default function HomeScreen({ navigation, route, user }: any) {
       {/* ROYAL BLUE BRAND HEADER - Original Clean Theme */}
       <View style={styles.royalHeader}>
         <View style={styles.topBar}>
-          {/* Brand Logo & Title */}
+          {/* Brand Title & Location */}
           <View style={styles.brandTitleRow}>
-            <AutoPartsRoundLogo size={36} />
             <View style={styles.brandTextCol}>
               <Text style={styles.headerBrandTitle}>AutoParts</Text>
               {/* Location Selector */}
@@ -723,7 +770,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
             </View>
           </View>
 
-          {/* Right Action Icons: Language, Wishlist, Notifications */}
+          {/* Right Action Icons: Language, Notifications */}
           <View style={styles.headerActionRow}>
             {/* Language Selector */}
             <TouchableOpacity
@@ -732,20 +779,6 @@ export default function HomeScreen({ navigation, route, user }: any) {
               onPress={() => setShowLanguageModal(true)}
             >
               <Icon source="translate" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-
-            {/* Wishlist / Favorites */}
-            <TouchableOpacity
-              style={styles.iconBtn}
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('WishlistScreen')}
-            >
-              <Icon source="heart-outline" size={20} color="#FFFFFF" />
-              {favorites.length > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{favorites.length > 9 ? '9+' : favorites.length}</Text>
-                </View>
-              )}
             </TouchableOpacity>
 
             {/* Notifications */}
@@ -917,86 +950,139 @@ export default function HomeScreen({ navigation, route, user }: any) {
           )}
         </View>
 
-        {/* 1. TOP CATEGORIES (4-Column Grid) */}
-        <View style={styles.sectionHeaderRow}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Top Categories
-          </Text>
-          <TouchableOpacity 
-            activeOpacity={0.7}
-            onPress={() => navigation.navigate('AllCategories')}
-          >
-            <Text style={styles.seeAllText}>See All →</Text>
-          </TouchableOpacity>
-        </View>
+        {/* 1. TOP CATEGORIES (4-Column Grid) - Real Admin Categories Only */}
+        {displayCategories.length > 0 && (
+          <>
+            <View style={styles.sectionHeaderRow}>
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Top Categories
+              </Text>
+            </View>
 
-        <View style={styles.categoriesGrid}>
-          {displayCategories.slice(0, 8).map((cat: any) => {
-            const isSelected = selectedCategory.toLowerCase() === cat.name.toLowerCase();
-            const isMore = cat.id === 'More' || cat.name?.toLowerCase() === 'more';
-            return (
-              <TouchableOpacity
-                key={cat.id || cat.name}
-                activeOpacity={0.8}
-                style={[styles.categoryCard, { width: catCardWidth }, isSelected && styles.categoryCardActive]}
-                onPress={() => {
-                  if (isMore) {
-                    navigation.navigate('AllCategories');
-                  } else {
-                    setSelectedCategory(isSelected ? 'All' : cat.name);
-                  }
-                }}
-              >
-                <View style={[styles.categoryIconCircle, isSelected && styles.categoryIconCircleActive]}>
-                  <Category3DIcon categoryName={cat.name} iconUrl={cat.iconUrl} size={28} />
-                </View>
-                <Text style={[styles.categoryLabel, isSelected && styles.categoryLabelActive]} numberOfLines={2}>
-                  {cat.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+            <View style={styles.categoriesGrid}>
+              {displayCategories.slice(0, 8).map((cat: any) => {
+                const isSelected = selectedCategory.toLowerCase() === cat.name.toLowerCase();
+                const isMore = cat.id === 'More' || cat.name?.toLowerCase() === 'more';
+                return (
+                  <TouchableOpacity
+                    key={cat.id || cat.name}
+                    activeOpacity={0.8}
+                    style={[styles.categoryItem, { width: catCardWidth }]}
+                    onPress={() => {
+                      if (isMore) {
+                        navigation.navigate('AllCategories');
+                      } else {
+                        setSelectedCategory(isSelected ? 'All' : cat.name);
+                      }
+                    }}
+                  >
+                    {/* Top Rounded Card Box - 100% Image Filled */}
+                    <View
+                      style={[
+                        styles.categoryCardBox,
+                        { width: catCardWidth, height: catCardWidth },
+                        isSelected && styles.categoryCardBoxActive,
+                      ]}
+                    >
+                      {cat.imageUrl ? (
+                        <Image
+                          source={{ uri: cat.imageUrl }}
+                          style={styles.categoryFullImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.categoryFallbackCenter}>
+                          <Category3DIcon
+                            categoryName={cat.name}
+                            iconUrl={cat.iconUrl}
+                            size={Math.round(catCardWidth * 0.56)}
+                          />
+                        </View>
+                      )}
+                    </View>
 
-        {/* 3. POPULAR CAR BRANDS */}
-        <View style={styles.sectionHeaderRow}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Popular Brands
-          </Text>
-        </View>
+                    {/* Outside Text Label Below Card */}
+                    <Text
+                      style={[styles.categoryLabel, isSelected && styles.categoryLabelActive]}
+                      numberOfLines={2}
+                    >
+                      {cat.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.brandsScroll}
-        >
-          {displayBrands.map((brand: any) => {
-            const isSelected = selectedBrand.toLowerCase() === brand.name.toLowerCase();
-            return (
-              <TouchableOpacity
-                key={brand.id || brand.name}
-                activeOpacity={0.8}
-                style={[styles.brandPill, isSelected && styles.brandPillActive]}
-                onPress={() => {
-                  setSelectedBrand(isSelected ? 'All' : brand.name);
-                }}
-              >
-                <CarBrandBadge brandName={brand.name} logoUrl={brand.logoUrl} size={24} />
-                <Text style={[styles.brandNameText, isSelected && styles.brandNameTextActive]}>
-                  {brand.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {/* 3. POPULAR CAR BRANDS - Real Admin Brands Only */}
+        {displayBrands.length > 0 && (
+          <>
+            <View style={styles.sectionHeaderRow}>
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Popular Brands
+              </Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.brandsScroll}
+            >
+              {displayBrands.map((brand: any) => {
+                const isSelected = selectedBrand.toLowerCase() === brand.name.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={brand.id || brand.name}
+                    activeOpacity={0.8}
+                    style={[styles.brandPill, isSelected && styles.brandPillActive]}
+                    onPress={() => {
+                      setSelectedBrand(isSelected ? 'All' : brand.name);
+                    }}
+                  >
+                    <CarBrandBadge brandName={brand.name} logoUrl={brand.logoUrl || brand.imageUrl} size={24} />
+                    <Text style={[styles.brandNameText, isSelected && styles.brandNameTextActive]}>
+                      {brand.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </>
+        )}
 
         {/* 4. VERIFIED SPARE PARTS FEED */}
         <View style={[styles.sectionHeaderRow, { marginTop: 20 }]}>
           <Text variant="titleMedium" style={styles.sectionTitle}>
-            {selectedCategory !== 'All' ? `${selectedCategory} Parts` : 'Fresh Recommendations'}
+            {selectedCategory !== 'All' 
+              ? (selectedCategory.toLowerCase().endsWith('parts') ? selectedCategory : `${selectedCategory} Parts`) 
+              : 'Fresh Recommendations'}
           </Text>
           <Text style={styles.partsCountText}>{filteredParts.length} Parts</Text>
         </View>
+
+        {selectedCategory !== 'All' && (
+          <View style={styles.activeFilterBar}>
+            <View style={styles.activeFilterPill}>
+              <Icon source="filter-variant" size={14} color="#0066FF" />
+              <Text style={styles.activeFilterPillText}>{selectedCategory}</Text>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setSelectedCategory('All')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.filterCloseCircle}
+              >
+                <Icon source="close" size={11} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity 
+              activeOpacity={0.7}
+              onPress={() => setSelectedCategory('All')}
+            >
+              <Text style={styles.clearFilterText}>Show All Parts</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {loading ? (
           <View style={styles.loadingBox}>
@@ -1030,7 +1116,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
                 item={item}
                 navigation={navigation}
                 cardWidth={productCardWidth}
-                isFavorited={favorites.some((f: any) => f.id === item.id)}
+                isFavorited={favorites.includes(item.id) || (favorites as any[]).some((f: any) => f === item.id || f?.id === item.id)}
                 toggleFavorite={toggleFavorite}
                 selectedCity={selectedCity}
               />
@@ -1419,6 +1505,45 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 12,
   },
+  activeFilterBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    marginTop: -4,
+  },
+  activeFilterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 20,
+    paddingVertical: 4,
+    paddingLeft: 10,
+    paddingRight: 6,
+    gap: 6,
+  },
+  activeFilterPillText: {
+    color: '#0066FF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  filterCloseCircle: {
+    backgroundColor: '#0066FF',
+    borderRadius: 8,
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clearFilterText: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
   sectionTitle: {
     color: '#0F172A',
     fontWeight: '800',
@@ -1434,36 +1559,41 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     paddingHorizontal: 16,
+    marginTop: 10,
   },
-  categoryCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
+  categoryItem: {
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    marginBottom: 14,
   },
-  categoryCardActive: {
-    borderColor: '#0066FF',
-    backgroundColor: '#EFF6FF',
-  },
-  categoryIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F8FAFC',
+  categoryCardBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 6,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  categoryIconCircleActive: {
-    backgroundColor: '#DBEAFE',
+  categoryCardBoxActive: {
+    borderColor: '#0066FF',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 2,
+  },
+  categoryFullImage: {
+    width: '100%',
+    height: '100%',
+  },
+  categoryFallbackCenter: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
   },
   categoryLabel: {
     color: '#334155',
@@ -1471,6 +1601,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     lineHeight: 14,
+    marginTop: 6,
+    paddingHorizontal: 2,
   },
   categoryLabelActive: {
     color: '#0066FF',
@@ -1565,17 +1697,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#FFFFFF',
+    padding: 4,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOpacity: 0.65,
+    shadowRadius: 3,
+    elevation: 3,
   },
   cardContent: {
     padding: 10,

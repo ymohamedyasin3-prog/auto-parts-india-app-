@@ -21,6 +21,7 @@ import PullToRefresh from "./PullToRefresh";
 import { useLanguage } from "../lib/LanguageContext";
 import { translateDynamic } from "../lib/translations";
 import { formatLocationBadgeWithDistance, LatLng } from "../utils/locationHelper";
+import { matchPartSearch, parseCreatedAt } from "../utils/searchHelper";
 
 interface SearchScreenProps {
   parts: SparePart[];
@@ -98,79 +99,98 @@ export default function SearchScreen({
   };
 
   const filteredParts = useMemo(() => {
-    return parts.filter((part) => {
-      // Exclude sold, expired, or deleted parts from search
+    const scoredList: { part: SparePart; score: number }[] = [];
+
+    for (const part of parts) {
+      // Exclude sold or deleted parts from search
       const isSold = part.sold === true || part.status === "sold";
-      const isExpired = (Date.now() - part.createdAt) > 90 * 24 * 60 * 60 * 1000;
-      const isDeleted = (part as any).isDeleted === true;
-      if (isSold || isExpired || isDeleted) return false;
+      const isDeleted = (part as any).isDeleted === true || (part as any).status === "deleted";
+      if (isSold || isDeleted) continue;
 
-      // Search text query matching
+      // Search text query matching & scoring
+      let searchScore = 0;
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchTitle = (part.title || "").toLowerCase().includes(q);
-        const matchBrand = (part.carBrand || "").toLowerCase().includes(q);
-        const matchModel = (part.carModel || "").toLowerCase().includes(q);
-        const matchCategory = (part.category || "").toLowerCase().includes(q);
-        const matchPartName = (part.partName || "").toLowerCase().includes(q);
-        const matchDescription = (part.description || "").toLowerCase().includes(q);
-        const matchLocation = (part.location || "").toLowerCase().includes(q);
-        const matchDistrict = (part.district || "").toLowerCase().includes(q);
-        const matchArea = (part.area || "").toLowerCase().includes(q);
-        const matchState = (part.state || "").toLowerCase().includes(q);
-
-        if (
-          !matchTitle &&
-          !matchBrand &&
-          !matchModel &&
-          !matchCategory &&
-          !matchPartName &&
-          !matchDescription &&
-          !matchLocation &&
-          !matchDistrict &&
-          !matchArea &&
-          !matchState
-        ) {
-          return false;
-        }
+        const res = matchPartSearch(part, searchQuery.trim());
+        if (!res.matches) continue;
+        searchScore = res.score;
       }
 
       // Category filter
-      if (selectedCategory !== "All Categories" && part.category !== selectedCategory) {
-        return false;
+      if (selectedCategory !== "All Categories" && selectedCategory !== "All") {
+        const sCat = selectedCategory.toLowerCase().trim();
+        const pCat = (part.category || "").toLowerCase().trim();
+        const pSubCat = ((part as any).subCategory || (part as any).subcategory || part.partName || "").toLowerCase().trim();
+        const pTitle = (part.title || "").toLowerCase().trim();
+        const catMatch =
+          pCat === sCat ||
+          (pCat && (pCat.includes(sCat) || sCat.includes(pCat))) ||
+          pSubCat.includes(sCat) ||
+          pTitle.includes(sCat);
+        if (!catMatch) continue;
       }
 
       // Brand filter
-      if (selectedBrand !== "All Brands" && part.carBrand !== selectedBrand) {
-        return false;
+      if (selectedBrand !== "All Brands" && selectedBrand !== "All") {
+        const sBrand = selectedBrand.toLowerCase().trim();
+        const pBrand = (part.carBrand || (part as any).brand || (part as any).make || "").toLowerCase().trim();
+        const pTitle = (part.title || "").toLowerCase().trim();
+        const pModel = (part.carModel || (part as any).model || "").toLowerCase().trim();
+        const brandMatch =
+          pBrand === sBrand ||
+          (pBrand && (pBrand.includes(sBrand) || sBrand.includes(pBrand))) ||
+          pTitle.includes(sBrand) ||
+          pModel.includes(sBrand);
+        if (!brandMatch) continue;
       }
 
       // Model filter
-      if (selectedModel !== "All Models" && part.carModel !== selectedModel) {
-        return false;
+      if (selectedModel !== "All Models" && selectedModel !== "All") {
+        const sModel = selectedModel.toLowerCase().trim();
+        const pModel = (part.carModel || (part as any).model || "").toLowerCase().trim();
+        const pTitle = (part.title || "").toLowerCase().trim();
+        const modelMatch = pModel === sModel || pModel.includes(sModel) || pTitle.includes(sModel);
+        if (!modelMatch) continue;
       }
 
       // Condition filter
-      if (selectedCondition !== "All Conditions" && part.condition !== selectedCondition) {
-        return false;
+      if (selectedCondition !== "All Conditions" && selectedCondition !== "All") {
+        const isNewSelected = selectedCondition.toLowerCase().includes("new");
+        const isPartNew = (part.condition || "").toLowerCase().includes("new");
+        if (isNewSelected && !isPartNew) continue;
+        if (!isNewSelected && isPartNew) continue;
       }
 
       // State filter
-      if (selectedState !== "All States" && part.state !== selectedState) {
-        return false;
+      if (selectedState !== "All States") {
+        const sState = selectedState.toLowerCase().trim();
+        const pState = (part.state || "").toLowerCase().trim();
+        const pLocation = (part.location || "").toLowerCase().trim();
+        const matchesState = pState.includes(sState) || pLocation.includes(sState);
+        if (!matchesState) continue;
       }
 
       // District filter
-      if (selectedDistrict !== "All Districts" && part.district !== selectedDistrict) {
-        return false;
+      if (selectedDistrict !== "All Districts") {
+        const sDist = selectedDistrict.toLowerCase().trim();
+        const pDist = (part.district || "").toLowerCase().trim();
+        const pLocation = (part.location || "").toLowerCase().trim();
+        const matchesDist = pDist.includes(sDist) || pLocation.includes(sDist);
+        if (!matchesDist) continue;
       }
 
-      return true;
-    }).sort((a, b) => {
-      if (sortBy === "price_low") return a.price - b.price;
-      if (sortBy === "price_high") return b.price - a.price;
-      return (b.createdAt || 0) - (a.createdAt || 0);
-    });
+      scoredList.push({ part, score: searchScore });
+    }
+
+    return scoredList.sort((a, b) => {
+      if (searchQuery.trim() && sortBy === "newest") {
+        if (b.score !== a.score) {
+          return b.score - a.score;
+        }
+      }
+      if (sortBy === "price_low") return a.part.price - b.part.price;
+      if (sortBy === "price_high") return b.part.price - a.part.price;
+      return parseCreatedAt(b.part.createdAt) - parseCreatedAt(a.part.createdAt);
+    }).map(item => item.part);
   }, [
     parts,
     searchQuery,
@@ -350,12 +370,14 @@ export default function SearchScreen({
                           e.stopPropagation();
                           if (onFavoriteToggle) onFavoriteToggle(part.id);
                         }}
-                        className="absolute top-2 right-2 p-1.5 bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full text-white active:scale-90 transition-transform z-10"
+                        className="absolute top-2 right-2 p-1 text-white hover:scale-110 active:scale-90 transition-transform z-10 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] cursor-pointer"
                         aria-label="Toggle Favorite"
                       >
                         <Heart
-                          size={14}
-                          className={isFavorite ? "fill-rose-500 text-rose-500" : "text-white"}
+                          size={18}
+                          fill={isFavorite ? "#EF4444" : "none"}
+                          className={isFavorite ? "text-red-500 stroke-red-500" : "text-white stroke-white"}
+                          strokeWidth={2.2}
                         />
                       </button>
                     </div>

@@ -47,7 +47,7 @@ export default function SellerProfileView({
 
   // Statistics & Filtering
   const sellerParts = allParts.filter(p => (p.sellerId === sellerId || p.ownerId === sellerId));
-  const activeAds = sellerParts.filter(p => !p.sold && p.status !== "sold" && !(p as any).isDeleted);
+  const activeAds = sellerParts.filter(p => !p.sold && p.status !== "sold" && !(p as any).isDeleted && (p as any).status !== "deleted");
   const displayName = sellerProfile?.name || sellerProfile?.displayName || sellerName || "Seller";
   const displayPhoto = sellerProfile?.photoURL || sellerProfile?.profilePhoto || "";
   const refPart = activeAds[0] || sellerParts[0];

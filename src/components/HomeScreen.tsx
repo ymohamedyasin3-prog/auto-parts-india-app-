@@ -69,6 +69,7 @@ import {
   LatLng
 } from "../utils/locationHelper";
 import { requestLocationPermissionJIT } from "../utils/permissionUtils";
+import { matchPartSearch, parseCreatedAt } from "../utils/searchHelper";
 
 function getCategoryIcon(catName: string, iconSize = 20, className = "") {
   const lower = (catName || "").toLowerCase();
@@ -402,7 +403,7 @@ export default function HomeScreen({
       if (ids.length > 0 && parts.length > 0) {
         const matched = ids
           .map(id => parts.find(p => p.id === id))
-          .filter((p): p is SparePart => p !== undefined && !p.sold && p.status !== "sold" && !(p as any).isDeleted);
+          .filter((p): p is SparePart => p !== undefined && !p.sold && p.status !== "sold" && !(p as any).isDeleted && (p as any).status !== "deleted");
         setRecentlyViewed(matched);
       }
     } catch (e) {
@@ -444,10 +445,11 @@ export default function HomeScreen({
   // Search and Multi-tier Fallback Filter Logic
   const activeParts = React.useMemo(() => {
     return parts.filter((part) => {
+      const isDeleted = (part as any).isDeleted === true || (part as any).status === "deleted";
+      if (isDeleted) return false;
       const isSold = part.sold === true || part.status === "sold";
-      const isExpired = (Date.now() - part.createdAt) > 90 * 24 * 60 * 60 * 1000;
-      const isDeleted = (part as any).isDeleted === true;
-      return !isSold && !isExpired && !isDeleted;
+      if (isSold) return false;
+      return true;
     });
   }, [parts]);
 
@@ -523,42 +525,58 @@ export default function HomeScreen({
 
     const matchesSpecificsAndQuery = (part: SparePart, checkQuery = true, checkSpecifics = true) => {
       if (checkQuery && query) {
-        const title = (part.title || "").toLowerCase();
-        const description = (part.description || "").toLowerCase();
-        const carModel = (part.carModel || "").toLowerCase();
-        const carBrand = (part.carBrand || "").toLowerCase();
-        const category = (part.category || "").toLowerCase();
-        const partName = (part.partName || "").toLowerCase();
-        const state = (part.state || "").toLowerCase();
-        const district = (part.district || "").toLowerCase();
-        const area = (part.area || "").toLowerCase();
-        const location = (part.location || "").toLowerCase();
-
-        const match =
-          title.includes(query) ||
-          description.includes(query) ||
-          carModel.includes(query) ||
-          carBrand.includes(query) ||
-          category.includes(query) ||
-          partName.includes(query) ||
-          state.includes(query) ||
-          district.includes(query) ||
-          area.includes(query) ||
-          location.includes(query);
-
-        if (!match) return false;
+        const searchResult = matchPartSearch(part, query);
+        if (!searchResult.matches) return false;
       }
 
       if (checkSpecifics) {
-        if (selectedBrand !== "All Brands" && part.carBrand !== selectedBrand) return false;
-        if (selectedModel !== "All Models" && part.carModel !== selectedModel) return false;
-        if (selectedCategory !== "All Categories" && part.category !== selectedCategory) return false;
+        if (selectedBrand !== "All Brands" && selectedBrand !== "All") {
+          const sBrand = selectedBrand.toLowerCase().trim();
+          const pBrand = (part.carBrand || (part as any).brand || (part as any).make || "").toLowerCase().trim();
+          const pTitle = (part.title || "").toLowerCase().trim();
+          const pModel = (part.carModel || (part as any).model || "").toLowerCase().trim();
+          const brandMatch =
+            pBrand === sBrand ||
+            (pBrand && (pBrand.includes(sBrand) || sBrand.includes(pBrand))) ||
+            pTitle.includes(sBrand) ||
+            pModel.includes(sBrand);
+          if (!brandMatch) return false;
+        }
+
+        if (selectedModel !== "All Models" && selectedModel !== "All") {
+          const sModel = selectedModel.toLowerCase().trim();
+          const pModel = (part.carModel || (part as any).model || "").toLowerCase().trim();
+          const pTitle = (part.title || "").toLowerCase().trim();
+          const modelMatch = pModel === sModel || pModel.includes(sModel) || pTitle.includes(sModel);
+          if (!modelMatch) return false;
+        }
+
+        if (selectedCategory !== "All Categories" && selectedCategory !== "All") {
+          const sCat = selectedCategory.toLowerCase().trim();
+          const pCat = (part.category || "").toLowerCase().trim();
+          const pSubCat = ((part as any).subCategory || (part as any).subcategory || part.partName || "").toLowerCase().trim();
+          const pTitle = (part.title || "").toLowerCase().trim();
+          const catMatch =
+            pCat === sCat ||
+            (pCat && (pCat.includes(sCat) || sCat.includes(pCat))) ||
+            pSubCat.includes(sCat) ||
+            pTitle.includes(sCat);
+          if (!catMatch) return false;
+        }
+
         if (
           selectedPartName !== "All Parts" &&
+          selectedPartName !== "All" &&
           part.partName !== selectedPartName &&
           !part.title?.toLowerCase().includes((selectedPartName || "").toLowerCase())
         ) return false;
-        if (selectedCondition !== "All Conditions" && part.condition !== selectedCondition) return false;
+
+        if (selectedCondition !== "All Conditions" && selectedCondition !== "All") {
+          const isNewSelected = selectedCondition.toLowerCase().includes("new");
+          const isPartNew = (part.condition || "").toLowerCase().includes("new");
+          if (isNewSelected && !isPartNew) return false;
+          if (!isNewSelected && isPartNew) return false;
+        }
       }
 
       return true;
@@ -683,8 +701,19 @@ export default function HomeScreen({
   const sortedFilteredParts = React.useMemo(() => {
     const list = [...finalFilteredParts];
     const center = effectiveUserCoords;
+    const q = searchQuery.trim();
 
     return list.sort((a, b) => {
+      // 1. If searching, prioritize relevance score
+      if (q) {
+        const scoreA = matchPartSearch(a, q).score;
+        const scoreB = matchPartSearch(b, q).score;
+        if (scoreB !== scoreA) {
+          return scoreB - scoreA;
+        }
+      }
+
+      // 2. Proximity sort if GPS coordinates available
       if (center) {
         let coordsA: LatLng | null = (a.lat && a.lng && a.lat !== 0) ? { lat: a.lat, lng: a.lng } : getApproxCoordinates(a.state, a.district);
         let coordsB: LatLng | null = (b.lat && b.lng && b.lat !== 0) ? { lat: b.lat, lng: b.lng } : getApproxCoordinates(b.state, b.district);
@@ -697,9 +726,10 @@ export default function HomeScreen({
         }
       }
 
-      return (b.createdAt || 0) - (a.createdAt || 0);
+      // 3. Newest first
+      return parseCreatedAt(b.createdAt) - parseCreatedAt(a.createdAt);
     });
-  }, [finalFilteredParts, effectiveUserCoords]);
+  }, [finalFilteredParts, effectiveUserCoords, searchQuery]);
 
   const trimmedQuery = searchQuery.trim().toLowerCase();
   
@@ -1464,15 +1494,16 @@ export default function HomeScreen({
                           e.stopPropagation();
                           onFavoriteToggle(part.id);
                         }}
-                        className={`absolute top-1.5 right-1.5 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all z-10 ${
-                          isFav 
-                            ? "bg-rose-500 text-white shadow-sm border border-rose-400" 
-                            : "bg-slate-950/40 text-white hover:bg-slate-950/70 border border-white/20"
-                        }`}
+                        className="absolute top-2 right-2 p-1 transition-transform hover:scale-110 active:scale-90 z-10 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] cursor-pointer"
                         id={`fav-btn-${part.id}`}
                         title={isFav ? "Remove from Favorites" : "Add to Favorites"}
                       >
-                        <Heart size={13} fill={isFav ? "currentColor" : "none"} strokeWidth={2.5} />
+                        <Heart
+                          size={18}
+                          fill={isFav ? "#EF4444" : "none"}
+                          className={isFav ? "text-red-500 stroke-red-500" : "text-white stroke-white"}
+                          strokeWidth={2.2}
+                        />
                       </motion.button>
                     )}
 

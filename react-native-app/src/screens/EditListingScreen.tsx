@@ -241,6 +241,39 @@ export default function EditListingScreen({ navigation, route }: any) {
     }
   };
 
+  const handleDeleteListing = () => {
+    Alert.alert(
+      'Delete Listing',
+      'Are you sure you want to permanently delete this listing? It will be removed immediately.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsSaving(true);
+              const db = getFirebaseFirestore();
+              if (db && typeof db.collection === 'function' && part?.id) {
+                await db.collection('spareParts').doc(part.id).delete();
+              }
+              Alert.alert('Deleted', 'Listing permanently deleted.', [
+                {
+                  text: 'OK',
+                  onPress: () => navigation.goBack(),
+                },
+              ]);
+            } catch (err: any) {
+              Alert.alert('Delete Failed', err?.message || 'Failed to delete listing.');
+            } finally {
+              setIsSaving(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0B1220" />
@@ -255,7 +288,14 @@ export default function EditListingScreen({ navigation, route }: any) {
           <Icon source="arrow-left" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Listing</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity
+          onPress={handleDeleteListing}
+          style={styles.deleteHeaderBtn}
+          activeOpacity={0.7}
+          disabled={isSaving}
+        >
+          <Icon source="trash-can-outline" size={22} color="#EF4444" />
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView
@@ -647,6 +687,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F1E36',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  deleteHeaderBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#3F1219',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#7F1D1D',
   },
   headerTitle: {
     color: '#FFFFFF',

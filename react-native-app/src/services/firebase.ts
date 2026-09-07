@@ -285,7 +285,11 @@ function notifyLocalDocSubscribers(collPath: string, docId: string, data: any) {
 }
 
 function normalizeCollectionPath(collPath: string): string {
-  return collPath.startsWith('/') ? collPath.substring(1) : collPath;
+  const p = collPath.startsWith('/') ? collPath.substring(1) : collPath;
+  if (p === 'parts' || p === 'products' || p === 'products/listings/items') {
+    return 'spareParts';
+  }
+  return p;
 }
 
 // Fetch real documents from Cloud Firestore
@@ -294,7 +298,7 @@ async function fetchCloudCollection(collPath: string): Promise<any[]> {
     const cleanPath = normalizeCollectionPath(collPath);
     const pathsToQuery: string[] = [];
 
-    if (cleanPath === 'spareParts' || cleanPath === 'products' || cleanPath === 'products/listings/items') {
+    if (cleanPath === 'spareParts') {
       pathsToQuery.push('spareParts', 'products');
     } else {
       pathsToQuery.push(cleanPath);
@@ -354,21 +358,28 @@ async function fetchCloudCollection(collPath: string): Promise<any[]> {
 
     const parsedDocs = Array.from(fetchedMap.values());
 
-    if (!cloudCache[collPath]) cloudCache[collPath] = {};
-    
-    // Merge fetched docs with existing cache
+    // Update cache with the exact live state from Firestore
+    const liveDocMap: Record<string, any> = {};
     parsedDocs.forEach((doc) => {
-      cloudCache[collPath][doc.id] = { ...doc };
+      liveDocMap[doc.id] = { ...doc };
     });
-
-    const allDocs = Object.values(cloudCache[collPath] || {});
+    cloudCache[collPath] = liveDocMap;
+    if (cleanPath !== collPath) {
+      cloudCache[cleanPath] = liveDocMap;
+    }
 
     try {
-      await AsyncStorage.setItem(STORAGE_KEY_PREFIX + collPath, JSON.stringify(cloudCache[collPath]));
+      await AsyncStorage.setItem(STORAGE_KEY_PREFIX + collPath, JSON.stringify(liveDocMap));
+      if (cleanPath !== collPath) {
+        await AsyncStorage.setItem(STORAGE_KEY_PREFIX + cleanPath, JSON.stringify(liveDocMap));
+      }
     } catch (_) {}
 
     notifyLocalSubscribers(collPath);
-    return allDocs.length > 0 ? allDocs : parsedDocs;
+    if (cleanPath !== collPath) {
+      notifyLocalSubscribers(cleanPath);
+    }
+    return parsedDocs;
   } catch (err) {
     console.warn(`[Firestore Cloud] Fetch error for ${collPath}:`, err);
     return Object.values(cloudCache[collPath] || {});
@@ -383,11 +394,24 @@ async function writeCloudDoc(collPath: string, docId: string, data: any, isMerge
     const existing = cloudCache[collPath][docId] || {};
     const merged = isMerge ? { ...existing, ...data, id: docId } : { id: docId, ...data };
     cloudCache[collPath][docId] = merged;
+    if (cleanPath !== collPath) {
+      if (!cloudCache[cleanPath]) cloudCache[cleanPath] = {};
+      cloudCache[cleanPath][docId] = merged;
+    }
     notifyLocalSubscribers(collPath);
+    if (cleanPath !== collPath) {
+      notifyLocalSubscribers(cleanPath);
+    }
     notifyLocalDocSubscribers(collPath, docId, merged);
+    if (cleanPath !== collPath) {
+      notifyLocalDocSubscribers(cleanPath, docId, merged);
+    }
 
     try {
       await AsyncStorage.setItem(STORAGE_KEY_PREFIX + collPath, JSON.stringify(cloudCache[collPath]));
+      if (cleanPath !== collPath) {
+        await AsyncStorage.setItem(STORAGE_KEY_PREFIX + cleanPath, JSON.stringify(cloudCache[cleanPath]));
+      }
     } catch (_) {}
 
     // Encode fields for Firestore REST API
@@ -399,7 +423,7 @@ async function writeCloudDoc(collPath: string, docId: string, data: any, isMerge
     }
 
     const pathsToWrite: string[] = [];
-    if (cleanPath === 'spareParts' || cleanPath === 'products' || cleanPath === 'products/listings/items') {
+    if (cleanPath === 'spareParts') {
       pathsToWrite.push('spareParts', 'products', 'products/listings/items');
     } else {
       pathsToWrite.push(cleanPath);
@@ -438,14 +462,26 @@ async function deleteCloudDoc(collPath: string, docId: string): Promise<void> {
     if (cloudCache[collPath]) {
       delete cloudCache[collPath][docId];
     }
+    if (cleanPath !== collPath && cloudCache[cleanPath]) {
+      delete cloudCache[cleanPath][docId];
+    }
     notifyLocalSubscribers(collPath);
+    if (cleanPath !== collPath) {
+      notifyLocalSubscribers(cleanPath);
+    }
     notifyLocalDocSubscribers(collPath, docId, null);
+    if (cleanPath !== collPath) {
+      notifyLocalDocSubscribers(cleanPath, docId, null);
+    }
     try {
-      await AsyncStorage.setItem(STORAGE_KEY_PREFIX + collPath, JSON.stringify(cloudCache[collPath]));
+      await AsyncStorage.setItem(STORAGE_KEY_PREFIX + collPath, JSON.stringify(cloudCache[collPath] || {}));
+      if (cleanPath !== collPath) {
+        await AsyncStorage.setItem(STORAGE_KEY_PREFIX + cleanPath, JSON.stringify(cloudCache[cleanPath] || {}));
+      }
     } catch (_) {}
 
     const pathsToDelete: string[] = [];
-    if (cleanPath === 'spareParts' || cleanPath === 'products' || cleanPath === 'products/listings/items') {
+    if (cleanPath === 'spareParts') {
       pathsToDelete.push('spareParts', 'products', 'products/listings/items');
     } else {
       pathsToDelete.push(cleanPath);
@@ -477,7 +513,8 @@ async function deleteCloudDoc(collPath: string, docId: string): Promise<void> {
   }).catch(() => {});
 });
 
-function createRealFirestoreQuery(collectionPath: string) {
+function createRealFirestoreQuery(rawCollectionPath: string) {
+  const collectionPath = normalizeCollectionPath(rawCollectionPath);
   let whereClauses: { field: string; op: string; val: any }[] = [];
   let orderField: string | null = null;
   let orderDirection: 'asc' | 'desc' = 'desc';
