@@ -48,6 +48,7 @@ import { matchPartSearch } from '../utils/searchHelper';
 import { Category3DIcon } from '../components/Category3DIcon';
 import { subscribeToUnreadNotificationCount } from '../services/notifications';
 import { getOptimizedImageUrl } from '../services/cloudinary';
+import { BannerPartsCollage } from '../components/BannerPartsCollage';
 import { 
   initializeTaxonomyDefaults, 
   INITIAL_DEFAULT_CATEGORIES, 
@@ -596,75 +597,93 @@ export default function HomeScreen({ navigation, route, user }: any) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0B1220" />
+      <StatusBar barStyle="light-content" backgroundColor="#0066FF" />
 
-      {/* TOP HEADER - Clean Search & Location Controls (Without Logo) */}
-      <View style={styles.topBar}>
-        {/* Left: Location Selector */}
-        <TouchableOpacity 
-          style={styles.locationButton}
-          activeOpacity={0.8}
-          onPress={() => navigation.navigate('LocationSelectScreen')}
-        >
-          <Icon source="map-marker" size={18} color="#0066FF" />
-          <View style={styles.locationTextWrapper}>
-            <Text style={styles.locationTitle} numberOfLines={1}>
-              {selectedCity || 'All India'}
-            </Text>
-            <Icon source="chevron-down" size={14} color="#94A3B8" />
+      {/* ROYAL BLUE BRAND HEADER - Original Clean Theme */}
+      <View style={styles.royalHeader}>
+        <View style={styles.topBar}>
+          {/* Brand Logo & Title */}
+          <View style={styles.brandTitleRow}>
+            <AutoPartsRoundLogo size={36} />
+            <View style={styles.brandTextCol}>
+              <Text style={styles.headerBrandTitle}>AutoParts</Text>
+              {/* Location Selector */}
+              <TouchableOpacity 
+                style={styles.locationButton}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('LocationSelectScreen')}
+              >
+                <Icon source="map-marker" size={13} color="#BAE6FD" />
+                <Text style={styles.locationTitle} numberOfLines={1}>
+                  {selectedCity || 'All India'}
+                </Text>
+                <Icon source="chevron-down" size={13} color="#BAE6FD" />
+              </TouchableOpacity>
+            </View>
           </View>
-        </TouchableOpacity>
 
-        {/* Right: Notification & Saved Parts Icons */}
-        <View style={styles.headerActionRow}>
+          {/* Right Action Icons: Language, Wishlist, Notifications */}
+          <View style={styles.headerActionRow}>
+            {/* Language Selector */}
+            <TouchableOpacity
+              style={styles.iconBtn}
+              activeOpacity={0.8}
+              onPress={() => setShowLanguageModal(true)}
+            >
+              <Icon source="translate" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            {/* Wishlist / Favorites */}
+            <TouchableOpacity
+              style={styles.iconBtn}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('WishlistScreen')}
+            >
+              <Icon source="heart-outline" size={20} color="#FFFFFF" />
+              {favorites.length > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{favorites.length > 9 ? '9+' : favorites.length}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Notifications */}
+            <TouchableOpacity
+              style={styles.iconBtn}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Notifications')}
+            >
+              <Icon source="bell-outline" size={20} color="#FFFFFF" />
+              {unreadCount > 0 && (
+                <View style={styles.badgeRed}>
+                  <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* SEARCH BAR ROW IN BLUE HEADER */}
+        <View style={styles.searchBarRow}>
           <TouchableOpacity
-            style={styles.iconBtn}
-            activeOpacity={0.8}
-            onPress={() => navigation.navigate('WishlistScreen')}
+            style={styles.searchBox}
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('Search')}
           >
-            <Icon source="heart-outline" size={22} color="#FFFFFF" />
-            {favorites.length > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{favorites.length > 9 ? '9+' : favorites.length}</Text>
-              </View>
-            )}
+            <Icon source="magnify" size={20} color="#64748B" />
+            <Text style={styles.searchPlaceholder}>
+              Search spare parts, headlights, bumper...
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.iconBtn}
+            style={styles.filterBtn}
             activeOpacity={0.8}
-            onPress={() => navigation.navigate('Notifications')}
+            onPress={() => setShowFilterModal(true)}
           >
-            <Icon source="bell-outline" size={22} color="#FFFFFF" />
-            {unreadCount > 0 && (
-              <View style={styles.badgeRed}>
-                <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-              </View>
-            )}
+            <Icon source="tune-variant" size={20} color="#0066FF" />
           </TouchableOpacity>
         </View>
-      </View>
-
-      {/* SEARCH BAR ROW */}
-      <View style={styles.searchBarRow}>
-        <TouchableOpacity
-          style={styles.searchBox}
-          activeOpacity={0.9}
-          onPress={() => navigation.navigate('Search')}
-        >
-          <Icon source="magnify" size={20} color="#94A3B8" />
-          <Text style={styles.searchPlaceholder}>
-            Search spare parts, headlights, bumper...
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.filterBtn}
-          activeOpacity={0.8}
-          onPress={() => setShowFilterModal(true)}
-        >
-          <Icon source="tune-variant" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
       </View>
 
       {/* MAIN SCROLLABLE FEED */}
@@ -681,56 +700,58 @@ export default function HomeScreen({ navigation, route, user }: any) {
           />
         }
       >
-        {/* PROMO BANNERS CAROUSEL (Real Data Only) */}
-        {banners.length > 0 && (
-          <View style={styles.bannerSection}>
-            <ScrollView
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={(e) => {
-                const index = Math.round(e.nativeEvent.contentOffset.x / (screenWidth - 32));
-                setActiveBannerIndex(index);
-              }}
-              contentContainerStyle={styles.bannerScroll}
-            >
-              {banners.map((item: any, idx: number) => (
-                <TouchableOpacity 
-                  key={item.id || idx} 
-                  style={[styles.bannerSlide, { width: screenWidth - 32 }]}
-                  activeOpacity={0.9}
-                  onPress={() => {
-                    if (item.targetCategory && item.targetCategory !== 'All') {
-                      setSelectedCategory(item.targetCategory);
-                    } else if (item.link) {
-                      // handle generic links if any
-                    }
-                  }}
-                >
-                  <Image 
-                    source={{ uri: getOptimizedImageUrl(item.image || item.imageUrl || item.photoURL, { width: 800 }) || 'https://via.placeholder.com/800x400' }}
-                    style={{ width: '100%', height: '100%', resizeMode: 'cover' }}
-                  />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {/* Carousel Pagination Dots */}
-            {banners.length > 1 && (
-              <View style={styles.paginationRow}>
-                {banners.map((_: any, dotIdx: number) => (
-                  <View
-                    key={dotIdx}
-                    style={[
-                      styles.paginationDot,
-                      activeBannerIndex === dotIdx && styles.paginationDotActive,
-                    ]}
-                  />
+        {/* HERO PROMO BANNER: Real Admin Firestore Banners Carousel with High-Quality Fallback */}
+        <View style={styles.bannerSection}>
+          {banners.length > 0 ? (
+            <>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={(e) => {
+                  const index = Math.round(e.nativeEvent.contentOffset.x / (screenWidth - 32));
+                  setActiveBannerIndex(index);
+                }}
+                contentContainerStyle={styles.bannerScroll}
+              >
+                {banners.map((item: any, idx: number) => (
+                  <TouchableOpacity 
+                    key={item.id || idx} 
+                    style={[styles.bannerSlide, { width: screenWidth - 32 }]}
+                    activeOpacity={0.9}
+                    onPress={() => {
+                      if (item.targetCategory && item.targetCategory !== 'All') {
+                        setSelectedCategory(item.targetCategory);
+                      }
+                    }}
+                  >
+                    <Image 
+                      source={{ uri: getOptimizedImageUrl(item.image || item.imageUrl || item.photoURL, { width: 800 }) || 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=800&auto=format&fit=crop&q=80' }}
+                      style={{ width: '100%', height: '100%', resizeMode: 'cover' }}
+                    />
+                  </TouchableOpacity>
                 ))}
-              </View>
-            )}
-          </View>
-        )}
+              </ScrollView>
+
+              {/* Carousel Pagination Dots */}
+              {banners.length > 1 && (
+                <View style={styles.paginationRow}>
+                  {banners.map((_: any, dotIdx: number) => (
+                    <View
+                      key={dotIdx}
+                      style={[
+                        styles.paginationDot,
+                        activeBannerIndex === dotIdx && styles.paginationDotActive,
+                      ]}
+                    />
+                  ))}
+                </View>
+              )}
+            </>
+          ) : (
+            <BannerPartsCollage />
+          )}
+        </View>
 
         {/* 1. TOP CATEGORIES (4-Column Grid) */}
         <View style={styles.sectionHeaderRow}>
@@ -927,6 +948,12 @@ export default function HomeScreen({ navigation, route, user }: any) {
           </View>
         </View>
       </Modal>
+
+      {/* Language Selector Modal */}
+      <LanguageSelectorModal
+        visible={showLanguageModal}
+        onClose={() => setShowLanguageModal(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -934,7 +961,18 @@ export default function HomeScreen({ navigation, route, user }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B1220',
+    backgroundColor: '#F8FAFC',
+  },
+  royalHeader: {
+    backgroundColor: '#0066FF',
+    paddingBottom: 12,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+    shadowColor: '#0066FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
   },
   topBar: {
     flexDirection: 'row',
@@ -942,29 +980,34 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 6,
+    paddingBottom: 8,
+  },
+  brandTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  brandTextCol: {
+    flex: 1,
+  },
+  headerBrandTitle: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 18,
+    letterSpacing: 0.3,
   },
   locationButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#0F1E36',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#1E3A5F',
-  },
-  locationTextWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    gap: 3,
+    marginTop: 1,
   },
   locationTitle: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-    maxWidth: 160,
+    color: '#E0F2FE',
+    fontWeight: '600',
+    fontSize: 12,
+    maxWidth: 130,
   },
   headerActionRow: {
     flexDirection: 'row',
@@ -972,35 +1015,33 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#0F1E36',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#1E3A5F',
   },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#0066FF',
+    top: -3,
+    right: -3,
+    backgroundColor: '#38BDF8',
     borderRadius: 10,
-    minWidth: 18,
-    height: 18,
+    minWidth: 16,
+    height: 16,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 3,
   },
   badgeRed: {
     position: 'absolute',
-    top: -4,
-    right: -4,
+    top: -3,
+    right: -3,
     backgroundColor: '#EF4444',
     borderRadius: 10,
-    minWidth: 18,
-    height: 18,
+    minWidth: 16,
+    height: 16,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 3,
@@ -1013,39 +1054,48 @@ const styles = StyleSheet.create({
   searchBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingTop: 4,
   },
   searchBox: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F1E36',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: '#1E3A5F',
     gap: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   searchPlaceholder: {
     color: '#94A3B8',
     fontSize: 13,
+    flex: 1,
   },
   filterBtn: {
-    width: 44,
-    height: 44,
+    width: 42,
+    height: 42,
     borderRadius: 12,
-    backgroundColor: '#0066FF',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   scrollContent: {
-    paddingBottom: 32,
+    paddingBottom: 36,
   },
   bannerSection: {
-    marginTop: 8,
+    marginTop: 12,
     paddingHorizontal: 16,
   },
   bannerScroll: {
@@ -1054,8 +1104,8 @@ const styles = StyleSheet.create({
   bannerSlide: {
     borderRadius: 16,
     overflow: 'hidden',
-    height: 180,
-    backgroundColor: '#0F1E36',
+    height: 170,
+    backgroundColor: '#E2E8F0',
   },
   paginationRow: {
     flexDirection: 'row',
@@ -1068,7 +1118,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#334155',
+    backgroundColor: '#CBD5E1',
   },
   paginationDotActive: {
     width: 18,
@@ -1079,11 +1129,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    marginTop: 18,
-    marginBottom: 10,
+    marginTop: 20,
+    marginBottom: 12,
   },
   sectionTitle: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: '800',
     fontSize: 16,
   },
@@ -1099,39 +1149,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   categoryCard: {
-    backgroundColor: '#0F1E36',
-    borderRadius: 12,
-    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 12,
     paddingHorizontal: 4,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#1E3A5F',
+    borderColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   categoryCardActive: {
     borderColor: '#0066FF',
-    backgroundColor: 'rgba(0, 102, 255, 0.15)',
+    backgroundColor: '#EFF6FF',
   },
   categoryIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#1E293B',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F8FAFC',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 6,
   },
   categoryIconCircleActive: {
-    backgroundColor: '#0066FF',
+    backgroundColor: '#DBEAFE',
   },
   categoryLabel: {
-    color: '#94A3B8',
+    color: '#334155',
     fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',
     lineHeight: 14,
   },
   categoryLabelActive: {
-    color: '#FFFFFF',
+    color: '#0066FF',
     fontWeight: '700',
   },
   brandsScroll: {
@@ -1141,21 +1196,26 @@ const styles = StyleSheet.create({
   brandPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#0F1E36',
-    paddingHorizontal: 12,
+    gap: 8,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#1E3A5F',
+    borderColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
   },
   brandPillActive: {
     backgroundColor: '#0066FF',
     borderColor: '#0066FF',
   },
   brandNameText: {
-    color: '#E2E8F0',
-    fontSize: 12,
+    color: '#334155',
+    fontSize: 13,
     fontWeight: '600',
   },
   brandNameTextActive: {
@@ -1174,15 +1234,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   card: {
-    backgroundColor: '#0F1E36',
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#1E3A5F',
+    borderColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   imageContainer: {
-    height: 120,
-    backgroundColor: '#1E293B',
+    height: 125,
+    backgroundColor: '#F1F5F9',
     position: 'relative',
   },
   cardImage: {
@@ -1191,11 +1256,11 @@ const styles = StyleSheet.create({
   },
   conditionBadge: {
     position: 'absolute',
-    top: 6,
-    left: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    top: 8,
+    left: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 5,
   },
   badgeNew: {
     backgroundColor: '#10B981',
@@ -1207,34 +1272,40 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 8,
     fontWeight: '800',
+    letterSpacing: 0.3,
   },
   favoriteButton: {
     position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    top: 8,
+    right: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
   },
   cardContent: {
     padding: 10,
   },
   partTitle: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: '700',
     fontSize: 13,
     marginBottom: 2,
   },
   categorySubText: {
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 11,
     marginBottom: 6,
   },
   price: {
-    color: '#38BDF8',
+    color: '#0066FF',
     fontWeight: '800',
     fontSize: 15,
     marginBottom: 4,
@@ -1245,36 +1316,36 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   locationText: {
-    color: '#64748B',
+    color: '#94A3B8',
     fontSize: 11,
   },
   loadingBox: {
-    padding: 32,
+    padding: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   loadingText: {
-    color: '#94A3B8',
+    color: '#64748B',
     marginTop: 10,
     fontSize: 13,
   },
   emptyBox: {
-    padding: 32,
+    padding: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyTitle: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: 'bold',
-    fontSize: 15,
+    fontSize: 16,
     marginTop: 12,
   },
   emptySubtitle: {
     color: '#64748B',
-    fontSize: 12,
+    fontSize: 13,
     textAlign: 'center',
     marginTop: 6,
-    marginBottom: 16,
+    marginBottom: 18,
     maxWidth: 260,
   },
   resetBtn: {
@@ -1283,11 +1354,11 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   filterModalContainer: {
-    backgroundColor: '#0F1E36',
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
@@ -1298,17 +1369,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E3A5F',
+    borderBottomColor: '#E2E8F0',
   },
   modalTitle: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: 'bold',
+    fontSize: 16,
   },
   modalBody: {
     padding: 16,
   },
   filterLabel: {
-    color: '#E2E8F0',
+    color: '#334155',
     fontWeight: '700',
     fontSize: 13,
     marginBottom: 8,
@@ -1320,13 +1392,13 @@ const styles = StyleSheet.create({
   },
   priceInput: {
     flex: 1,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#F8FAFC',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    color: '#FFFFFF',
+    color: '#0F172A',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   modalPillWrap: {
     flexDirection: 'row',
@@ -1334,19 +1406,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   modalPill: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#F1F5F9',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   modalPillActive: {
     backgroundColor: '#0066FF',
     borderColor: '#0066FF',
   },
   modalPillText: {
-    color: '#94A3B8',
+    color: '#475569',
     fontSize: 12,
   },
   modalPillTextActive: {
@@ -1358,18 +1430,18 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderTopWidth: 1,
-    borderTopColor: '#1E3A5F',
+    borderTopColor: '#E2E8F0',
   },
   modalClearBtn: {
     flex: 1,
     paddingVertical: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#CBD5E1',
     alignItems: 'center',
   },
   modalClearText: {
-    color: '#94A3B8',
+    color: '#64748B',
     fontWeight: '700',
   },
   modalApplyBtn: {
