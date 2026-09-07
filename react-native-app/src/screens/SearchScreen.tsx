@@ -26,16 +26,7 @@ export default function SearchScreen({ navigation, route, user }: any) {
   const theme = useTheme();
 
   const [searchQuery, setSearchQuery] = useState(route?.params?.initialQuery || '');
-  const [debouncedQuery, setDebouncedQuery] = useState(route?.params?.initialQuery || '');
   const [selectedCategory, setSelectedCategory] = useState(route?.params?.initialCategory || route?.params?.selectedCategory || 'All Categories');
-
-  // Debounce search query input by 200ms
-  React.useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedQuery(searchQuery);
-    }, 200);
-    return () => clearTimeout(handler);
-  }, [searchQuery]);
   const [selectedBrand, setSelectedBrand] = useState(route?.params?.initialBrand || 'All Brands');
   const [selectedCondition, setSelectedCondition] = useState('All Conditions');
   const [selectedState, setSelectedState] = useState('All States');
@@ -170,8 +161,8 @@ export default function SearchScreen({ navigation, route, user }: any) {
       }
 
       let searchScore = 0;
-      if (debouncedQuery.trim()) {
-        const searchResult = matchPartSearch(part, debouncedQuery);
+      if (searchQuery.trim()) {
+        const searchResult = matchPartSearch(part, searchQuery);
         if (!searchResult.matches) {
           continue;
         }

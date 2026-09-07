@@ -49,7 +49,6 @@ import { Category3DIcon } from '../components/Category3DIcon';
 import { BannerPartsCollage } from '../components/BannerPartsCollage';
 import { subscribeToUnreadNotificationCount } from '../services/notifications';
 import { getOptimizedImageUrl } from '../services/cloudinary';
-import { ProductFeedSkeletonList } from '../components/ProductCardSkeleton';
 import { 
   initializeTaxonomyDefaults, 
   INITIAL_DEFAULT_CATEGORIES, 
@@ -213,8 +212,6 @@ export default function HomeScreen({ navigation, route, user }: any) {
 
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-  const [displayLimit, setDisplayLimit] = useState(12);
   const [selectedCategory, setSelectedCategory] = useState(route?.params?.selectedCategory || 'All');
   const [selectedBrand, setSelectedBrand] = useState<string>('All');
   const [selectedCity, setSelectedCity] = useState('All India');
@@ -586,25 +583,12 @@ export default function HomeScreen({ navigation, route, user }: any) {
     }
   };
 
-  // 200ms Search Debounce for smooth keyboard typing & zero lag
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchQuery(searchQuery);
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // Reset display limit when filter or search changes
-  useEffect(() => {
-    setDisplayLimit(12);
-  }, [debouncedSearchQuery, selectedCategory, selectedBrand, selectedCity, minPrice, maxPrice]);
-
   // Filter Parts Based on Search, Category, Brand, Price and Location
   const filteredParts = useMemo(() => {
     return parts.filter((part) => {
       // 1. Search filter
-      if (debouncedSearchQuery.trim()) {
-        const matchesSearch = matchPartSearch(part, debouncedSearchQuery.trim());
+      if (searchQuery.trim()) {
+        const matchesSearch = matchPartSearch(part, searchQuery.trim());
         if (!matchesSearch) return false;
       }
 
@@ -617,9 +601,9 @@ export default function HomeScreen({ navigation, route, user }: any) {
       // 3. Brand filter
       if (selectedBrand && selectedBrand !== 'All') {
         const brandLower = selectedBrand.toLowerCase();
-        const partBrand = (part.brand || part.carBrand || part.make || '').toLowerCase();
-        const partTitle = (part.title || part.name || '').toLowerCase();
-        const partModel = (part.carModel || part.model || '').toLowerCase();
+        const partBrand = (part.brand || part.carBrand || part.make || '').toString().toLowerCase();
+        const partTitle = (part.title || part.name || '').toString().toLowerCase();
+        const partModel = (part.carModel || part.model || '').toString().toLowerCase();
         if (!partBrand.includes(brandLower) && !partTitle.includes(brandLower) && !partModel.includes(brandLower)) {
           return false;
         }
@@ -633,7 +617,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
       // 5. City filter
       if (selectedCity && selectedCity !== 'All India') {
         const cityLower = selectedCity.toLowerCase();
-        const partLoc = (part.location || part.district || part.city || part.state || '').toLowerCase();
+        const partLoc = (part.location || part.district || part.city || part.state || '').toString().toLowerCase();
         if (!partLoc.includes(cityLower)) {
           // Allow nationwide shipping parts or parts without strict location
           const canShip = Boolean(part.deliveryAvailable || part.allIndiaShipping);
@@ -645,12 +629,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
 
       return true;
     });
-  }, [parts, debouncedSearchQuery, selectedCategory, selectedBrand, minPrice, maxPrice, selectedCity]);
-
-  // Paginated Parts for 60 FPS smooth rendering
-  const paginatedParts = useMemo(() => {
-    return filteredParts.slice(0, displayLimit);
-  }, [filteredParts, displayLimit]);
+  }, [parts, searchQuery, selectedCategory, selectedBrand, minPrice, maxPrice, selectedCity]);
 
   // Display Categories
   const displayCategories = useMemo(() => {
@@ -745,6 +724,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
 
       {/* MAIN SCROLLABLE FEED */}
       <ScrollView
+        style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -873,7 +853,10 @@ export default function HomeScreen({ navigation, route, user }: any) {
         </View>
 
         {loading ? (
-          <ProductFeedSkeletonList cardWidth={productCardWidth} count={6} />
+          <View style={styles.loadingBox}>
+            <ActivityIndicator color="#0066FF" size="large" />
+            <Text style={styles.loadingText}>Loading spare parts...</Text>
+          </View>
         ) : filteredParts.length === 0 ? (
           <View style={styles.emptyBox}>
             <Icon source="car-off" size={48} color="#64748B" />
@@ -894,33 +877,18 @@ export default function HomeScreen({ navigation, route, user }: any) {
             </Button>
           </View>
         ) : (
-          <View>
-            <View style={styles.partsGrid}>
-              {paginatedParts.map((item: any) => (
-                <PartCard
-                  key={item.id}
-                  item={item}
-                  navigation={navigation}
-                  cardWidth={productCardWidth}
-                  isFavorited={favorites.some((f: any) => f.id === item.id)}
-                  toggleFavorite={toggleFavorite}
-                  selectedCity={selectedCity}
-                />
-              ))}
-            </View>
-
-            {filteredParts.length > displayLimit && (
-              <TouchableOpacity
-                style={styles.loadMoreBtn}
-                onPress={() => setDisplayLimit((prev) => prev + 12)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.loadMoreText}>
-                  Load More Parts ({filteredParts.length - displayLimit} remaining)
-                </Text>
-                <Icon source="chevron-down" size={18} color="#0066FF" />
-              </TouchableOpacity>
-            )}
+          <View style={styles.partsGrid}>
+            {filteredParts.map((item: any) => (
+              <PartCard
+                key={item.id}
+                item={item}
+                navigation={navigation}
+                cardWidth={productCardWidth}
+                isFavorited={favorites.some((f: any) => f.id === item.id)}
+                toggleFavorite={toggleFavorite}
+                selectedCity={selectedCity}
+              />
+            ))}
           </View>
         )}
       </ScrollView>
@@ -1456,24 +1424,5 @@ const styles = StyleSheet.create({
   modalApplyText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
-  },
-  loadMoreBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#0F1E36',
-    borderWidth: 1,
-    borderColor: '#1E3A5F',
-    borderRadius: 12,
-    paddingVertical: 14,
-    marginHorizontal: 16,
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  loadMoreText: {
-    color: '#0066FF',
-    fontSize: 13,
-    fontWeight: '700',
   },
 });
