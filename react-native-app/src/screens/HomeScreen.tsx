@@ -221,6 +221,8 @@ export default function HomeScreen({ navigation, route, user }: any) {
   const [parts, setParts] = useState<any[]>([]);
   const [topCategories, setTopCategories] = useState<any[]>([]);
   const [carBrands, setCarBrands] = useState<any[]>([]);
+  const [banners, setBanners] = useState<any[]>([]);
+  const [activeBannerIndex, setActiveBannerIndex] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -592,12 +594,6 @@ export default function HomeScreen({ navigation, route, user }: any) {
     return INITIAL_DEFAULT_BRANDS;
   }, [carBrands]);
 
-  // Display Banners
-  const displayBanners = useMemo(() => {
-    if (banners.length > 0) return banners;
-    return DEFAULT_PROMO_BANNERS;
-  }, [banners]);
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0B1220" />
@@ -685,6 +681,57 @@ export default function HomeScreen({ navigation, route, user }: any) {
           />
         }
       >
+        {/* PROMO BANNERS CAROUSEL (Real Data Only) */}
+        {banners.length > 0 && (
+          <View style={styles.bannerSection}>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e) => {
+                const index = Math.round(e.nativeEvent.contentOffset.x / (screenWidth - 32));
+                setActiveBannerIndex(index);
+              }}
+              contentContainerStyle={styles.bannerScroll}
+            >
+              {banners.map((item: any, idx: number) => (
+                <TouchableOpacity 
+                  key={item.id || idx} 
+                  style={[styles.bannerSlide, { width: screenWidth - 32 }]}
+                  activeOpacity={0.9}
+                  onPress={() => {
+                    if (item.targetCategory && item.targetCategory !== 'All') {
+                      setSelectedCategory(item.targetCategory);
+                    } else if (item.link) {
+                      // handle generic links if any
+                    }
+                  }}
+                >
+                  <Image 
+                    source={{ uri: getOptimizedImageUrl(item.image || item.imageUrl || item.photoURL, { width: 800 }) || 'https://via.placeholder.com/800x400' }}
+                    style={{ width: '100%', height: '100%', resizeMode: 'cover' }}
+                  />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Carousel Pagination Dots */}
+            {banners.length > 1 && (
+              <View style={styles.paginationRow}>
+                {banners.map((_: any, dotIdx: number) => (
+                  <View
+                    key={dotIdx}
+                    style={[
+                      styles.paginationDot,
+                      activeBannerIndex === dotIdx && styles.paginationDotActive,
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* 1. TOP CATEGORIES (4-Column Grid) */}
         <View style={styles.sectionHeaderRow}>
           <Text variant="titleMedium" style={styles.sectionTitle}>
@@ -996,6 +1043,36 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 32,
+  },
+  bannerSection: {
+    marginTop: 8,
+    paddingHorizontal: 16,
+  },
+  bannerScroll: {
+    gap: 12,
+  },
+  bannerSlide: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    height: 180,
+    backgroundColor: '#0F1E36',
+  },
+  paginationRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  paginationDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#334155',
+  },
+  paginationDotActive: {
+    width: 18,
+    backgroundColor: '#0066FF',
   },
   sectionHeaderRow: {
     flexDirection: 'row',
