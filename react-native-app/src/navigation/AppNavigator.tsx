@@ -7,7 +7,8 @@ import {
   TouchableOpacity, 
   Animated, 
   Image,
-  Vibration 
+  Vibration,
+  PanResponder
 } from 'react-native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -35,6 +36,7 @@ import RecentlyViewedScreen from '../screens/RecentlyViewedScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import HelpSupportScreen from '../screens/HelpSupportScreen';
 import LocationSelectScreen from '../screens/LocationSelectScreen';
+import EditListingScreen from '../screens/EditListingScreen';
 import { navigationRef, navigate } from './navigationRef';
 
 const Stack = createStackNavigator();
@@ -203,12 +205,14 @@ function TabNavigator() {
 }
 
 /**
- * Top In-App Floating Notification Banner Component
+ * Top In-App Floating Notification Banner with Swipe-to-Dismiss Gesture
  */
 function InAppNotificationBanner() {
   const insets = useSafeAreaInsets();
   const [activeNotification, setActiveNotification] = useState<any | null>(null);
-  const translateY = useRef(new Animated.Value(-120)).current;
+  const translateY = useRef(new Animated.Value(-160)).current;
+  const translateX = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
   const lastNotifIdRef = useRef<string>('');
   const timeoutRef = useRef<any>(null);
 
@@ -248,36 +252,117 @@ function InAppNotificationBanner() {
   const showBanner = (notif: any) => {
     setActiveNotification(notif);
     try {
-      Vibration.vibrate(100);
+      Vibration.vibrate([0, 80, 50, 80]);
     } catch (_) {}
+
+    translateY.setValue(-160);
+    translateX.setValue(0);
+    opacity.setValue(1);
 
     Animated.spring(translateY, {
       toValue: 0,
       useNativeDriver: true,
       friction: 8,
-      tension: 40,
+      tension: 45,
     }).start();
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
-      hideBanner();
+      dismissUp();
     }, 6000);
   };
 
-  const hideBanner = () => {
-    Animated.timing(translateY, {
-      toValue: -140,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(() => {
+  const dismissUp = () => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: -180,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
       setActiveNotification(null);
     });
   };
 
+  const dismissHorizontal = (direction: 'left' | 'right') => {
+    Animated.parallel([
+      Animated.timing(translateX, {
+        toValue: direction === 'left' ? -400 : 400,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
+      setActiveNotification(null);
+    });
+  };
+
+  // PanResponder to handle smooth Swipe Up and Swipe Horizontal gestures
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 5 || Math.abs(gestureState.dx) > 10;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy < 0) {
+          // Pulling up
+          translateY.setValue(gestureState.dy);
+        } else {
+          // Slight resistance pulling down
+          translateY.setValue(gestureState.dy * 0.2);
+        }
+        translateX.setValue(gestureState.dx);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        // If swiped UP significantly -> dismiss
+        if (gestureState.dy < -30 || gestureState.vy < -0.5) {
+          dismissUp();
+        } 
+        // If swiped LEFT significantly -> dismiss left
+        else if (gestureState.dx < -80 || gestureState.vx < -0.5) {
+          dismissHorizontal('left');
+        }
+        // If swiped RIGHT significantly -> dismiss right
+        else if (gestureState.dx > 80 || gestureState.vx > 0.5) {
+          dismissHorizontal('right');
+        }
+        // If it was just a quick TAP (no substantial drag) -> Open chat
+        else if (Math.abs(gestureState.dx) < 8 && Math.abs(gestureState.dy) < 8) {
+          handleBannerPress();
+        } 
+        // Otherwise restore position
+        else {
+          Animated.parallel([
+            Animated.spring(translateY, {
+              toValue: 0,
+              useNativeDriver: true,
+              friction: 7,
+            }),
+            Animated.spring(translateX, {
+              toValue: 0,
+              useNativeDriver: true,
+              friction: 7,
+            }),
+          ]).start();
+        }
+      },
+    })
+  ).current;
+
   const handleBannerPress = () => {
     if (!activeNotification) return;
     const notif = activeNotification;
-    hideBanner();
+    dismissUp();
 
     if (notif.id) {
       markNotificationAsRead(notif.id);
@@ -313,19 +398,20 @@ function InAppNotificationBanner() {
 
   return (
     <Animated.View
+      {...panResponder.panHandlers}
       style={[
         bannerStyles.bannerContainer,
         {
           top: Platform.OS === 'ios' ? insets.top + 6 : 12,
-          transform: [{ translateY }],
+          opacity,
+          transform: [
+            { translateY },
+            { translateX }
+          ],
         },
       ]}
     >
-      <TouchableOpacity
-        activeOpacity={0.9}
-        style={bannerStyles.bannerCard}
-        onPress={handleBannerPress}
-      >
+      <View style={bannerStyles.bannerCard}>
         {activeNotification.partImageUrl ? (
           <Image source={{ uri: activeNotification.partImageUrl }} style={bannerStyles.bannerThumb} />
         ) : (
@@ -349,10 +435,11 @@ function InAppNotificationBanner() {
           </Text>
         </View>
 
-        <TouchableOpacity onPress={hideBanner} style={bannerStyles.closeBtn}>
-          <Icon source="close" size={18} color="#94A3B8" />
-        </TouchableOpacity>
-      </TouchableOpacity>
+        {/* Minimalist Swipe Dismiss Indicator */}
+        <View style={bannerStyles.swipeIndicatorBox}>
+          <Icon source="chevron-up" size={16} color="#64748B" />
+        </View>
+      </View>
     </Animated.View>
   );
 }
@@ -430,9 +517,10 @@ const bannerStyles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  closeBtn: {
-    padding: 6,
-    marginLeft: 6,
+  swipeIndicatorBox: {
+    paddingLeft: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 
@@ -601,6 +689,12 @@ export default function AppNavigator({ user }: { user?: any } = {}) {
             headerShown: false,
             cardStyleInterpolator: CardStyleInterpolators.forVerticalIOS,
           }}
+        />
+
+        <Stack.Screen 
+          name="EditListing" 
+          component={EditListingScreen}
+          options={{ headerShown: false }}
         />
       </Stack.Navigator>
     </View>

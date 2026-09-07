@@ -74,10 +74,10 @@ export async function openNativeCamera(options?: Partial<CameraOptions>): Promis
     mediaType: 'photo',
     cameraType: 'back',
     quality: 0.8 as any,
-    maxWidth: 1600,
-    maxHeight: 1600,
+    maxWidth: 1280,
+    maxHeight: 1280,
     saveToPhotos: false,
-    includeBase64: true,
+    includeBase64: false,
     ...options,
   };
 
@@ -94,11 +94,6 @@ export async function openNativeCamera(options?: Partial<CameraOptions>): Promis
         return;
       }
       const asset = response.assets?.[0];
-      if (asset?.base64) {
-        const mime = asset.type || 'image/jpeg';
-        resolve(`data:${mime};base64,${asset.base64}`);
-        return;
-      }
       resolve(asset?.uri || null);
     });
   });
@@ -113,10 +108,10 @@ export async function openNativeGallery(options?: Partial<ImageLibraryOptions>):
   const libraryOptions: ImageLibraryOptions = {
     mediaType: 'photo',
     quality: 0.8 as any,
-    maxWidth: 1600,
-    maxHeight: 1600,
+    maxWidth: 1280,
+    maxHeight: 1280,
     selectionLimit: 1,
-    includeBase64: true,
+    includeBase64: false,
     ...options,
   };
 
@@ -133,11 +128,6 @@ export async function openNativeGallery(options?: Partial<ImageLibraryOptions>):
         return;
       }
       const asset = response.assets?.[0];
-      if (asset?.base64) {
-        const mime = asset.type || 'image/jpeg';
-        resolve(`data:${mime};base64,${asset.base64}`);
-        return;
-      }
       resolve(asset?.uri || null);
     });
   });

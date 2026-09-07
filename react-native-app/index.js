@@ -62,6 +62,16 @@ try {
           try {
             const notifee = require('@notifee/react-native').default;
             const AndroidImportance = require('@notifee/react-native').AndroidImportance;
+            
+            // Ensure high-priority sound channel exists
+            await notifee.createChannel({
+              id: 'auto_parts_notifications',
+              name: 'Auto Parts Messages & Alerts',
+              importance: AndroidImportance.HIGH,
+              sound: 'default',
+              vibration: true,
+            });
+
             const title = remoteMessage.notification?.title || remoteMessage.data?.title || 'Auto Parts India';
             const body = remoteMessage.notification?.body || remoteMessage.data?.body || 'New background notification';
             
@@ -70,8 +80,9 @@ try {
               body,
               data: remoteMessage.data,
               android: {
-                channelId: 'default',
+                channelId: 'auto_parts_notifications',
                 importance: AndroidImportance.HIGH,
+                sound: 'default',
                 pressAction: { id: 'default' },
               },
             });
@@ -83,8 +94,6 @@ try {
         try {
           const notifee = require('@notifee/react-native').default;
           notifee.onBackgroundEvent(async ({ type, detail }) => {
-            // Background press is handled when the app opens natively, 
-            // but we must register the handler so it doesn't crash
             console.log('[Notifee] Background event', type);
           });
         } catch (e) {}

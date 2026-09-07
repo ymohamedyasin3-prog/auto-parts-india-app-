@@ -834,7 +834,14 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
           <View style={styles.actionRow}>
             <TouchableOpacity 
               style={[styles.outlineActionBtn, { marginRight: 10 }]} 
-              onPress={() => setEditModalVisible(true)}
+              onPress={() => {
+                navigation.navigate('EditListing', {
+                  part,
+                  onUpdated: (updatedPart: any) => {
+                    setPart((prev: any) => ({ ...prev, ...updatedPart }));
+                  },
+                });
+              }}
               activeOpacity={0.85}
               disabled={isDeleting}
             >

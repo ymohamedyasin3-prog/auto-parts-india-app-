@@ -47,7 +47,7 @@ export const sendChatNotification = async (req: any, res: any) => {
       return res.json({ status: "No FCM token for user" });
     }
     
-    // Send FCM push
+    // Send FCM High Priority Push with Explicit Sound & Android Channel
     const payload = {
       token: fcmToken,
       notification: {
@@ -58,21 +58,37 @@ export const sendChatNotification = async (req: any, res: any) => {
       data: {
         screen: "ChatRoom",
         chatRoomId: chatId || "",
+        chatId: chatId || "",
         title: senderName || "New Message",
         body: text.substring(0, 100),
-        partTitle: partTitle || ""
+        partTitle: partTitle || "",
+        click_action: "FLUTTER_NOTIFICATION_CLICK"
       },
       android: {
         priority: "high" as const,
+        ttl: 3600 * 1000,
         notification: {
           sound: "default",
-          channelId: "default",
+          channelId: "auto_parts_notifications",
+          priority: "max" as const,
+          defaultSound: true,
+          defaultVibrateTimings: true,
+          visibility: "public" as const,
+        },
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: "default",
+            badge: 1,
+          },
         },
       },
     };
 
-    await getMessaging().send(payload);
-    return res.json({ status: "Sent successfully" });
+    const response = await getMessaging().send(payload);
+    console.log("[FCM Server] Notification sent successfully:", response);
+    return res.json({ status: "Sent successfully", messageId: response });
   } catch (err: any) {
     console.warn("FCM Send Warning:", err?.message || err);
     return res.json({ status: "Handled", warning: err?.message });

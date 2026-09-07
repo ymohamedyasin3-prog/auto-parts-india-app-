@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFirebaseFirestore, getCurrentUser, getFirebaseAuth } from '../services/firebase';
 import { useLanguage } from '../context/LanguageContext';
 import { EditListingModal } from '../components/EditListingModal';
+import { getOptimizedImageUrl } from '../services/cloudinary';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
@@ -420,7 +421,8 @@ export default function MyAdsScreen({ navigation, user: initialUser }: any) {
   const renderAdItem = ({ item }: { item: any }) => {
     const isSold = item.sold === true || item.status === 'sold';
     const isExpired = !isSold && now - (item.createdAt || now) > NINETY_DAYS_MS;
-    const imageUrl = item.imageUrl || (item.images && item.images[0]) || '';
+    const rawUrl = item.imageUrl || (item.images && item.images[0]) || '';
+    const imageUrl = rawUrl ? getOptimizedImageUrl(rawUrl, 300, 300) : '';
 
     return (
       <Surface style={styles.adCard} elevation={1}>
@@ -502,8 +504,15 @@ export default function MyAdsScreen({ navigation, user: initialUser }: any) {
                 style={styles.actionBtnOutline}
                 activeOpacity={0.7}
                 onPress={() => {
-                  setSelectedPartToEdit(item);
-                  setIsEditModalOpen(true);
+                  navigation.navigate('EditListing', {
+                    part: item,
+                    onUpdated: (updatedPart: any) => {
+                      setMyParts((prev) =>
+                        prev.map((p) => (p.id === updatedPart.id ? { ...p, ...updatedPart } : p))
+                      );
+                      showSuccessToast('Listing updated successfully!');
+                    },
+                  });
                 }}
               >
                 <Icon source="pencil-outline" size={15} color="#0066FF" />
@@ -540,8 +549,15 @@ export default function MyAdsScreen({ navigation, user: initialUser }: any) {
                 style={styles.actionBtnOutline}
                 activeOpacity={0.7}
                 onPress={() => {
-                  setSelectedPartToEdit(item);
-                  setIsEditModalOpen(true);
+                  navigation.navigate('EditListing', {
+                    part: item,
+                    onUpdated: (updatedPart: any) => {
+                      setMyParts((prev) =>
+                        prev.map((p) => (p.id === updatedPart.id ? { ...p, ...updatedPart } : p))
+                      );
+                      showSuccessToast('Listing updated successfully!');
+                    },
+                  });
                 }}
               >
                 <Icon source="pencil-outline" size={15} color="#0066FF" />

@@ -1,9 +1,8 @@
 import { getFirebaseFirestore as db } from './firebase';
 import firestoreModule from '@react-native-firebase/firestore';
 
-import { Platform, PermissionsAndroid, Alert } from "react-native";
+import { Platform, PermissionsAndroid } from "react-native";
 import notifee, { AndroidImportance, EventType } from "@notifee/react-native";
-
 
 import { navigate } from '../navigation/navigationRef';
 
@@ -36,23 +35,50 @@ function getMessagingSafely() {
 }
 
 /**
+ * Ensures the native Android Notification Channel with Sound and Vibration is created
+ */
+export async function ensureNotificationChannel(): Promise<void> {
+  try {
+    await notifee.createChannel({
+      id: 'auto_parts_notifications',
+      name: 'Auto Parts Messages & Alerts',
+      importance: AndroidImportance.HIGH,
+      sound: 'default',
+      vibration: true,
+      badge: true,
+    });
+  } catch (e) {
+    console.warn('[FCM] Channel creation error:', e);
+  }
+}
+
+/**
  * Request notification permissions safely on Android (including Android 13+ POST_NOTIFICATIONS) and iOS
  */
 export async function requestNotificationPermission(): Promise<boolean> {
   try {
+    // 1. Android 13+ runtime permission prompt
     if (Platform.OS === 'android' && Platform.Version >= 33) {
       try {
         const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+          {
+            title: 'Notification Permission',
+            message: 'Auto Parts needs permission to notify you instantly when buyers or sellers message you.',
+            buttonPositive: 'Allow',
+            buttonNegative: 'Deny',
+          }
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
           console.warn('[FCM] Android 13+ POST_NOTIFICATIONS permission denied');
-          return false;
         }
       } catch (pErr) {
         console.warn('[FCM] POST_NOTIFICATIONS permission error:', pErr);
       }
     }
+
+    // 2. Setup Notifee channel with sound
+    await ensureNotificationChannel();
 
     const msg = getMessagingSafely();
     if (!msg) return false;
@@ -68,9 +94,6 @@ export async function requestNotificationPermission(): Promise<boolean> {
         authStatus === 1 ||
         authStatus === 2;
 
-      if (enabled) {
-        console.log('[FCM] Notification authorization status:', authStatus);
-      }
       return Boolean(enabled);
     } catch (e) {
       console.warn('[FCM] requestPermission warning:', e);
@@ -89,11 +112,8 @@ export async function saveFcmTokenToFirestore(userId: string): Promise<string | 
   if (!userId) return null;
 
   try {
-    const hasPermission = await requestNotificationPermission();
-    if (!hasPermission) {
-      console.log('[FCM] Cannot get token without notification permission');
-      return null;
-    }
+    await ensureNotificationChannel();
+    await requestNotificationPermission();
 
     const msg = getMessagingSafely();
     if (!msg) return null;
@@ -121,28 +141,26 @@ export async function saveFcmTokenToFirestore(userId: string): Promise<string | 
 
     console.log('[FCM] Generated FCM Token:', token.substring(0, 15) + '...');
 
-    if (true) {
-      const userRef = db().collection('users').doc(userId);
-      await userRef.update({
+    const userRef = db().collection('users').doc(userId);
+    await userRef.update({
+      fcmToken: token,
+      fcmTokenLastUpdated: firestoreModule.FieldValue.serverTimestamp(),
+      platform: Platform.OS,
+    }).catch(async () => {
+      await userRef.set({
         fcmToken: token,
         fcmTokenLastUpdated: firestoreModule.FieldValue.serverTimestamp(),
         platform: Platform.OS,
-      }).catch(async () => {
-        await userRef.set({
-          fcmToken: token,
-          fcmTokenLastUpdated: firestoreModule.FieldValue.serverTimestamp(),
-          platform: Platform.OS,
-        }, { merge: true });
-      });
+      }, { merge: true });
+    });
 
-      const safeDocId = token.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
-      const tokenRef = db().collection('users').doc(userId).collection('fcmTokens').doc(safeDocId);
-      await tokenRef.set({
-        token: token,
-        createdAt: firestoreModule.FieldValue.serverTimestamp(),
-        platform: Platform.OS,
-      }, { merge: true }).catch(() => null);
-    }
+    const safeDocId = token.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
+    const tokenRef = db().collection('users').doc(userId).collection('fcmTokens').doc(safeDocId);
+    await tokenRef.set({
+      token: token,
+      createdAt: firestoreModule.FieldValue.serverTimestamp(),
+      platform: Platform.OS,
+    }, { merge: true }).catch(() => null);
 
     return token;
   } catch (error) {
@@ -164,7 +182,7 @@ export async function removeFcmTokenFromFirestore(userId: string): Promise<void>
       token = await msg.getToken().catch(() => null);
     }
 
-    if (token && true) {
+    if (token) {
       const userRef = db().collection('users').doc(userId);
       await userRef.update({
         fcmToken: null,
@@ -195,11 +213,12 @@ export function handleNotificationPayload(remoteMessage: any) {
   if (!remoteMessage || !remoteMessage.data) return;
 
   console.log('[FCM] Handling notification tap data:', remoteMessage.data);
-  const { screen, chatRoomId, partId, sellerId } = remoteMessage.data;
+  const { screen, chatRoomId, chatId, partId, sellerId } = remoteMessage.data;
 
   try {
-    if (screen === 'ChatRoom' && chatRoomId) {
-      navigate('ChatRoom', { chatRoomId });
+    const targetChatId = chatRoomId || chatId;
+    if ((screen === 'ChatRoom' || targetChatId) && targetChatId) {
+      navigate('ChatRoom', { chatId: targetChatId });
     } else if (screen === 'ProductDetail' && partId) {
       navigate('ProductDetail', { partId });
     } else if (screen === 'SellerProfile' && sellerId) {
@@ -220,27 +239,14 @@ export function handleNotificationPayload(remoteMessage: any) {
  * Initializes listeners for foreground, background, and initial (terminated) notification taps
  */
 export function setupFcmListeners(userId?: string): () => void {
-  console.log('[FCM] Setting up FCM listeners');
+  console.log('[FCM] Setting up FCM listeners with sound support');
 
   const msg = getMessagingSafely();
   if (!msg) {
     return () => {};
   }
 
-  const setupChannel = async () => {
-    try {
-      await notifee.requestPermission();
-      await notifee.createChannel({
-        id: 'default',
-        name: 'Default Notifications',
-        importance: AndroidImportance.HIGH,
-        sound: 'default',
-      });
-    } catch (e) {
-      console.warn('[FCM] Notifee channel creation error:', e);
-    }
-  };
-  setupChannel();
+  ensureNotificationChannel();
 
   const unsubscribeForeground = notifee.onForegroundEvent(({ type, detail }) => {
     if (type === EventType.PRESS && detail.notification?.data) {
@@ -255,7 +261,7 @@ export function setupFcmListeners(userId?: string): () => void {
   try {
     unsubscribeTokenRefresh = msg.onTokenRefresh(async (newToken: string) => {
       console.log('[FCM] Token refreshed:', newToken.substring(0, 15) + '...');
-      if (userId && true) {
+      if (userId) {
         const userRef = db().collection('users').doc(userId);
         await userRef.update({
           fcmToken: newToken,
@@ -280,8 +286,10 @@ export function setupFcmListeners(userId?: string): () => void {
           body,
           data: remoteMessage.data,
           android: {
-            channelId: 'default',
+            channelId: 'auto_parts_notifications',
             importance: AndroidImportance.HIGH,
+            sound: 'default',
+            vibration: true,
             pressAction: {
               id: 'default',
             },
