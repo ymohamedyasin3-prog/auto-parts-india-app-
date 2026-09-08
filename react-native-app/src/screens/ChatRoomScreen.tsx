@@ -240,7 +240,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
         unsubscribe();
       } catch (_) {}
     };
-  }, [chatId, currentUid, mergedChat?.unreadCount]);
+  }, [chatId, currentUid]);
 
   // 2. Subscribe to Partner Typing Status & Presence Real-time
   useEffect(() => {

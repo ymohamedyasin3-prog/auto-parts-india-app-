@@ -48,8 +48,8 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
         return () => {};
       }
 
-      // Query chats collection where activeUid is a participant, buyer, or seller
-      const chatsRef = db.collection('chats');
+      // Query chats collection where activeUid is in the participants array
+      const chatsRef = db.collection('chats').where('participants', 'array-contains', activeUid);
       
       const unsubscribe = chatsRef.onSnapshot(
         (snapshot: any) => {
@@ -58,16 +58,7 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
             snapshot.forEach((doc: any) => {
               const data = doc.data ? doc.data() : doc;
               const chatId = doc.id || data.id;
-              
-              const isParticipant =
-                (Array.isArray(data.participants) && data.participants.includes(activeUid)) ||
-                data.buyerId === activeUid ||
-                data.sellerId === activeUid ||
-                (typeof chatId === 'string' && chatId.includes(activeUid));
-
-              if (isParticipant) {
-                list.push({ id: chatId, ...data });
-              }
+              list.push({ id: chatId, ...data });
             });
           }
 
