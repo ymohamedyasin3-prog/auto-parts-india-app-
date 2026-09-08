@@ -15,6 +15,7 @@ import {
   Linking,
   TextInput,
   Text,
+  BackHandler,
 } from 'react-native';
 import { Icon, ActivityIndicator, Appbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -145,6 +146,17 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [selectedPreviewImage, setSelectedPreviewImage] = useState<string | null>(null);
+
+  // Unified Back Navigation Logic
+  const handleBackNavigation = useCallback(() => {
+    navigation.navigate('MainTabs', { screen: 'ChatsTab' });
+    return true; // Prevent default behavior
+  }, [navigation]);
+
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackNavigation);
+    return () => backHandler.remove();
+  }, [handleBackNavigation]);
 
   // Presence & Typing State
   const [partnerPresence, setPartnerPresence] = useState<{ online: boolean; lastSeen: number }>({
@@ -689,7 +701,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
       {/* 1. NATIVE HEADER (Single, Clean Bar) */}
       <View style={[styles.headerBar, { paddingTop: Math.max(insets.top, 10) }]}>
         {/* Back Button */}
-        <Appbar.BackAction color="#FFFFFF" onPress={() => navigation.goBack()} />
+        <Appbar.BackAction color="#FFFFFF" onPress={handleBackNavigation} />
 
         {/* Partner Info and Presence Status */}
         <TouchableOpacity

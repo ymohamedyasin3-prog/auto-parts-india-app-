@@ -358,14 +358,37 @@ async function fetchCloudCollection(collPath: string): Promise<any[]> {
 
     const parsedDocs = Array.from(fetchedMap.values());
 
-    // Update cache with the exact live state from Firestore
+    // Update cache with the exact live state from Firestore, preserving very recent local writes
+    const currentCache = cloudCache[collPath] || {};
     const liveDocMap: Record<string, any> = {};
+    
+    // 1. Keep local docs that were written in the last 15 seconds (to avoid race conditions)
+    Object.keys(currentCache).forEach((docId) => {
+      const doc = currentCache[docId];
+      if (doc._localTs && Date.now() - doc._localTs < 15000) {
+        liveDocMap[docId] = doc;
+      }
+    });
+
+    // 2. Overwrite with fetched docs
     parsedDocs.forEach((doc) => {
       liveDocMap[doc.id] = { ...doc };
     });
+
     cloudCache[collPath] = liveDocMap;
     if (cleanPath !== collPath) {
-      cloudCache[cleanPath] = liveDocMap;
+      const currentCleanCache = cloudCache[cleanPath] || {};
+      const liveCleanDocMap: Record<string, any> = {};
+      Object.keys(currentCleanCache).forEach((docId) => {
+        const doc = currentCleanCache[docId];
+        if (doc._localTs && Date.now() - doc._localTs < 15000) {
+          liveCleanDocMap[docId] = doc;
+        }
+      });
+      parsedDocs.forEach((doc) => {
+        liveCleanDocMap[doc.id] = { ...doc };
+      });
+      cloudCache[cleanPath] = liveCleanDocMap;
     }
 
     try {
@@ -392,7 +415,7 @@ async function writeCloudDoc(collPath: string, docId: string, data: any, isMerge
     const cleanPath = normalizeCollectionPath(collPath);
     if (!cloudCache[collPath]) cloudCache[collPath] = {};
     const existing = cloudCache[collPath][docId] || {};
-    const merged = isMerge ? { ...existing, ...data, id: docId } : { id: docId, ...data };
+    const merged = isMerge ? { ...existing, ...data, id: docId, _localTs: Date.now() } : { id: docId, ...data, _localTs: Date.now() };
     cloudCache[collPath][docId] = merged;
     if (cleanPath !== collPath) {
       if (!cloudCache[cleanPath]) cloudCache[cleanPath] = {};
@@ -426,7 +449,7 @@ async function writeCloudDoc(collPath: string, docId: string, data: any, isMerge
     if (cleanPath === 'spareParts') {
       pathsToWrite.push('spareParts', 'products', 'products/listings/items');
     } else {
-      pathsToWrite.push(cleanPath);
+      pathsToWrite.push(collPath);
     }
 
     // Write to Cloud Firestore endpoints
