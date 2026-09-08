@@ -104,12 +104,6 @@ export default function EditListingScreen({ navigation, route }: any) {
   const [price, setPrice] = useState(
     part.price !== undefined && part.price !== null ? String(part.price) : ''
   );
-  const [isNegotiable, setIsNegotiable] = useState<boolean>(
-    Boolean(part.negotiable || part.isNegotiable)
-  );
-  const [allIndiaShipping, setAllIndiaShipping] = useState<boolean>(
-    Boolean(part.allIndiaShipping || part.deliveryAvailable)
-  );
 
   // Specifications (Matching SellScreen)
   const [category, setCategory] = useState<string>(part.category || 'Body & Exterior');
@@ -118,9 +112,6 @@ export default function EditListingScreen({ navigation, route }: any) {
   const [model, setModel] = useState<string>(part.carModel || part.model || 'Swift');
   const [variant, setVariant] = useState<string>(part.carVariant || part.variant || '');
   const [carYear, setCarYear] = useState<string>(part.carYear ? String(part.carYear) : '2023');
-  const [oemPartNumber, setOemPartNumber] = useState<string>(
-    part.partNumber || part.oemNumber || part.oemPartNumber || ''
-  );
   const [fuelType, setFuelType] = useState<string>(part.fuelType || 'Petrol');
   const [description, setDescription] = useState<string>(part.description || '');
 
@@ -135,20 +126,109 @@ export default function EditListingScreen({ navigation, route }: any) {
 
   // Modal Sheet States
   const [activeSheet, setActiveSheet] = useState<
-    'category' | 'condition' | 'brand' | 'model' | 'variant' | 'year' | 'fuel' | 'oem' | 'description' | null
+    'category' | 'condition' | 'brand' | 'model' | 'variant' | 'year' | 'fuel' | 'description' | null
   >(null);
   const [sheetSearchQuery, setSheetSearchQuery] = useState('');
-  const [tempOemInput, setTempOemInput] = useState('');
   const [tempDescInput, setTempDescInput] = useState('');
 
   const [isSaving, setIsSaving] = useState(false);
 
-  // Dynamic Brands & Models available
+  // Dynamic Categories & Brands from Admin Panel (Firestore)
+  const [topCategories, setTopCategories] = useState<any[]>([]);
+  const [carBrands, setCarBrands] = useState<any[]>([]);
+
+  useEffect(() => {
+    try {
+      const db = getFirebaseFirestore();
+      if (!db || typeof db.collection !== 'function') return;
+
+      const unsubCats = db.collection('topCategories').onSnapshot(
+        (snap: any) => {
+          const catList: any[] = [];
+          if (snap && typeof snap.forEach === 'function') {
+            snap.forEach((doc: any) => {
+              const data = doc.data ? doc.data() : doc;
+              catList.push({ id: doc.id, ...data });
+            });
+          }
+          catList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          setTopCategories(catList);
+        },
+        (err: any) => console.warn('Categories sync error in EditListing:', err)
+      );
+
+      const unsubBrands = db.collection('carBrands').onSnapshot(
+        (snap: any) => {
+          const brandList: any[] = [];
+          if (snap && typeof snap.forEach === 'function') {
+            snap.forEach((doc: any) => {
+              const data = doc.data ? doc.data() : doc;
+              brandList.push({ id: doc.id, ...data });
+            });
+          }
+          brandList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          setCarBrands(brandList);
+        },
+        (err: any) => console.warn('Brands sync error in EditListing:', err)
+      );
+
+      return () => {
+        try { unsubCats(); } catch (_) {}
+        try { unsubBrands(); } catch (_) {}
+      };
+    } catch (_) {}
+  }, []);
+
+  // Available Categories (Admin CMS priority with HD 3D fallback)
+  const availableCategories = useMemo(() => {
+    if (topCategories && topCategories.length > 0) {
+      const activeList = topCategories.filter(
+        (c: any) => c.active !== false && c.id !== 'More' && c.name?.toLowerCase() !== 'more'
+      );
+      if (activeList.length > 0) {
+        return activeList.map((c: any) => ({
+          name: c.name || c.title,
+          imageUrl: c.imageUrl,
+          iconUrl: c.iconUrl || c.imageUrl,
+          icon: c.icon || 'car-cog',
+        }));
+      }
+    }
+    return REAL_CATEGORIES.map((catName) => ({
+      name: catName,
+      imageUrl: undefined,
+      iconUrl: undefined,
+      icon: 'car-cog',
+    }));
+  }, [topCategories]);
+
+  // Available Brands (Admin CMS priority with default fallback)
   const availableBrands = useMemo(() => {
+    if (carBrands && carBrands.length > 0) {
+      const activeList = carBrands.filter((b: any) => b.active !== false);
+      const list = activeList.map((b: any) => b.name || b.title);
+      if (brand && !list.some((x: string) => x.toLowerCase() === brand.toLowerCase())) {
+        list.unshift(brand);
+      }
+      return list;
+    }
     const list = Object.keys(DEFAULT_BRAND_MODELS);
     if (brand && !list.includes(brand)) list.unshift(brand);
     return list;
-  }, [brand]);
+  }, [carBrands, brand]);
+
+  const selectedCategoryItem = useMemo(() => {
+    return availableCategories.find(
+      (c) => c.name.toLowerCase() === category.toLowerCase()
+    );
+  }, [availableCategories, category]);
+
+  const selectedBrandCustomLogo = useMemo(() => {
+    const bDoc = carBrands.find(
+      (cb) => (cb.name || cb.title)?.toLowerCase() === brand.toLowerCase()
+    );
+    return bDoc?.imageUrl || bDoc?.logoUrl || null;
+  }, [carBrands, brand]);
 
   const availableModels = useMemo(() => {
     if (!brand) return [];
@@ -258,15 +338,8 @@ export default function EditListingScreen({ navigation, route }: any) {
         carVariant: variant.trim() || null,
         carYear: carYear.trim() || null,
         year: carYear.trim() || null,
-        partNumber: oemPartNumber.trim() || null,
-        oemNumber: oemPartNumber.trim() || null,
-        oemPartNumber: oemPartNumber.trim() || null,
         fuelType: fuelType.trim() || null,
         description: description.trim(),
-        negotiable: isNegotiable,
-        isNegotiable: isNegotiable,
-        allIndiaShipping: allIndiaShipping,
-        deliveryAvailable: allIndiaShipping,
         imageUrl: primaryCover,
         image: primaryCover,
         images: finalImages,
@@ -466,35 +539,6 @@ export default function EditListingScreen({ navigation, route }: any) {
                 </TouchableOpacity>
               )}
             </View>
-
-            {/* Quick Toggles Row */}
-            <View style={styles.togglesRow}>
-              <View style={styles.toggleItem}>
-                <Icon source="tag-outline" size={18} color="#0066FF" />
-                <Text style={styles.toggleLabel}>Price Negotiable</Text>
-                <Switch
-                  value={isNegotiable}
-                  onValueChange={setIsNegotiable}
-                  trackColor={{ false: '#CBD5E1', true: '#BFDBFE' }}
-                  thumbColor={isNegotiable ? '#0066FF' : '#FFFFFF'}
-                  style={styles.switchSmall}
-                />
-              </View>
-
-              <View style={styles.toggleDivider} />
-
-              <View style={styles.toggleItem}>
-                <Icon source="truck-fast-outline" size={18} color="#0066FF" />
-                <Text style={styles.toggleLabel}>All India Shipping</Text>
-                <Switch
-                  value={allIndiaShipping}
-                  onValueChange={setAllIndiaShipping}
-                  trackColor={{ false: '#CBD5E1', true: '#BFDBFE' }}
-                  thumbColor={allIndiaShipping ? '#0066FF' : '#FFFFFF'}
-                  style={styles.switchSmall}
-                />
-              </View>
-            </View>
           </View>
 
           {/* CARD 3: SPECIFICATIONS & FITMENT (Matching Image rows) */}
@@ -631,29 +675,6 @@ export default function EditListingScreen({ navigation, route }: any) {
 
             <View style={styles.rowDivider} />
 
-            {/* OEM Part Number Row */}
-            <TouchableOpacity
-              style={styles.specRow}
-              onPress={() => {
-                setTempOemInput(oemPartNumber);
-                setActiveSheet('oem');
-              }}
-              activeOpacity={0.6}
-            >
-              <View style={styles.specLeft}>
-                <Icon source="file-document-outline" size={20} color="#0066FF" />
-                <Text style={styles.specLabel}>OEM Part Number</Text>
-              </View>
-              <View style={styles.specRight}>
-                <Text style={styles.specValue} numberOfLines={1}>
-                  {oemPartNumber || 'Optional'}
-                </Text>
-                <Icon source="chevron-right" size={20} color="#94A3B8" />
-              </View>
-            </TouchableOpacity>
-
-            <View style={styles.rowDivider} />
-
             {/* Fuel Type Row */}
             <TouchableOpacity
               style={styles.specRow}
@@ -773,8 +794,10 @@ export default function EditListingScreen({ navigation, route }: any) {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.sheetListContent}
             >
-              {REAL_CATEGORIES.map((catName) => {
-                const isSelected = category === catName;
+              {availableCategories.map((catItem) => {
+                const catName = typeof catItem === 'string' ? catItem : catItem.name;
+                const catImageUrl = typeof catItem === 'object' ? (catItem.imageUrl || catItem.iconUrl) : undefined;
+                const isSelected = category.toLowerCase() === catName.toLowerCase();
                 return (
                   <TouchableOpacity
                     key={catName}
@@ -789,7 +812,14 @@ export default function EditListingScreen({ navigation, route }: any) {
                     }}
                   >
                     <View style={styles.catLeftGroup}>
-                      <Category3DIcon categoryName={catName} size={48} />
+                      {catImageUrl ? (
+                        <Image
+                          source={{ uri: catImageUrl }}
+                          style={{ width: 44, height: 44, borderRadius: 10, resizeMode: 'contain', backgroundColor: '#F8FAFC' }}
+                        />
+                      ) : (
+                        <Category3DIcon categoryName={catName} size={48} />
+                      )}
                       <Text
                         style={[
                           styles.catItemName,
@@ -866,6 +896,10 @@ export default function EditListingScreen({ navigation, route }: any) {
                 .filter((b) => b.toLowerCase().includes(sheetSearchQuery.toLowerCase()))
                 .map((b) => {
                   const isSelected = brand.toLowerCase() === b.toLowerCase();
+                  const brandDoc = carBrands.find(
+                    (cb) => (cb.name || cb.title)?.toLowerCase() === b.toLowerCase()
+                  );
+                  const brandLogoUrl = brandDoc?.imageUrl || brandDoc?.logoUrl;
                   return (
                     <TouchableOpacity
                       key={b}
@@ -883,7 +917,14 @@ export default function EditListingScreen({ navigation, route }: any) {
                       }}
                     >
                       <View style={styles.brandRowLeft}>
-                        <BrandLogo brand={b} size={30} />
+                        {brandLogoUrl ? (
+                          <Image
+                            source={{ uri: brandLogoUrl }}
+                            style={{ width: 30, height: 30, borderRadius: 6, resizeMode: 'contain' }}
+                          />
+                        ) : (
+                          <BrandLogo brand={b} size={30} />
+                        )}
                         <Text style={[styles.simpleRowText, isSelected && styles.simpleRowTextSelected]}>
                           {b}
                         </Text>
@@ -1223,53 +1264,7 @@ export default function EditListingScreen({ navigation, route }: any) {
       </Modal>
 
       {/* ============================================================ */}
-      {/* 8. OEM PART NUMBER EDIT MODAL */}
-      {/* ============================================================ */}
-      <Modal
-        visible={activeSheet === 'oem'}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setActiveSheet(null)}
-      >
-        <View style={styles.modalCenterBackdrop}>
-          <View style={styles.modalDialogCard}>
-            <Text style={styles.modalDialogTitle}>OEM Part Number</Text>
-            <Text style={styles.modalDialogSubtitle}>
-              Enter manufacturer part code stamped on the part (optional).
-            </Text>
-            <RNTextInput
-              style={styles.dialogTextInput}
-              placeholder="e.g. 35120-M76R00"
-              placeholderTextColor="#94A3B8"
-              value={tempOemInput}
-              onChangeText={setTempOemInput}
-              autoCapitalize="characters"
-            />
-            <View style={styles.dialogActionsRow}>
-              <TouchableOpacity
-                style={styles.dialogCancelBtn}
-                onPress={() => setActiveSheet(null)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.dialogCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.dialogSaveBtn}
-                onPress={() => {
-                  setOemPartNumber(tempOemInput.trim());
-                  setActiveSheet(null);
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.dialogSaveText}>Apply</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ============================================================ */}
-      {/* 9. DESCRIPTION EDIT MODAL */}
+      {/* 8. DESCRIPTION EDIT MODAL */}
       {/* ============================================================ */}
       <Modal
         visible={activeSheet === 'description'}

@@ -70,12 +70,6 @@ export default function EditListingModal({ part, onClose, onSave, onDelete }: Ed
   const [price, setPrice] = useState(
     part.price !== undefined && part.price !== null ? String(part.price) : ""
   );
-  const [isNegotiable, setIsNegotiable] = useState<boolean>(
-    Boolean((part as any).negotiable || (part as any).isNegotiable)
-  );
-  const [allIndiaShipping, setAllIndiaShipping] = useState<boolean>(
-    Boolean((part as any).allIndiaShipping || (part as any).deliveryAvailable)
-  );
 
   // Specifications
   const [category, setCategory] = useState(part.category || "Body & Exterior");
@@ -85,9 +79,6 @@ export default function EditListingModal({ part, onClose, onSave, onDelete }: Ed
   const [carVariant, setCarVariant] = useState(part.carVariant || "");
   const [carYear, setCarYear] = useState(
     (part as any).carYear ? String((part as any).carYear) : (part as any).year ? String((part as any).year) : "2023"
-  );
-  const [oemPartNumber, setOemPartNumber] = useState(
-    (part as any).partNumber || (part as any).oemNumber || (part as any).oemPartNumber || ""
   );
   const [fuelType, setFuelType] = useState((part as any).fuelType || "Petrol");
   const [description, setDescription] = useState(part.description || "");
@@ -117,10 +108,9 @@ export default function EditListingModal({ part, onClose, onSave, onDelete }: Ed
 
   // Active Bottom Sheet
   const [activeSheet, setActiveSheet] = useState<
-    "category" | "condition" | "brand" | "model" | "variant" | "year" | "fuel" | "oem" | "description" | null
+    "category" | "condition" | "brand" | "model" | "variant" | "year" | "fuel" | "description" | null
   >(null);
   const [sheetSearchQuery, setSheetSearchQuery] = useState("");
-  const [tempOemInput, setTempOemInput] = useState("");
   const [tempDescInput, setTempDescInput] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -271,14 +261,7 @@ export default function EditListingModal({ part, onClose, onSave, onDelete }: Ed
         ...({
           carYear: carYear.trim() || undefined,
           year: carYear.trim() || undefined,
-          partNumber: oemPartNumber.trim() || undefined,
-          oemNumber: oemPartNumber.trim() || undefined,
-          oemPartNumber: oemPartNumber.trim() || undefined,
           fuelType: fuelType.trim() || undefined,
-          isNegotiable,
-          negotiable: isNegotiable,
-          allIndiaShipping,
-          deliveryAvailable: allIndiaShipping,
         } as any),
       };
 
@@ -474,53 +457,6 @@ export default function EditListingModal({ part, onClose, onSave, onDelete }: Ed
             </div>
 
             {/* Quick Toggles Row */}
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-4">
-              <label className="flex items-center gap-2.5 cursor-pointer flex-1">
-                <Tag className="w-4 h-4 text-[#0066FF]" />
-                <span className="text-xs font-semibold text-slate-700">Price Negotiable</span>
-                <input
-                  type="checkbox"
-                  checked={isNegotiable}
-                  onChange={(e) => setIsNegotiable(e.target.checked)}
-                  className="sr-only"
-                />
-                <div
-                  className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ml-auto ${
-                    isNegotiable ? "bg-[#0066FF]" : "bg-slate-300"
-                  }`}
-                >
-                  <div
-                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                      isNegotiable ? "translate-x-4" : "translate-x-0"
-                    }`}
-                  />
-                </div>
-              </label>
-
-              <div className="w-px h-5 bg-slate-200" />
-
-              <label className="flex items-center gap-2.5 cursor-pointer flex-1">
-                <Truck className="w-4 h-4 text-[#0066FF]" />
-                <span className="text-xs font-semibold text-slate-700">All India Shipping</span>
-                <input
-                  type="checkbox"
-                  checked={allIndiaShipping}
-                  onChange={(e) => setAllIndiaShipping(e.target.checked)}
-                  className="sr-only"
-                />
-                <div
-                  className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ml-auto ${
-                    allIndiaShipping ? "bg-[#0066FF]" : "bg-slate-300"
-                  }`}
-                >
-                  <div
-                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                      allIndiaShipping ? "translate-x-4" : "translate-x-0"
-                    }`}
-                  />
-                </div>
-              </label>
-            </div>
           </div>
 
           {/* CARD 3: SPECIFICATIONS & FITMENT (Matching Demo Image rows) */}
@@ -635,27 +571,6 @@ export default function EditListingModal({ part, onClose, onSave, onDelete }: Ed
               </div>
               <div className="flex items-center gap-1 text-slate-600 shrink-0">
                 <span className="text-sm text-slate-600 font-medium">{carYear}</span>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              </div>
-            </button>
-
-            {/* OEM Part Number Row */}
-            <button
-              type="button"
-              onClick={() => {
-                setTempOemInput(oemPartNumber);
-                setActiveSheet("oem");
-              }}
-              className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50/80 transition-colors text-left"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#0066FF] flex items-center justify-center shrink-0">
-                  <FileText className="w-4 h-4" />
-                </div>
-                <span className="text-sm font-semibold text-slate-900">OEM Part Number</span>
-              </div>
-              <div className="flex items-center gap-1 text-slate-600 shrink-0">
-                <span className="text-sm text-slate-600 font-medium">{oemPartNumber || "Optional"}</span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
             </button>
@@ -1167,47 +1082,7 @@ export default function EditListingModal({ part, onClose, onSave, onDelete }: Ed
         )}
 
         {/* ========================================================= */}
-        {/* 8. OEM PART NUMBER EDIT MODAL                            */}
-        {/* ========================================================= */}
-        {activeSheet === "oem" && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/60 backdrop-blur-2xs p-4 animate-in fade-in duration-200">
-            <div className="w-full max-w-sm bg-white rounded-2xl p-5 shadow-2xl">
-              <h4 className="text-base font-bold text-slate-900 mb-1">OEM Part Number</h4>
-              <p className="text-xs text-slate-500 mb-4">
-                Enter the manufacturer part code stamped on the unit (optional).
-              </p>
-              <input
-                type="text"
-                placeholder="e.g. 35120-M76R00"
-                value={tempOemInput}
-                onChange={(e) => setTempOemInput(e.target.value.toUpperCase())}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 mb-5 focus:outline-none focus:ring-1 focus:ring-[#0066FF]"
-              />
-              <div className="flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setActiveSheet(null)}
-                  className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOemPartNumber(tempOemInput.trim());
-                    setActiveSheet(null);
-                  }}
-                  className="px-5 py-2 text-sm font-bold text-white bg-[#0066FF] hover:bg-blue-600 rounded-lg shadow transition-colors"
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* 9. DESCRIPTION EDIT MODAL                                */}
+        {/* 8. DESCRIPTION EDIT MODAL                                */}
         {/* ========================================================= */}
         {activeSheet === "description" && (
           <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/60 backdrop-blur-2xs p-4 animate-in fade-in duration-200">
