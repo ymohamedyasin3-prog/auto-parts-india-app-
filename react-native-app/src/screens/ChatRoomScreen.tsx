@@ -596,21 +596,6 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
           isMe ? styles.myMessageRow : styles.theirMessageRow,
         ]}
       >
-        {/* Partner avatar for received messages */}
-        {!isMe && (
-          <View style={styles.partnerBubbleAvatar}>
-            {effectivePartnerPhoto ? (
-              <Image source={{ uri: effectivePartnerPhoto }} style={styles.partnerSmallAvatarImg} />
-            ) : (
-              <View style={styles.partnerSmallAvatarPlaceholder}>
-                <Text style={styles.partnerSmallAvatarText}>
-                  {(partnerName || 'S').charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
-
         <View style={[styles.bubbleWrapper, isMe ? styles.myBubbleWrapper : styles.theirBubbleWrapper]}>
           <TouchableOpacity
             activeOpacity={0.88}
@@ -654,34 +639,36 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
                 {item.text}
               </Text>
             ) : null}
+
+            {/* Timestamp & Status ticks */}
+            <View style={[styles.metaRow, isMe ? styles.myMetaRow : styles.theirMetaRow]}>
+              <Text style={[styles.timeText, isMe ? styles.myTimeText : styles.theirTimeText]}>
+                {formatMessageTime(item.createdAt)}
+              </Text>
+
+              {isMe && (
+                <View style={styles.statusTickContainer}>
+                  {isPending ? (
+                    <ActivityIndicator size={10} color="#A0BEC0" />
+                  ) : isFailed ? (
+                    <TouchableOpacity
+                      onPress={() => retrySendMessage(item)}
+                      style={styles.retryBtn}
+                    >
+                      <Icon source="alert-circle" size={12} color="#EF4444" />
+                      <Text style={styles.retryText}>{translateDynamic('Retry')}</Text>
+                    </TouchableOpacity>
+                  ) : item.status === 'read' ? (
+                    <Icon source="check-all" size={14} color="#38BDF8" />
+                  ) : item.status === 'delivered' ? (
+                    <Icon source="check-all" size={14} color="#A0BEC0" />
+                  ) : (
+                    <Icon source="check" size={14} color="#A0BEC0" />
+                  )}
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
-
-          {/* Timestamp & Status ticks */}
-          <View style={[styles.metaRow, isMe ? styles.myMetaRow : styles.theirMetaRow]}>
-            <Text style={styles.timeText}>{formatMessageTime(item.createdAt)}</Text>
-
-            {isMe && (
-              <View style={styles.statusTickContainer}>
-                {isPending ? (
-                  <ActivityIndicator size={10} color="#94A3B8" />
-                ) : isFailed ? (
-                  <TouchableOpacity
-                    onPress={() => retrySendMessage(item)}
-                    style={styles.retryBtn}
-                  >
-                    <Icon source="alert-circle" size={12} color="#EF4444" />
-                    <Text style={styles.retryText}>{translateDynamic('Retry')}</Text>
-                  </TouchableOpacity>
-                ) : item.status === 'read' ? (
-                  <Icon source="check-all" size={14} color="#0066FF" />
-                ) : item.status === 'delivered' ? (
-                  <Icon source="check-all" size={14} color="#94A3B8" />
-                ) : (
-                  <Icon source="check" size={14} color="#94A3B8" />
-                )}
-              </View>
-            )}
-          </View>
         </View>
       </View>
     );
@@ -774,40 +761,38 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
         </View>
       </View>
 
-      {/* 2. COMPACT FLOATING INQUIRY CARD */}
+      {/* 2. OLX STYLE FLUSH PRODUCT AD BANNER */}
       {part ? (
-        <View style={styles.productBannerWrap}>
-          <TouchableOpacity
-            style={styles.productBannerCard}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('ProductDetail', { part })}
-          >
-            <Image
-              source={{
-                uri:
-                  part.imageUrl ||
-                  part.partImageUrl ||
-                  'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&q=80&w=200',
-              }}
-              style={styles.productBannerImage}
-            />
-            <View style={styles.productBannerInfo}>
-              <Text style={styles.inquiryLabel}>
-                {translateDynamic('INQUIRY ITEM')}
-              </Text>
-              <Text numberOfLines={1} style={styles.productBannerTitle}>
-                {part.title || part.partTitle || 'Auto Spare Part'}
-              </Text>
-              <Text style={styles.productBannerPrice}>
-                {formatPrice(Number(part.price || part.partPrice) || 0)}
-              </Text>
-            </View>
-            <View style={styles.viewPartBtn}>
-              <Text style={styles.viewPartBtnText}>{translateDynamic('View')}</Text>
-              <Icon source="chevron-right" size={14} color="#0066FF" />
-            </View>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.productBannerCard}
+          activeOpacity={0.88}
+          onPress={() => navigation.navigate('ProductDetail', { part })}
+        >
+          <Image
+            source={{
+              uri:
+                part.imageUrl ||
+                part.partImageUrl ||
+                'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&q=80&w=200',
+            }}
+            style={styles.productBannerImage}
+          />
+          <View style={styles.productBannerInfo}>
+            <Text style={styles.inquiryLabel}>
+              {translateDynamic('INQUIRY ITEM')}
+            </Text>
+            <Text numberOfLines={1} style={styles.productBannerTitle}>
+              {part.title || part.partTitle || 'Auto Spare Part'}
+            </Text>
+            <Text style={styles.productBannerPrice}>
+              {formatPrice(Number(part.price || part.partPrice) || 0)}
+            </Text>
+          </View>
+          <View style={styles.viewPartBtn}>
+            <Text style={styles.viewPartBtnText}>{translateDynamic('VIEW')}</Text>
+            <Icon source="chevron-right" size={14} color="#002F34" />
+          </View>
+        </TouchableOpacity>
       ) : null}
 
       {/* 3. MESSAGE FEED + COMPOSER */}
@@ -892,7 +877,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
             disabled={isUploadingImage || isSending}
             activeOpacity={0.7}
           >
-            <Icon source="camera-outline" size={22} color="#64748B" />
+            <Icon source="camera-outline" size={22} color="#002F34" />
           </TouchableOpacity>
 
           {/* Direct Gallery Button */}
@@ -902,7 +887,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
             disabled={isUploadingImage || isSending}
             activeOpacity={0.7}
           >
-            <Icon source="image-outline" size={22} color="#64748B" />
+            <Icon source="image-outline" size={22} color="#002F34" />
           </TouchableOpacity>
 
           {/* Native Text Input */}
@@ -912,7 +897,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
               value={inputText}
               onChangeText={handleInputChange}
               style={styles.nativeInput}
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor="#7C8B96"
               multiline
               maxLength={1000}
             />
@@ -974,19 +959,19 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
 const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F2F4F5',
   },
   contentFlex: {
     flex: 1,
   },
   headerBar: {
-    backgroundColor: '#0B1220',
+    backgroundColor: '#002F34',
     paddingBottom: 12,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#1E3A5F',
+    borderBottomColor: '#002226',
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1012,17 +997,17 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     borderWidth: 1.5,
-    borderColor: '#38BDF8',
+    borderColor: '#00A599',
   },
   partnerHeaderAvatarPlaceholder: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#0066FF',
+    backgroundColor: '#00A599',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#38BDF8',
+    borderColor: '#002F34',
   },
   partnerHeaderAvatarInitial: {
     color: '#FFFFFF',
@@ -1037,7 +1022,7 @@ const styles = StyleSheet.create({
     height: 11,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#0F172A',
+    borderColor: '#002F34',
   },
   presenceOnline: {
     backgroundColor: '#10B981',
@@ -1060,15 +1045,15 @@ const styles = StyleSheet.create({
     maxWidth: '75%',
   },
   partnerRoleBadge: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    backgroundColor: 'rgba(0, 165, 153, 0.25)',
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 4,
     borderWidth: 0.5,
-    borderColor: 'rgba(56, 189, 248, 0.3)',
+    borderColor: 'rgba(0, 165, 153, 0.5)',
   },
   partnerRoleBadgeText: {
-    color: '#38BDF8',
+    color: '#2DD4BF',
     fontSize: 9,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -1077,7 +1062,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   typingStatusText: {
-    color: '#38BDF8',
+    color: '#2DD4BF',
     fontSize: 11,
     fontWeight: '700',
   },
@@ -1113,86 +1098,85 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#0F1E36',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderWidth: 1,
-    borderColor: '#1E3A5F',
+    borderColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  productBannerWrap: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 2,
-    backgroundColor: '#F8FAFC',
   },
   productBannerCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    padding: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 2,
-    elevation: 1,
   },
   productBannerImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-    marginRight: 10,
+    width: 50,
+    height: 50,
+    borderRadius: 6,
+    backgroundColor: '#F2F4F5',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   productBannerInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
   inquiryLabel: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#0066FF',
+    color: '#002F34',
+    opacity: 0.6,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
   productBannerTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#0F172A',
-    marginTop: 1,
+    color: '#002F34',
+    marginTop: 2,
   },
   productBannerPrice: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '800',
-    color: '#0F172A',
-    marginTop: 1,
+    color: '#002F34',
+    marginTop: 2,
   },
   viewPartBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#F2F4F5',
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingVertical: 6,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#DBEAFE',
-    gap: 2,
+    borderColor: '#D8DFE2',
+    gap: 3,
   },
   viewPartBtnText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#0066FF',
+    color: '#002F34',
   },
   messageListContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     flexGrow: 1,
+    backgroundColor: '#F2F4F5',
   },
   messageRow: {
-    marginVertical: 3,
+    marginVertical: 4,
     flexDirection: 'row',
-    maxWidth: '85%',
+    maxWidth: '82%',
   },
   myMessageRow: {
     alignSelf: 'flex-end',
@@ -1200,29 +1184,6 @@ const styles = StyleSheet.create({
   },
   theirMessageRow: {
     alignSelf: 'flex-start',
-  },
-  partnerBubbleAvatar: {
-    marginRight: 6,
-    alignSelf: 'flex-end',
-    marginBottom: 14,
-  },
-  partnerSmallAvatarImg: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-  },
-  partnerSmallAvatarPlaceholder: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#0066FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  partnerSmallAvatarText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
   },
   bubbleWrapper: {
     maxWidth: '100%',
@@ -1234,9 +1195,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   bubbleBox: {
-    paddingVertical: 9,
-    paddingHorizontal: 13,
-    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 14,
     elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -1244,18 +1205,18 @@ const styles = StyleSheet.create({
     shadowRadius: 1,
   },
   myBubble: {
-    backgroundColor: '#0066FF',
-    borderBottomRightRadius: 3,
+    backgroundColor: '#002F34',
+    borderTopRightRadius: 2,
   },
   failedBubble: {
     backgroundColor: '#EF4444',
-    borderBottomRightRadius: 3,
+    borderTopRightRadius: 2,
   },
   theirBubble: {
     backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 3,
+    borderTopLeftRadius: 2,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#E5E7EB',
   },
   imageAttachmentContainer: {
     borderRadius: 10,
@@ -1278,21 +1239,21 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 14,
-    lineHeight: 19,
+    lineHeight: 20,
   },
   myMessageText: {
     color: '#FFFFFF',
-    fontWeight: '500',
+    fontWeight: '400',
   },
   theirMessageText: {
-    color: '#0F172A',
-    fontWeight: '500',
+    color: '#002F34',
+    fontWeight: '400',
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
-    paddingHorizontal: 4,
+    marginTop: 3,
+    paddingHorizontal: 2,
     gap: 4,
   },
   myMetaRow: {
@@ -1303,8 +1264,13 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 10,
-    color: '#94A3B8',
     fontWeight: '500',
+  },
+  myTimeText: {
+    color: '#A0BEC0',
+  },
+  theirTimeText: {
+    color: '#7C8B96',
   },
   statusTickContainer: {
     marginLeft: 2,
@@ -1325,8 +1291,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 14,
+    borderTopLeftRadius: 2,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#E5E7EB',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -1334,17 +1301,18 @@ const styles = StyleSheet.create({
   },
   typingBubbleText: {
     fontSize: 11,
-    color: '#64748B',
+    color: '#7C8B96',
     fontWeight: '600',
   },
   uploadingImageBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#E6F4F1',
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 14,
+    borderTopRightRadius: 2,
     borderWidth: 1,
-    borderColor: '#DBEAFE',
+    borderColor: '#00A599',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -1352,7 +1320,7 @@ const styles = StyleSheet.create({
   },
   uploadingImageText: {
     fontSize: 11,
-    color: '#0066FF',
+    color: '#002F34',
     fontWeight: '700',
   },
   emptyFeedContainer: {
@@ -1366,7 +1334,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#E6F4F1',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
@@ -1374,26 +1342,26 @@ const styles = StyleSheet.create({
   emptyFeedTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#002F34',
     textAlign: 'center',
   },
   emptyFeedSub: {
     fontSize: 13,
-    color: '#64748B',
+    color: '#7C8B96',
     textAlign: 'center',
     marginTop: 6,
     lineHeight: 18,
   },
   quickRepliesBar: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    paddingVertical: 6,
+    borderTopColor: '#E5E7EB',
+    paddingVertical: 8,
   },
   quickRepliesScroll: {
     paddingHorizontal: 12,
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   zapIconContainer: {
     paddingRight: 2,
@@ -1401,10 +1369,10 @@ const styles = StyleSheet.create({
   quickReplyChip: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 18,
+    borderColor: '#D8DFE2',
+    borderRadius: 20,
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
@@ -1412,41 +1380,42 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   quickReplyChipText: {
-    color: '#1E40AF',
+    color: '#002F34',
     fontSize: 12,
     fontWeight: '600',
   },
   composerContainer: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    paddingHorizontal: 8,
+    borderTopColor: '#E5E7EB',
+    paddingHorizontal: 10,
     paddingTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   mediaIconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F2F4F5',
     justifyContent: 'center',
     alignItems: 'center',
   },
   inputBubbleWrap: {
     flex: 1,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 20,
+    backgroundColor: '#F2F4F5',
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 12,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 14,
     paddingVertical: Platform.OS === 'ios' ? 8 : 4,
     maxHeight: 100,
     justifyContent: 'center',
   },
   nativeInput: {
     fontSize: 14,
-    color: '#0F172A',
+    color: '#002F34',
     padding: 0,
     margin: 0,
   },
@@ -1458,15 +1427,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendButtonActive: {
-    backgroundColor: '#0066FF',
-    shadowColor: '#0066FF',
+    backgroundColor: '#002F34',
+    shadowColor: '#002F34',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 3,
   },
   sendButtonDisabled: {
-    backgroundColor: '#CBD5E1',
+    backgroundColor: '#D8DFE2',
   },
   imageModalContainer: {
     flex: 1,

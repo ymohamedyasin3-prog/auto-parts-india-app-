@@ -2225,11 +2225,12 @@ export async function sendChatMessage(
       const chatDoc = await getDoc(chatDocRef);
       
       // If chat document does not exist, initialize it with metadata
+      const rawParticipants = (chatMeta as any)?.participants;
       const participantsList = Array.from(new Set([
         chatMeta?.buyerId, 
         chatMeta?.sellerId, 
         senderId,
-        ...(Array.isArray(chatMeta?.participants) ? chatMeta.participants : [])
+        ...(Array.isArray(rawParticipants) ? rawParticipants : [])
       ].filter(Boolean)));
 
       if (!chatDoc.exists()) {
