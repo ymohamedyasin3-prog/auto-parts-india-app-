@@ -96,6 +96,16 @@ export const AdminTaxonomyCMS: React.FC = () => {
   const [selectedLocationIndex, setSelectedLocationIndex] = useState<number | null>(null);
   const [newDistrictName, setNewDistrictName] = useState('');
 
+  // Track expanded state for locations with > 30 districts
+  const [expandedLocations, setExpandedLocations] = useState<Record<string, boolean>>({});
+
+  const toggleExpandLocation = (stateName: string) => {
+    setExpandedLocations((prev) => ({
+      ...prev,
+      [stateName]: !prev[stateName],
+    }));
+  };
+
   useEffect(() => {
     fetchTaxonomy();
   }, []);
@@ -315,6 +325,71 @@ export const AdminTaxonomyCMS: React.FC = () => {
     setCategories(updated);
   };
 
+  const syncLocationsToCloud = async (updatedLocs: { state: string; districts: string[] }[]) => {
+    try {
+      const db = getFirestoreInstance();
+      if (!db) return;
+
+      const allLocs: string[] = [];
+      const stateList: string[] = [];
+      const distMap: Record<string, string[]> = {};
+
+      updatedLocs.forEach((loc) => {
+        if (loc.state && loc.state.trim()) {
+          const s = loc.state.trim();
+          allLocs.push(s);
+          stateList.push(s);
+          distMap[s] = loc.districts || [];
+        }
+        if (Array.isArray(loc.districts)) {
+          loc.districts.forEach((d) => {
+            if (d && d.trim()) allLocs.push(d.trim());
+          });
+        }
+      });
+      const uniqueLocs = Array.from(new Set(allLocs));
+
+      await db.collection('taxonomy').doc('data').set(
+        {
+          locations: updatedLocs,
+          updatedAt: Date.now(),
+        },
+        { merge: true }
+      );
+
+      await db.collection('config').doc('locations').set(
+        {
+          list: uniqueLocs,
+          updatedAt: Date.now(),
+        },
+        { merge: true }
+      );
+
+      await db.collection('taxonomy').doc('states').set(
+        {
+          list: stateList,
+          updatedAt: Date.now(),
+        },
+        { merge: true }
+      );
+
+      await db.collection('taxonomy').doc('districts').set(
+        {
+          map: distMap,
+          updatedAt: Date.now(),
+        },
+        { merge: true }
+      );
+
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('config_locations', JSON.stringify(uniqueLocs));
+        window.localStorage.setItem('taxonomy_locations', JSON.stringify(updatedLocs));
+      }
+    } catch (e) {
+      console.warn('[AdminTaxonomyCMS] auto-sync error:', e);
+    }
+  };
+
   const handleAddLocation = () => {
     if (!newStateName.trim()) {
       Alert.alert('Error', 'State name is required');
@@ -325,10 +400,12 @@ export const AdminTaxonomyCMS: React.FC = () => {
       .map((d) => d.trim())
       .filter(Boolean);
 
-    setLocations([...locations, { state: newStateName.trim(), districts: distArray }]);
+    const updated = [...locations, { state: newStateName.trim(), districts: distArray }];
+    setLocations(updated);
     setNewStateName('');
     setNewDistricts('');
     setLocationModalVisible(false);
+    syncLocationsToCloud(updated);
   };
 
   const handleDeleteLocation = (index: number) => {
@@ -341,6 +418,7 @@ export const AdminTaxonomyCMS: React.FC = () => {
           const updated = [...locations];
           updated.splice(index, 1);
           setLocations(updated);
+          syncLocationsToCloud(updated);
         },
       },
     ]);
@@ -352,6 +430,7 @@ export const AdminTaxonomyCMS: React.FC = () => {
     if (!updated[selectedLocationIndex].districts.includes(newDistrictName.trim())) {
       updated[selectedLocationIndex].districts.push(newDistrictName.trim());
       setLocations(updated);
+      syncLocationsToCloud(updated);
     }
     setNewDistrictName('');
     setDistrictModalVisible(false);
@@ -361,6 +440,7 @@ export const AdminTaxonomyCMS: React.FC = () => {
     const updated = [...locations];
     updated[locIndex].districts = updated[locIndex].districts.filter((d) => d !== districtName);
     setLocations(updated);
+    syncLocationsToCloud(updated);
   };
 
   return (
@@ -561,9 +641,15 @@ export const AdminTaxonomyCMS: React.FC = () => {
                     <View style={styles.brandTitleRow}>
                       <IconButton icon="map-marker-outline" size={20} iconColor="#34D399" style={{ margin: 0 }} />
                       <Text style={styles.cmsCardTitle}>{st.state}</Text>
-                      <View style={styles.countChip}>
-                        <Text style={styles.countChipText}>{st.districts.length} districts</Text>
-                      </View>
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => toggleExpandLocation(st.state)}
+                        style={styles.countChip}
+                      >
+                        <Text style={styles.countChipText}>
+                          {st.districts.length} districts {expandedLocations[st.state] ? '▲' : '▼'}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                     <View style={{ flexDirection: 'row' }}>
                       <IconButton
@@ -585,7 +671,7 @@ export const AdminTaxonomyCMS: React.FC = () => {
                   </View>
 
                   <View style={styles.chipsWrap}>
-                    {st.districts.slice(0, 30).map((d) => (
+                    {(expandedLocations[st.state] ? st.districts : st.districts.slice(0, 30)).map((d) => (
                       <Chip
                         key={d}
                         style={styles.modelChip}
@@ -596,9 +682,25 @@ export const AdminTaxonomyCMS: React.FC = () => {
                       </Chip>
                     ))}
                     {st.districts.length > 30 && (
-                      <View style={styles.locPillMore}>
-                        <Text style={styles.locPillMoreText}>+{st.districts.length - 30} more</Text>
-                      </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.locPillMore,
+                          expandedLocations[st.state] && styles.locPillMoreExpanded,
+                        ]}
+                        activeOpacity={0.7}
+                        onPress={() => toggleExpandLocation(st.state)}
+                      >
+                        <Text
+                          style={[
+                            styles.locPillMoreText,
+                            expandedLocations[st.state] && styles.locPillMoreTextExpanded,
+                          ]}
+                        >
+                          {expandedLocations[st.state]
+                            ? '▲ Show less'
+                            : `+${st.districts.length - 30} more ▼`}
+                        </Text>
+                      </TouchableOpacity>
                     )}
                   </View>
                 </Surface>
@@ -967,14 +1069,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#EFF6FF',
     borderColor: '#BFDBFE',
     borderWidth: 1,
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locPillMoreExpanded: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#CBD5E1',
   },
   locPillMoreText: {
     fontSize: 12,
     fontWeight: '800',
     color: '#1D4ED8',
+  },
+  locPillMoreTextExpanded: {
+    color: '#475569',
+    fontWeight: '700',
   },
   modalBackdrop: {
     flex: 1,

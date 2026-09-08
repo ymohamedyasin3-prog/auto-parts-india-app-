@@ -771,7 +771,10 @@ export default function HomeScreen({ navigation, route, user }: any) {
           {/* Brand Title & Location */}
           <View style={styles.brandTitleRow}>
             <View style={styles.brandTextCol}>
-              <Text style={styles.headerBrandTitle}>AutoParts India</Text>
+              <View style={styles.brandRow}>
+                <Text style={styles.brandAutoParts}>Auto Parts </Text>
+                <Text style={styles.brandIndia}>India</Text>
+              </View>
               {/* Location Selector */}
               <TouchableOpacity 
                 style={styles.locationButton}
@@ -1271,11 +1274,21 @@ const styles = StyleSheet.create({
   brandTextCol: {
     flex: 1,
   },
-  headerBrandTitle: {
-    color: '#FFFFFF',
-    fontWeight: '900',
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  brandAutoParts: {
     fontSize: 18,
-    letterSpacing: 0.3,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  brandIndia: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FF6B00',
+    letterSpacing: 0.2,
   },
   locationButton: {
     flexDirection: 'row',

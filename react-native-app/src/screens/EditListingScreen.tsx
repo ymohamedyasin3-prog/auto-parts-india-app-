@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,28 +9,34 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
-  FlatList,
   TextInput as RNTextInput,
   KeyboardAvoidingView,
   SafeAreaView,
   StatusBar,
+  Modal,
+  Switch,
+  Dimensions,
 } from 'react-native';
+import { Icon } from 'react-native-paper';
+import { promptImageSourceDialog } from '../services/imagePickerService';
 import {
-  TextInput,
-  Button,
-  IconButton,
-  Chip,
-  Divider,
-  Surface,
-  Icon,
-} from 'react-native-paper';
+  uploadMultipleImagesToCloudinary,
+  deleteMultipleImagesFromCloudinary,
+} from '../services/cloudinary';
+import { getFirebaseFirestore, getCurrentUser, getFirestoreInstance } from '../services/firebase';
+import { Category3DIcon } from '../components/Category3DIcon';
+import { BrandLogo } from '../components/BrandLogo';
 import {
-  promptImageSourceDialog,
-} from '../services/imagePickerService';
-import { uploadMultipleImagesToCloudinary, deleteMultipleImagesFromCloudinary } from '../services/cloudinary';
-import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
+  DEFAULT_BRAND_MODELS,
+  DEFAULT_BRAND_VARIANTS,
+  MODEL_SPECIFIC_VARIANTS,
+  DEFAULT_CATEGORY_PARTS,
+} from './SellPartScreen';
 
-const CATEGORIES = [
+const { width, height } = Dimensions.get('window');
+
+// Canonical automotive categories matching SellPartScreen & reference UI
+const REAL_CATEGORIES = [
   'Engine & Mechanical',
   'Body & Exterior',
   'Lights & Electricals',
@@ -41,27 +47,15 @@ const CATEGORIES = [
   'Exhaust & Fuel',
 ];
 
-const POPULAR_BRANDS = [
-  'Maruti Suzuki',
-  'Hyundai',
-  'Tata',
-  'Mahindra',
-  'Toyota',
-  'Honda',
-  'Kia',
-  'Volkswagen',
-  'Skoda',
-  'Ford',
-  'MG',
-  'Renault',
-  'Nissan',
-  'BMW',
-  'Mercedes-Benz',
-  'Audi',
-  'Universal',
-];
-
 const FUEL_TYPES = ['Petrol', 'Diesel', 'CNG', 'Electric', 'Hybrid', 'All / Any'];
+
+const YEARS = Array.from({ length: 27 }, (_, i) => String(2026 - i));
+
+const CONDITION_OPTIONS = [
+  { id: 'Used', label: 'Used / OEM', desc: 'Pre-owned genuine or verified spare part' },
+  { id: 'Brand New', label: 'Brand New', desc: 'Fresh in box / uninstalled original part' },
+  { id: 'Refurbished', label: 'Refurbished', desc: 'Tested, repaired and restored to working state' },
+];
 
 export default function EditListingScreen({ navigation, route }: any) {
   const part = route?.params?.part;
@@ -69,70 +63,128 @@ export default function EditListingScreen({ navigation, route }: any) {
 
   if (!part) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.safeContainer}>
         <View style={styles.errorCenter}>
           <Icon source="alert-circle-outline" size={48} color="#EF4444" />
           <Text style={styles.errorText}>No listing selected to edit.</Text>
-          <Button mode="contained" onPress={() => navigation.goBack()} style={styles.btnPrimary}>
-            Go Back
-          </Button>
+          <TouchableOpacity
+            style={styles.goBackBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.goBackBtnText}>Go Back</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Extract initial images array
-  const initialImages: string[] = [];
-  if (Array.isArray(part.images) && part.images.length > 0) {
-    part.images.forEach((img: any) => {
-      if (typeof img === 'string' && img) initialImages.push(img);
-    });
-  } else if (Array.isArray(part.imageUrls) && part.imageUrls.length > 0) {
-    part.imageUrls.forEach((img: any) => {
-      if (typeof img === 'string' && img) initialImages.push(img);
-    });
-  } else if (part.imageUrl) {
-    initialImages.push(part.imageUrl);
-  }
+  // Extract initial photos safely
+  const initialImages: string[] = useMemo(() => {
+    const arr: string[] = [];
+    if (Array.isArray(part.images) && part.images.length > 0) {
+      part.images.forEach((img: any) => {
+        if (typeof img === 'string' && img.trim()) arr.push(img.trim());
+      });
+    } else if (Array.isArray(part.imageUrls) && part.imageUrls.length > 0) {
+      part.imageUrls.forEach((img: any) => {
+        if (typeof img === 'string' && img.trim()) arr.push(img.trim());
+      });
+    } else if (part.imageUrl && typeof part.imageUrl === 'string') {
+      arr.push(part.imageUrl.trim());
+    } else if (part.image && typeof part.image === 'string') {
+      arr.push(part.image.trim());
+    }
+    return arr;
+  }, [part]);
 
-  // State
+  // Form States
   const [images, setImages] = useState<string[]>(initialImages);
   const [title, setTitle] = useState(part.title || part.name || part.partTitle || '');
-  const [price, setPrice] = useState(String(part.price || part.partPrice || ''));
-  const [category, setCategory] = useState(part.category || 'Engine & Mechanical');
-  const [brand, setBrand] = useState(part.carBrand || part.brand || 'Universal');
-  const [model, setModel] = useState(part.carModel || part.model || '');
-  const [variant, setVariant] = useState(part.carVariant || part.variant || '');
-  const [carYear, setCarYear] = useState(part.carYear ? String(part.carYear) : '');
-  const [fuelType, setFuelType] = useState(part.fuelType || 'Petrol');
-  const [condition, setCondition] = useState(part.condition || 'Used');
-  const [partNumber, setPartNumber] = useState(part.partNumber || part.oemNumber || '');
-  const [warranty, setWarranty] = useState(part.warranty || 'No Warranty');
-  const [description, setDescription] = useState(part.description || '');
-  const [negotiable, setNegotiable] = useState(Boolean(part.negotiable || part.isNegotiable));
-  const [deliveryAvailable, setDeliveryAvailable] = useState(Boolean(part.deliveryAvailable || part.allIndiaShipping));
+  const [price, setPrice] = useState(
+    part.price !== undefined && part.price !== null ? String(part.price) : ''
+  );
+  const [isNegotiable, setIsNegotiable] = useState<boolean>(
+    Boolean(part.negotiable || part.isNegotiable)
+  );
+  const [allIndiaShipping, setAllIndiaShipping] = useState<boolean>(
+    Boolean(part.allIndiaShipping || part.deliveryAvailable)
+  );
 
-  // Read-only locked fields
-  const lockedLocation = part.location || part.district || part.city || part.state || 'India';
-  const lockedPhone = part.sellerPhone || part.phone || part.contactNumber || 'Contact via In-App Chat';
+  // Specifications (Matching SellScreen)
+  const [category, setCategory] = useState<string>(part.category || 'Body & Exterior');
+  const [condition, setCondition] = useState<string>(part.condition || 'Used / OEM');
+  const [brand, setBrand] = useState<string>(part.carBrand || part.brand || 'Maruti Suzuki');
+  const [model, setModel] = useState<string>(part.carModel || part.model || 'Swift');
+  const [variant, setVariant] = useState<string>(part.carVariant || part.variant || '');
+  const [carYear, setCarYear] = useState<string>(part.carYear ? String(part.carYear) : '2023');
+  const [oemPartNumber, setOemPartNumber] = useState<string>(
+    part.partNumber || part.oemNumber || part.oemPartNumber || ''
+  );
+  const [fuelType, setFuelType] = useState<string>(part.fuelType || 'Petrol');
+  const [description, setDescription] = useState<string>(part.description || '');
+
+  // Locked Location & Contact from ad post
+  const lockedLocation =
+    part.location ||
+    (part.district && part.state ? `${part.district}, ${part.state}` : '') ||
+    part.district ||
+    part.city ||
+    part.state ||
+    'Begambur, Dindigul';
+
+  // Modal Sheet States
+  const [activeSheet, setActiveSheet] = useState<
+    'category' | 'condition' | 'brand' | 'model' | 'variant' | 'year' | 'fuel' | 'oem' | 'description' | null
+  >(null);
+  const [sheetSearchQuery, setSheetSearchQuery] = useState('');
+  const [tempOemInput, setTempOemInput] = useState('');
+  const [tempDescInput, setTempDescInput] = useState('');
 
   const [isSaving, setIsSaving] = useState(false);
 
-  // Add Photo Handler
+  // Dynamic Brands & Models available
+  const availableBrands = useMemo(() => {
+    const list = Object.keys(DEFAULT_BRAND_MODELS);
+    if (brand && !list.includes(brand)) list.unshift(brand);
+    return list;
+  }, [brand]);
+
+  const availableModels = useMemo(() => {
+    if (!brand) return [];
+    return DEFAULT_BRAND_MODELS[brand] || [];
+  }, [brand]);
+
+  const availableVariants = useMemo(() => {
+    if (!brand) return [];
+    const modelKey = `${brand} ${model}`.trim();
+    if (MODEL_SPECIFIC_VARIANTS[modelKey]) {
+      return MODEL_SPECIFIC_VARIANTS[modelKey];
+    }
+    return (
+      DEFAULT_BRAND_VARIANTS[brand] || [
+        'All Variants (Fits All)',
+        'Base Model',
+        'VXI / SX',
+        'ZXI / Top Model',
+      ]
+    );
+  }, [brand, model]);
+
+  // Handle Photo Picker
   const handleAddPhoto = async () => {
     if (images.length >= 6) {
-      Alert.alert('Limit Reached', 'You can upload a maximum of 6 photos per listing.');
+      Alert.alert('Limit Reached', 'You can upload up to 6 photos per listing.');
       return;
     }
-
     try {
       const selected: any = await promptImageSourceDialog();
-      const imgUri = typeof selected === 'string' ? selected : selected?.uri;
-      if (imgUri) {
-        setImages((prev) => [...prev, imgUri]);
+      const uri = typeof selected === 'string' ? selected : selected?.uri;
+      if (uri) {
+        setImages((prev) => (prev.length < 6 ? [...prev, uri] : prev));
       }
-    } catch (err: any) {
-      console.warn('Image picker error:', err);
+    } catch (err) {
+      console.warn('[EditListingScreen] image pick error:', err);
     }
   };
 
@@ -140,28 +192,26 @@ export default function EditListingScreen({ navigation, route }: any) {
     setImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
-  // Submit Update
+  // Submit Listing Update
   const handleSaveListing = async () => {
     if (!title.trim()) {
-      Alert.alert('Missing Title', 'Please enter a title for your spare part.');
+      Alert.alert('Title Required', 'Please enter a title for your spare part.');
       return;
     }
-
-    const numericPrice = parseFloat(price.replace(/[^0-9.]/g, ''));
-    if (isNaN(numericPrice) || numericPrice <= 0) {
-      Alert.alert('Invalid Price', 'Please enter a valid selling price in ₹.');
+    const cleanPrice = price.replace(/[^0-9.]/g, '');
+    const numPrice = parseFloat(cleanPrice);
+    if (!cleanPrice || isNaN(numPrice) || numPrice <= 0) {
+      Alert.alert('Price Required', 'Please enter a valid price in ₹.');
       return;
     }
-
     if (images.length === 0) {
-      Alert.alert('Photo Required', 'Please provide at least 1 photo of the spare part.');
+      Alert.alert('Photo Required', 'Please provide at least 1 photo for your listing.');
       return;
     }
 
     setIsSaving(true);
-
     try {
-      // 1. Separate local vs already-hosted Cloudinary images
+      // 1. Separate local URIs from remote Cloudinary URLs
       const localUris: string[] = [];
       const remoteUrls: string[] = [];
 
@@ -173,85 +223,86 @@ export default function EditListingScreen({ navigation, route }: any) {
         }
       });
 
-      // 2. Upload any newly picked local images
-      let newlyUploadedUrls: string[] = [];
+      // 2. Upload any local images to Cloudinary
+      let uploadedUrls: string[] = [];
       if (localUris.length > 0) {
-        newlyUploadedUrls = await uploadMultipleImagesToCloudinary(localUris, 'parts');
+        uploadedUrls = await uploadMultipleImagesToCloudinary(localUris, 'parts');
       }
 
-      const finalImages = [...remoteUrls, ...newlyUploadedUrls];
-      const primaryImageUrl = finalImages[0] || '';
+      const finalImages = [...remoteUrls, ...uploadedUrls];
+      const primaryCover = finalImages[0] || '';
 
-      // Clean up removed old Cloudinary images in background
-      const originalImages = (part.images || part.imageUrls || [part.imageUrl, part.image]).filter(Boolean);
-      const removedImages = originalImages.filter((oldUrl: string) => !finalImages.includes(oldUrl));
-      if (removedImages.length > 0) {
-        deleteMultipleImagesFromCloudinary(removedImages);
+      // Delete removed old Cloudinary images in background
+      const originalArr = (part.images || part.imageUrls || [part.imageUrl, part.image]).filter(
+        Boolean
+      );
+      const toDelete = originalArr.filter((oldUrl: string) => !finalImages.includes(oldUrl));
+      if (toDelete.length > 0) {
+        deleteMultipleImagesFromCloudinary(toDelete).catch(() => null);
       }
 
-      // 3. Build comprehensive sync update payload
-      const updateData = {
+      // 3. Payload with exact SellScreen fields
+      const updatePayload: Record<string, any> = {
         title: title.trim(),
         name: title.trim(),
         partTitle: title.trim(),
-        price: numericPrice,
-        partPrice: numericPrice,
-        category,
+        price: numPrice,
+        partPrice: numPrice,
+        category: category.trim(),
+        condition: condition.trim(),
         brand: brand.trim(),
         carBrand: brand.trim(),
-        finalBrand: brand.trim(),
         model: model.trim(),
         carModel: model.trim(),
-        finalModel: model.trim(),
-        variant: variant.trim(),
-        carVariant: variant.trim(),
-        carYear: carYear.trim() || undefined,
-        fuelType,
-        condition,
-        partNumber: partNumber.trim() || undefined,
-        oemNumber: partNumber.trim() || undefined,
-        warranty,
+        variant: variant.trim() || null,
+        carVariant: variant.trim() || null,
+        carYear: carYear.trim() || null,
+        year: carYear.trim() || null,
+        partNumber: oemPartNumber.trim() || null,
+        oemNumber: oemPartNumber.trim() || null,
+        oemPartNumber: oemPartNumber.trim() || null,
+        fuelType: fuelType.trim() || null,
         description: description.trim(),
-        negotiable,
-        isNegotiable: negotiable,
-        deliveryAvailable,
-        allIndiaShipping: deliveryAvailable,
-        imageUrl: primaryImageUrl,
-        image: primaryImageUrl,
+        negotiable: isNegotiable,
+        isNegotiable: isNegotiable,
+        allIndiaShipping: allIndiaShipping,
+        deliveryAvailable: allIndiaShipping,
+        imageUrl: primaryCover,
+        image: primaryCover,
         images: finalImages,
         imageUrls: finalImages,
         updatedAt: Date.now(),
       };
 
       const db = getFirebaseFirestore();
-      if (db && typeof db.collection === 'function') {
-        // Update Firestore in both spareParts and parts collections if present
-        await db.collection('spareParts').doc(part.id).set(updateData, { merge: true }).catch(() => null);
-        await db.collection('parts').doc(part.id).set(updateData, { merge: true }).catch(() => null);
+      if (db && typeof db.collection === 'function' && part?.id) {
+        await db.collection('spareParts').doc(part.id).set(updatePayload, { merge: true }).catch(() => null);
+        await db.collection('parts').doc(part.id).set(updatePayload, { merge: true }).catch(() => null);
       }
 
       if (typeof onUpdated === 'function') {
-        onUpdated({ ...part, ...updateData });
+        onUpdated({ ...part, ...updatePayload });
       }
 
-      Alert.alert('Success', 'Listing updated successfully!', [
+      Alert.alert('Saved', 'Listing updated successfully!', [
         {
           text: 'OK',
           onPress: () => navigation.goBack(),
         },
       ]);
     } catch (err: any) {
-      console.error('[EditListingScreen] Update error:', err);
-      Alert.alert('Update Failed', err?.message || 'Could not update listing. Please check your connection.');
+      console.error('[EditListingScreen] save error:', err);
+      Alert.alert('Save Failed', err?.message || 'Unable to update listing right now.');
     } finally {
       setIsSaving(false);
     }
   };
 
+  // Delete Listing Confirmation
   const handleDeleteListing = () => {
     Alert.alert(
       'Delete Listing',
-      'Are you sure you want to permanently delete this listing? It will be removed immediately.',
+      'Are you sure you want to permanently delete this listing? This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -265,18 +316,14 @@ export default function EditListingScreen({ navigation, route }: any) {
                 await db.collection('spareParts').doc(part.id).delete();
                 await db.collection('parts').doc(part.id).delete().catch(() => null);
               }
-
-              // Delete all images associated with this deleted listing from Cloudinary
-              const allListingImages = (part.images || part.imageUrls || [part.imageUrl, part.image]).filter(Boolean);
-              if (allListingImages.length > 0) {
-                deleteMultipleImagesFromCloudinary(allListingImages);
+              const oldImgs = (part.images || part.imageUrls || [part.imageUrl, part.image]).filter(
+                Boolean
+              );
+              if (oldImgs.length > 0) {
+                deleteMultipleImagesFromCloudinary(oldImgs).catch(() => null);
               }
-
               Alert.alert('Deleted', 'Listing permanently deleted.', [
-                {
-                  text: 'OK',
-                  onPress: () => navigation.goBack(),
-                },
+                { text: 'OK', onPress: () => navigation.goBack() },
               ]);
             } catch (err: any) {
               Alert.alert('Delete Failed', err?.message || 'Failed to delete listing.');
@@ -290,22 +337,24 @@ export default function EditListingScreen({ navigation, route }: any) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0B1220" />
+    <SafeAreaView style={styles.safeContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#0B132B" />
 
-      {/* TOP APP BAR */}
-      <View style={styles.headerBar}>
+      {/* TOP BAR */}
+      <View style={styles.topHeader}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          style={styles.backBtn}
+          style={styles.headerBtn}
           activeOpacity={0.7}
         >
           <Icon source="arrow-left" size={24} color="#FFFFFF" />
         </TouchableOpacity>
+
         <Text style={styles.headerTitle}>Edit Listing</Text>
+
         <TouchableOpacity
           onPress={handleDeleteListing}
-          style={styles.deleteHeaderBtn}
+          style={styles.headerBtn}
           activeOpacity={0.7}
           disabled={isSaving}
         >
@@ -314,716 +363,1483 @@ export default function EditListingScreen({ navigation, route }: any) {
       </View>
 
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={styles.flex1}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* SECTION 1: PHOTOS (Up to 6) */}
-          <Surface style={styles.cardSection} elevation={1}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={styles.titleIconRow}>
+          {/* CARD 1: PHOTOS (Up to 6) */}
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.iconTitleRow}>
                 <Icon source="camera" size={20} color="#0066FF" />
-                <Text style={styles.sectionTitle}>Listing Photos ({images.length}/6)</Text>
+                <Text style={styles.cardHeading}>Photos ({images.length}/6)</Text>
               </View>
-              <Text style={styles.helperText}>Tap photo to delete</Text>
+              <Text style={styles.cardSubheading}>Add up to 6 photos</Text>
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.photosRow}
+            >
               {images.map((imgUri, index) => (
-                <View key={index} style={styles.photoContainer}>
-                  <Image source={{ uri: imgUri }} style={styles.photoThumb} />
+                <View key={index} style={styles.photoBox}>
+                  <Image source={{ uri: imgUri }} style={styles.photoImg as any} resizeMode="cover" />
                   {index === 0 && (
-                    <View style={styles.coverBadge}>
-                      <Text style={styles.coverBadgeText}>COVER</Text>
+                    <View style={styles.coverPill}>
+                      <Text style={styles.coverPillText}>Cover</Text>
                     </View>
                   )}
                   <TouchableOpacity
-                    style={styles.deletePhotoBtn}
+                    style={styles.removePhotoBadge}
                     onPress={() => handleRemovePhoto(index)}
                     activeOpacity={0.8}
                   >
-                    <Icon source="close" size={14} color="#FFFFFF" />
+                    <Icon source="close" size={13} color="#FFFFFF" />
                   </TouchableOpacity>
                 </View>
               ))}
 
               {images.length < 6 && (
                 <TouchableOpacity
-                  style={styles.addPhotoBox}
+                  style={styles.addPhotoDashed}
                   onPress={handleAddPhoto}
-                  activeOpacity={0.8}
+                  activeOpacity={0.7}
                 >
-                  <Icon source="camera-plus-outline" size={28} color="#0066FF" />
+                  <Icon source="camera" size={26} color="#0066FF" />
                   <Text style={styles.addPhotoText}>Add Photo</Text>
                 </TouchableOpacity>
               )}
             </ScrollView>
-          </Surface>
+          </View>
 
-          {/* SECTION 2: ESSENTIAL INFORMATION */}
-          <Surface style={styles.cardSection} elevation={1}>
-            <View style={styles.titleIconRow}>
-              <Icon source="car-cog" size={20} color="#0066FF" />
-              <Text style={styles.sectionTitle}>Basic Details</Text>
+          {/* CARD 2: TITLE & PRICE */}
+          <View style={styles.card}>
+            {/* Title Field */}
+            <View style={styles.fieldHeaderRow}>
+              <Icon source="pencil-box-outline" size={20} color="#0066FF" />
+              <Text style={styles.fieldLabel}>Title</Text>
+            </View>
+            <View style={styles.inputContainer}>
+              <RNTextInput
+                style={styles.textInput}
+                value={title}
+                onChangeText={setTitle}
+                placeholder="e.g. Maruti Suzuki Swift Headlight Assembly"
+                placeholderTextColor="#94A3B8"
+              />
+              {title.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setTitle('')}
+                  style={styles.clearBtn}
+                  activeOpacity={0.7}
+                >
+                  <Icon source="close-circle" size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
             </View>
 
-            {/* Title */}
-            <Text style={styles.fieldLabel}>Listing Title *</Text>
-            <TextInput
-              mode="outlined"
-              value={title}
-              onChangeText={setTitle}
-              placeholder="e.g. OEM LED Headlight Assembly Right Side"
-              outlineColor="#334155"
-              activeOutlineColor="#0066FF"
-              textColor="#FFFFFF"
-              style={styles.input}
-              theme={{ colors: { background: '#1E293B' } }}
-            />
+            {/* Price Field */}
+            <View style={[styles.fieldHeaderRow, { marginTop: 14 }]}>
+              <Icon source="currency-inr" size={20} color="#0066FF" />
+              <Text style={styles.fieldLabel}>Price ( ₹ )</Text>
+            </View>
+            <View style={styles.inputContainer}>
+              <RNTextInput
+                style={styles.textInput}
+                value={price}
+                onChangeText={setPrice}
+                keyboardType="numeric"
+                placeholder="e.g. 3500"
+                placeholderTextColor="#94A3B8"
+              />
+              {price.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setPrice('')}
+                  style={styles.clearBtn}
+                  activeOpacity={0.7}
+                >
+                  <Icon source="close-circle" size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+            </View>
 
-            {/* Price */}
-            <Text style={styles.fieldLabel}>Selling Price (₹) *</Text>
-            <TextInput
-              mode="outlined"
-              value={price}
-              onChangeText={setPrice}
-              keyboardType="numeric"
-              placeholder="e.g. 4500"
-              outlineColor="#334155"
-              activeOutlineColor="#0066FF"
-              textColor="#FFFFFF"
-              style={styles.input}
-              theme={{ colors: { background: '#1E293B' } }}
-            />
+            {/* Quick Toggles Row */}
+            <View style={styles.togglesRow}>
+              <View style={styles.toggleItem}>
+                <Icon source="tag-outline" size={18} color="#0066FF" />
+                <Text style={styles.toggleLabel}>Price Negotiable</Text>
+                <Switch
+                  value={isNegotiable}
+                  onValueChange={setIsNegotiable}
+                  trackColor={{ false: '#CBD5E1', true: '#BFDBFE' }}
+                  thumbColor={isNegotiable ? '#0066FF' : '#FFFFFF'}
+                  style={styles.switchSmall}
+                />
+              </View>
 
-            {/* Negotiable & Delivery Toggles */}
-            <View style={styles.toggleRow}>
-              <TouchableOpacity
-                style={[styles.togglePill, negotiable && styles.togglePillActive]}
-                onPress={() => setNegotiable(!negotiable)}
-                activeOpacity={0.8}
+              <View style={styles.toggleDivider} />
+
+              <View style={styles.toggleItem}>
+                <Icon source="truck-fast-outline" size={18} color="#0066FF" />
+                <Text style={styles.toggleLabel}>All India Shipping</Text>
+                <Switch
+                  value={allIndiaShipping}
+                  onValueChange={setAllIndiaShipping}
+                  trackColor={{ false: '#CBD5E1', true: '#BFDBFE' }}
+                  thumbColor={allIndiaShipping ? '#0066FF' : '#FFFFFF'}
+                  style={styles.switchSmall}
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* CARD 3: SPECIFICATIONS & FITMENT (Matching Image rows) */}
+          <View style={styles.card}>
+            {/* Category Row */}
+            <TouchableOpacity
+              style={styles.specRow}
+              onPress={() => {
+                setSheetSearchQuery('');
+                setActiveSheet('category');
+              }}
+              activeOpacity={0.6}
+            >
+              <View style={styles.specLeft}>
+                <Icon source="cog" size={20} color="#F97316" />
+                <Text style={styles.specLabel}>Category</Text>
+              </View>
+              <View style={styles.specRight}>
+                <Text style={styles.specValue} numberOfLines={1}>
+                  {category}
+                </Text>
+                <Icon source="chevron-right" size={20} color="#94A3B8" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.rowDivider} />
+
+            {/* Condition Row */}
+            <TouchableOpacity
+              style={styles.specRow}
+              onPress={() => setActiveSheet('condition')}
+              activeOpacity={0.6}
+            >
+              <View style={styles.specLeft}>
+                <Icon source="package-variant-closed" size={20} color="#F97316" />
+                <Text style={styles.specLabel}>Condition</Text>
+              </View>
+              <View style={styles.specRight}>
+                <Text style={styles.specValue} numberOfLines={1}>
+                  {condition}
+                </Text>
+                <Icon source="chevron-right" size={20} color="#94A3B8" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.rowDivider} />
+
+            {/* Car Brand / Make Row */}
+            <TouchableOpacity
+              style={styles.specRow}
+              onPress={() => {
+                setSheetSearchQuery('');
+                setActiveSheet('brand');
+              }}
+              activeOpacity={0.6}
+            >
+              <View style={styles.specLeft}>
+                <Icon source="car" size={20} color="#0066FF" />
+                <Text style={styles.specLabel}>Car Brand / Make</Text>
+              </View>
+              <View style={styles.specRight}>
+                <Text style={styles.specValue} numberOfLines={1}>
+                  {brand}
+                </Text>
+                <Icon source="chevron-right" size={20} color="#94A3B8" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.rowDivider} />
+
+            {/* Model Row */}
+            <TouchableOpacity
+              style={styles.specRow}
+              onPress={() => {
+                setSheetSearchQuery('');
+                setActiveSheet('model');
+              }}
+              activeOpacity={0.6}
+            >
+              <View style={styles.specLeft}>
+                <Icon source="car-sports" size={20} color="#0066FF" />
+                <Text style={styles.specLabel}>Model</Text>
+              </View>
+              <View style={styles.specRight}>
+                <Text style={styles.specValue} numberOfLines={1}>
+                  {model || 'Select Model'}
+                </Text>
+                <Icon source="chevron-right" size={20} color="#94A3B8" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.rowDivider} />
+
+            {/* Variant (Optional) Row */}
+            <TouchableOpacity
+              style={styles.specRow}
+              onPress={() => {
+                setSheetSearchQuery('');
+                setActiveSheet('variant');
+              }}
+              activeOpacity={0.6}
+            >
+              <View style={styles.specLeft}>
+                <Icon source="format-list-bulleted" size={20} color="#0066FF" />
+                <Text style={styles.specLabel}>Variant (Optional)</Text>
+              </View>
+              <View style={styles.specRight}>
+                <Text style={styles.specValue} numberOfLines={1}>
+                  {variant || 'Optional'}
+                </Text>
+                <Icon source="chevron-right" size={20} color="#94A3B8" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.rowDivider} />
+
+            {/* Manufacturing Year Row */}
+            <TouchableOpacity
+              style={styles.specRow}
+              onPress={() => setActiveSheet('year')}
+              activeOpacity={0.6}
+            >
+              <View style={styles.specLeft}>
+                <Icon source="calendar-month-outline" size={20} color="#0066FF" />
+                <Text style={styles.specLabel}>Manufacturing Year</Text>
+              </View>
+              <View style={styles.specRight}>
+                <Text style={styles.specValue} numberOfLines={1}>
+                  {carYear}
+                </Text>
+                <Icon source="chevron-right" size={20} color="#94A3B8" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.rowDivider} />
+
+            {/* OEM Part Number Row */}
+            <TouchableOpacity
+              style={styles.specRow}
+              onPress={() => {
+                setTempOemInput(oemPartNumber);
+                setActiveSheet('oem');
+              }}
+              activeOpacity={0.6}
+            >
+              <View style={styles.specLeft}>
+                <Icon source="file-document-outline" size={20} color="#0066FF" />
+                <Text style={styles.specLabel}>OEM Part Number</Text>
+              </View>
+              <View style={styles.specRight}>
+                <Text style={styles.specValue} numberOfLines={1}>
+                  {oemPartNumber || 'Optional'}
+                </Text>
+                <Icon source="chevron-right" size={20} color="#94A3B8" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.rowDivider} />
+
+            {/* Fuel Type Row */}
+            <TouchableOpacity
+              style={styles.specRow}
+              onPress={() => setActiveSheet('fuel')}
+              activeOpacity={0.6}
+            >
+              <View style={styles.specLeft}>
+                <Icon source="water-outline" size={20} color="#0066FF" />
+                <Text style={styles.specLabel}>Fuel Type</Text>
+              </View>
+              <View style={styles.specRight}>
+                <Text style={styles.specValue} numberOfLines={1}>
+                  {fuelType}
+                </Text>
+                <Icon source="chevron-right" size={20} color="#94A3B8" />
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {/* CARD 4: DESCRIPTION */}
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.descCardHeader}
+              onPress={() => {
+                setTempDescInput(description);
+                setActiveSheet('description');
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.specLeft}>
+                <Icon source="text-box-outline" size={20} color="#0066FF" />
+                <Text style={styles.specLabel}>Description</Text>
+              </View>
+              <Icon source="chevron-right" size={20} color="#94A3B8" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                setTempDescInput(description);
+                setActiveSheet('description');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.descPreviewText,
+                  !description && { color: '#94A3B8', fontStyle: 'italic' },
+                ]}
+                numberOfLines={3}
               >
-                <Icon source={negotiable ? "check-circle" : "checkbox-blank-circle-outline"} size={18} color={negotiable ? "#FFFFFF" : "#94A3B8"} />
-                <Text style={[styles.toggleText, negotiable && styles.toggleTextActive]}>Price Negotiable</Text>
-              </TouchableOpacity>
+                {description || 'Tap to edit description...'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-              <TouchableOpacity
-                style={[styles.togglePill, deliveryAvailable && styles.togglePillActive]}
-                onPress={() => setDeliveryAvailable(!deliveryAvailable)}
-                activeOpacity={0.8}
-              >
-                <Icon source={deliveryAvailable ? "truck-fast" : "truck-outline"} size={18} color={deliveryAvailable ? "#FFFFFF" : "#94A3B8"} />
-                <Text style={[styles.toggleText, deliveryAvailable && styles.toggleTextActive]}>All India Shipping</Text>
-              </TouchableOpacity>
-            </View>
-          </Surface>
-
-          {/* SECTION 3: CATEGORY & CONDITION */}
-          <Surface style={styles.cardSection} elevation={1}>
-            <View style={styles.titleIconRow}>
-              <Icon source="shape" size={20} color="#0066FF" />
-              <Text style={styles.sectionTitle}>Category & Condition</Text>
-            </View>
-
-            {/* Category Chips */}
-            <Text style={styles.fieldLabel}>Category</Text>
-            <View style={styles.chipWrap}>
-              {CATEGORIES.map((cat) => {
-                const selected = category === cat;
-                return (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[styles.choiceChip, selected && styles.choiceChipActive]}
-                    onPress={() => setCategory(cat)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.choiceChipText, selected && styles.choiceChipTextActive]}>
-                      {cat}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Condition Chips */}
-            <Text style={[styles.fieldLabel, { marginTop: 14 }]}>Condition</Text>
-            <View style={styles.conditionRow}>
-              {['Brand New', 'Used / OEM', 'Refurbished'].map((cond) => {
-                const selected = condition.toLowerCase() === cond.toLowerCase();
-                return (
-                  <TouchableOpacity
-                    key={cond}
-                    style={[styles.condPill, selected && styles.condPillActive]}
-                    onPress={() => setCondition(cond)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.condPillText, selected && styles.condPillTextActive]}>
-                      {cond}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </Surface>
-
-          {/* SECTION 4: VEHICLE FITMENT (BRAND, MODEL, VARIANT, YEAR) */}
-          <Surface style={styles.cardSection} elevation={1}>
-            <View style={styles.titleIconRow}>
-              <Icon source="car" size={20} color="#0066FF" />
-              <Text style={styles.sectionTitle}>Car Compatibility</Text>
-            </View>
-
-            {/* Popular Brands Quick Select */}
-            <Text style={styles.fieldLabel}>Car Brand / Make</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.brandQuickRow}>
-              {POPULAR_BRANDS.map((b) => {
-                const selected = brand.toLowerCase() === b.toLowerCase();
-                return (
-                  <TouchableOpacity
-                    key={b}
-                    style={[styles.brandQuickPill, selected && styles.brandQuickPillActive]}
-                    onPress={() => setBrand(b)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.brandQuickText, selected && styles.brandQuickTextActive]}>
-                      {b}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            <TextInput
-              mode="outlined"
-              value={brand}
-              onChangeText={setBrand}
-              placeholder="Or type custom brand"
-              outlineColor="#334155"
-              activeOutlineColor="#0066FF"
-              textColor="#FFFFFF"
-              style={[styles.input, { marginTop: 8 }]}
-              theme={{ colors: { background: '#1E293B' } }}
-            />
-
-            {/* Car Model & Variant */}
-            <View style={styles.twoColumnRow}>
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <Text style={styles.fieldLabel}>Car Model</Text>
-                <TextInput
-                  mode="outlined"
-                  value={model}
-                  onChangeText={setModel}
-                  placeholder="e.g. Swift / Creta"
-                  outlineColor="#334155"
-                  activeOutlineColor="#0066FF"
-                  textColor="#FFFFFF"
-                  style={styles.input}
-                  theme={{ colors: { background: '#1E293B' } }}
-                />
+          {/* CARD 5: LOCATION & CONTACT (Locked) */}
+          <View style={styles.card}>
+            <View style={styles.specRow}>
+              <View style={styles.specLeft}>
+                <Icon source="map-marker" size={20} color="#0066FF" />
+                <View>
+                  <Text style={styles.specLabel}>Location & Contact</Text>
+                  <Text style={styles.locValueText}>{lockedLocation}</Text>
+                  <Text style={styles.locSubText}>Cannot be changed</Text>
+                </View>
               </View>
-
-              <View style={{ flex: 1, marginLeft: 8 }}>
-                <Text style={styles.fieldLabel}>Variant (Optional)</Text>
-                <TextInput
-                  mode="outlined"
-                  value={variant}
-                  onChangeText={setVariant}
-                  placeholder="e.g. VXI / SX"
-                  outlineColor="#334155"
-                  activeOutlineColor="#0066FF"
-                  textColor="#FFFFFF"
-                  style={styles.input}
-                  theme={{ colors: { background: '#1E293B' } }}
-                />
+              <View style={styles.specRight}>
+                <Icon source="lock" size={18} color="#94A3B8" />
+                <Icon source="chevron-right" size={20} color="#CBD5E1" />
               </View>
             </View>
+          </View>
 
-            {/* Manufacturing Year & OEM Number */}
-            <View style={styles.twoColumnRow}>
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <Text style={styles.fieldLabel}>Manufacturing Year</Text>
-                <TextInput
-                  mode="outlined"
-                  value={carYear}
-                  onChangeText={setCarYear}
-                  keyboardType="numeric"
-                  placeholder="e.g. 2019"
-                  outlineColor="#334155"
-                  activeOutlineColor="#0066FF"
-                  textColor="#FFFFFF"
-                  style={styles.input}
-                  theme={{ colors: { background: '#1E293B' } }}
-                />
+          {/* BOTTOM SUBMIT BUTTON */}
+          <TouchableOpacity
+            style={[styles.saveBtn, isSaving && { opacity: 0.7 }]}
+            onPress={handleSaveListing}
+            activeOpacity={0.8}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <View style={styles.btnRow}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text style={styles.saveBtnText}>Saving Changes...</Text>
               </View>
-
-              <View style={{ flex: 1, marginLeft: 8 }}>
-                <Text style={styles.fieldLabel}>OEM Part Number</Text>
-                <TextInput
-                  mode="outlined"
-                  value={partNumber}
-                  onChangeText={setPartNumber}
-                  placeholder="e.g. 35120-M76R00"
-                  outlineColor="#334155"
-                  activeOutlineColor="#0066FF"
-                  textColor="#FFFFFF"
-                  style={styles.input}
-                  theme={{ colors: { background: '#1E293B' } }}
-                />
-              </View>
-            </View>
-
-            {/* Fuel Type */}
-            <Text style={[styles.fieldLabel, { marginTop: 10 }]}>Fuel Type</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.fuelRow}>
-              {FUEL_TYPES.map((f) => {
-                const selected = fuelType === f;
-                return (
-                  <TouchableOpacity
-                    key={f}
-                    style={[styles.fuelPill, selected && styles.fuelPillActive]}
-                    onPress={() => setFuelType(f)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.fuelPillText, selected && styles.fuelPillTextActive]}>
-                      {f}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </Surface>
-
-          {/* SECTION 5: DESCRIPTION */}
-          <Surface style={styles.cardSection} elevation={1}>
-            <View style={styles.titleIconRow}>
-              <Icon source="text-box-outline" size={20} color="#0066FF" />
-              <Text style={styles.sectionTitle}>Description & Fitment Notes</Text>
-            </View>
-
-            <TextInput
-              mode="outlined"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={4}
-              placeholder="Describe condition, scratch status, working guarantee or any fitment instructions..."
-              outlineColor="#334155"
-              activeOutlineColor="#0066FF"
-              textColor="#FFFFFF"
-              style={[styles.input, { minHeight: 90, textAlignVertical: 'top' }]}
-              theme={{ colors: { background: '#1E293B' } }}
-            />
-          </Surface>
-
-          {/* SECTION 6: LOCKED FIELDS (LOCATION & CONTACT NUMBER) */}
-          <Surface style={styles.cardSection} elevation={1}>
-            <View style={styles.titleIconRow}>
-              <Icon source="lock-outline" size={20} color="#94A3B8" />
-              <Text style={[styles.sectionTitle, { color: '#94A3B8' }]}>Verified Location & Contact</Text>
-            </View>
-            <Text style={styles.lockedNotice}>
-              To maintain buyer trust and fraud prevention, verified Location and Contact Number cannot be altered during quick edits.
-            </Text>
-
-            {/* Locked Location Card */}
-            <View style={styles.lockedFieldCard}>
-              <Icon source="map-marker" size={20} color="#0066FF" />
-              <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={styles.lockedFieldLabel}>Location</Text>
-                <Text style={styles.lockedFieldValue}>{lockedLocation}</Text>
-              </View>
-              <Icon source="lock" size={16} color="#64748B" />
-            </View>
-
-            {/* Locked Contact Card */}
-            <View style={[styles.lockedFieldCard, { marginTop: 8 }]}>
-              <Icon source="phone" size={20} color="#10B981" />
-              <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={styles.lockedFieldLabel}>Contact Number / Phone</Text>
-                <Text style={styles.lockedFieldValue}>{lockedPhone}</Text>
-              </View>
-              <Icon source="lock" size={16} color="#64748B" />
-            </View>
-          </Surface>
-
-          <View style={{ height: 20 }} />
+            ) : (
+              <Text style={styles.saveBtnText}>Save Changes</Text>
+            )}
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* BOTTOM ACTION BAR */}
-      <Surface style={styles.bottomBar} elevation={4}>
-        <Button
-          mode="outlined"
-          onPress={() => navigation.goBack()}
-          style={styles.cancelBtn}
-          textColor="#94A3B8"
-          disabled={isSaving}
-        >
-          Cancel
-        </Button>
+      {/* ============================================================ */}
+      {/* 1. SELECT CATEGORY BOTTOM SHEET (Exact Match to Demo Image) */}
+      {/* ============================================================ */}
+      <Modal
+        visible={activeSheet === 'category'}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setActiveSheet(null)}
+      >
+        <View style={styles.sheetBackdrop}>
+          <TouchableOpacity
+            style={styles.sheetDismissArea}
+            activeOpacity={1}
+            onPress={() => setActiveSheet(null)}
+          />
+          <View style={styles.sheetCard}>
+            {/* Top Handle */}
+            <View style={styles.sheetHandle} />
 
-        <Button
-          mode="contained"
-          onPress={handleSaveListing}
-          style={styles.saveBtn}
-          loading={isSaving}
-          disabled={isSaving}
-          icon="check"
-        >
-          {isSaving ? 'Saving Changes...' : 'Save Changes'}
-        </Button>
-      </Surface>
+            {/* Title */}
+            <Text style={styles.sheetTitle}>Select Category</Text>
+
+            {/* Category List */}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.sheetListContent}
+            >
+              {REAL_CATEGORIES.map((catName) => {
+                const isSelected = category === catName;
+                return (
+                  <TouchableOpacity
+                    key={catName}
+                    style={[
+                      styles.categorySheetRow,
+                      isSelected && styles.categorySheetRowSelected,
+                    ]}
+                    activeOpacity={0.6}
+                    onPress={() => {
+                      setCategory(catName);
+                      setActiveSheet(null);
+                    }}
+                  >
+                    <View style={styles.catLeftGroup}>
+                      <Category3DIcon categoryName={catName} size={48} />
+                      <Text
+                        style={[
+                          styles.catItemName,
+                          isSelected && styles.catItemNameSelected,
+                        ]}
+                      >
+                        {catName}
+                      </Text>
+                    </View>
+
+                    <Icon
+                      source={isSelected ? 'check' : 'chevron-right'}
+                      size={22}
+                      color={isSelected ? '#0066FF' : '#94A3B8'}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Cancel Button */}
+            <TouchableOpacity
+              style={styles.sheetCancelBtn}
+              onPress={() => setActiveSheet(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================ */}
+      {/* 2. SELECT CAR BRAND BOTTOM SHEET */}
+      {/* ============================================================ */}
+      <Modal
+        visible={activeSheet === 'brand'}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setActiveSheet(null)}
+      >
+        <View style={styles.sheetBackdrop}>
+          <TouchableOpacity
+            style={styles.sheetDismissArea}
+            activeOpacity={1}
+            onPress={() => setActiveSheet(null)}
+          />
+          <View style={styles.sheetCard}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Select Car Brand / Make</Text>
+
+            {/* Search Input */}
+            <View style={styles.sheetSearchBox}>
+              <Icon source="magnify" size={20} color="#94A3B8" />
+              <RNTextInput
+                style={styles.sheetSearchInput}
+                placeholder="Search brand (e.g. Maruti, Hyundai, Tata)"
+                placeholderTextColor="#94A3B8"
+                value={sheetSearchQuery}
+                onChangeText={setSheetSearchQuery}
+              />
+              {sheetSearchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSheetSearchQuery('')}>
+                  <Icon source="close-circle" size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.sheetListContent}
+            >
+              {availableBrands
+                .filter((b) => b.toLowerCase().includes(sheetSearchQuery.toLowerCase()))
+                .map((b) => {
+                  const isSelected = brand.toLowerCase() === b.toLowerCase();
+                  return (
+                    <TouchableOpacity
+                      key={b}
+                      style={[styles.simpleSheetRow, isSelected && styles.simpleSheetRowSelected]}
+                      activeOpacity={0.6}
+                      onPress={() => {
+                        setBrand(b);
+                        // Reset model if brand changed
+                        if (brand.toLowerCase() !== b.toLowerCase()) {
+                          const newModels = DEFAULT_BRAND_MODELS[b] || [];
+                          setModel(newModels[0] || '');
+                          setVariant('');
+                        }
+                        setActiveSheet(null);
+                      }}
+                    >
+                      <View style={styles.brandRowLeft}>
+                        <BrandLogo brand={b} size={30} />
+                        <Text style={[styles.simpleRowText, isSelected && styles.simpleRowTextSelected]}>
+                          {b}
+                        </Text>
+                      </View>
+                      <Icon
+                        source={isSelected ? 'check' : 'chevron-right'}
+                        size={20}
+                        color={isSelected ? '#0066FF' : '#94A3B8'}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.sheetCancelBtn}
+              onPress={() => setActiveSheet(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================ */}
+      {/* 3. SELECT CAR MODEL BOTTOM SHEET */}
+      {/* ============================================================ */}
+      <Modal
+        visible={activeSheet === 'model'}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setActiveSheet(null)}
+      >
+        <View style={styles.sheetBackdrop}>
+          <TouchableOpacity
+            style={styles.sheetDismissArea}
+            activeOpacity={1}
+            onPress={() => setActiveSheet(null)}
+          />
+          <View style={styles.sheetCard}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Select Model ({brand})</Text>
+
+            <View style={styles.sheetSearchBox}>
+              <Icon source="magnify" size={20} color="#94A3B8" />
+              <RNTextInput
+                style={styles.sheetSearchInput}
+                placeholder="Search car model..."
+                placeholderTextColor="#94A3B8"
+                value={sheetSearchQuery}
+                onChangeText={setSheetSearchQuery}
+              />
+              {sheetSearchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSheetSearchQuery('')}>
+                  <Icon source="close-circle" size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.sheetListContent}
+            >
+              {availableModels
+                .filter((m) => m.toLowerCase().includes(sheetSearchQuery.toLowerCase()))
+                .map((m) => {
+                  const isSelected = model.toLowerCase() === m.toLowerCase();
+                  return (
+                    <TouchableOpacity
+                      key={m}
+                      style={[styles.simpleSheetRow, isSelected && styles.simpleSheetRowSelected]}
+                      activeOpacity={0.6}
+                      onPress={() => {
+                        setModel(m);
+                        setVariant('');
+                        setActiveSheet(null);
+                      }}
+                    >
+                      <Text style={[styles.simpleRowText, isSelected && styles.simpleRowTextSelected]}>
+                        {m}
+                      </Text>
+                      <Icon
+                        source={isSelected ? 'check' : 'chevron-right'}
+                        size={20}
+                        color={isSelected ? '#0066FF' : '#94A3B8'}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.sheetCancelBtn}
+              onPress={() => setActiveSheet(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================ */}
+      {/* 4. SELECT VARIANT BOTTOM SHEET */}
+      {/* ============================================================ */}
+      <Modal
+        visible={activeSheet === 'variant'}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setActiveSheet(null)}
+      >
+        <View style={styles.sheetBackdrop}>
+          <TouchableOpacity
+            style={styles.sheetDismissArea}
+            activeOpacity={1}
+            onPress={() => setActiveSheet(null)}
+          />
+          <View style={styles.sheetCard}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Select Variant</Text>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.sheetListContent}
+            >
+              {availableVariants.map((v) => {
+                const isSelected = variant.toLowerCase() === v.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={v}
+                    style={[styles.simpleSheetRow, isSelected && styles.simpleSheetRowSelected]}
+                    activeOpacity={0.6}
+                    onPress={() => {
+                      setVariant(v);
+                      setActiveSheet(null);
+                    }}
+                  >
+                    <Text style={[styles.simpleRowText, isSelected && styles.simpleRowTextSelected]}>
+                      {v}
+                    </Text>
+                    <Icon
+                      source={isSelected ? 'check' : 'chevron-right'}
+                      size={20}
+                      color={isSelected ? '#0066FF' : '#94A3B8'}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.sheetCancelBtn}
+              onPress={() => setActiveSheet(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================ */}
+      {/* 5. SELECT CONDITION BOTTOM SHEET */}
+      {/* ============================================================ */}
+      <Modal
+        visible={activeSheet === 'condition'}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setActiveSheet(null)}
+      >
+        <View style={styles.sheetBackdrop}>
+          <TouchableOpacity
+            style={styles.sheetDismissArea}
+            activeOpacity={1}
+            onPress={() => setActiveSheet(null)}
+          />
+          <View style={styles.sheetCard}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Select Condition</Text>
+
+            <View style={styles.sheetListContent}>
+              {CONDITION_OPTIONS.map((c) => {
+                const isSelected =
+                  condition.toLowerCase() === c.label.toLowerCase() ||
+                  condition.toLowerCase() === c.id.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.conditionSheetRow, isSelected && styles.simpleSheetRowSelected]}
+                    activeOpacity={0.6}
+                    onPress={() => {
+                      setCondition(c.label);
+                      setActiveSheet(null);
+                    }}
+                  >
+                    <View style={styles.conditionRowLeft}>
+                      <Text style={[styles.simpleRowText, isSelected && styles.simpleRowTextSelected]}>
+                        {c.label}
+                      </Text>
+                      <Text style={styles.conditionDescText}>{c.desc}</Text>
+                    </View>
+                    <Icon
+                      source={isSelected ? 'check' : 'chevron-right'}
+                      size={20}
+                      color={isSelected ? '#0066FF' : '#94A3B8'}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={styles.sheetCancelBtn}
+              onPress={() => setActiveSheet(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================ */}
+      {/* 6. SELECT MANUFACTURING YEAR BOTTOM SHEET */}
+      {/* ============================================================ */}
+      <Modal
+        visible={activeSheet === 'year'}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setActiveSheet(null)}
+      >
+        <View style={styles.sheetBackdrop}>
+          <TouchableOpacity
+            style={styles.sheetDismissArea}
+            activeOpacity={1}
+            onPress={() => setActiveSheet(null)}
+          />
+          <View style={styles.sheetCard}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Manufacturing Year</Text>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.sheetListContent}
+            >
+              {YEARS.map((yr) => {
+                const isSelected = carYear === yr;
+                return (
+                  <TouchableOpacity
+                    key={yr}
+                    style={[styles.simpleSheetRow, isSelected && styles.simpleSheetRowSelected]}
+                    activeOpacity={0.6}
+                    onPress={() => {
+                      setCarYear(yr);
+                      setActiveSheet(null);
+                    }}
+                  >
+                    <Text style={[styles.simpleRowText, isSelected && styles.simpleRowTextSelected]}>
+                      {yr}
+                    </Text>
+                    <Icon
+                      source={isSelected ? 'check' : 'chevron-right'}
+                      size={20}
+                      color={isSelected ? '#0066FF' : '#94A3B8'}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.sheetCancelBtn}
+              onPress={() => setActiveSheet(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================ */}
+      {/* 7. SELECT FUEL TYPE BOTTOM SHEET */}
+      {/* ============================================================ */}
+      <Modal
+        visible={activeSheet === 'fuel'}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setActiveSheet(null)}
+      >
+        <View style={styles.sheetBackdrop}>
+          <TouchableOpacity
+            style={styles.sheetDismissArea}
+            activeOpacity={1}
+            onPress={() => setActiveSheet(null)}
+          />
+          <View style={styles.sheetCard}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Select Fuel Type</Text>
+
+            <View style={styles.sheetListContent}>
+              {FUEL_TYPES.map((f) => {
+                const isSelected = fuelType === f;
+                return (
+                  <TouchableOpacity
+                    key={f}
+                    style={[styles.simpleSheetRow, isSelected && styles.simpleSheetRowSelected]}
+                    activeOpacity={0.6}
+                    onPress={() => {
+                      setFuelType(f);
+                      setActiveSheet(null);
+                    }}
+                  >
+                    <Text style={[styles.simpleRowText, isSelected && styles.simpleRowTextSelected]}>
+                      {f}
+                    </Text>
+                    <Icon
+                      source={isSelected ? 'check' : 'chevron-right'}
+                      size={20}
+                      color={isSelected ? '#0066FF' : '#94A3B8'}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={styles.sheetCancelBtn}
+              onPress={() => setActiveSheet(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================ */}
+      {/* 8. OEM PART NUMBER EDIT MODAL */}
+      {/* ============================================================ */}
+      <Modal
+        visible={activeSheet === 'oem'}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setActiveSheet(null)}
+      >
+        <View style={styles.modalCenterBackdrop}>
+          <View style={styles.modalDialogCard}>
+            <Text style={styles.modalDialogTitle}>OEM Part Number</Text>
+            <Text style={styles.modalDialogSubtitle}>
+              Enter manufacturer part code stamped on the part (optional).
+            </Text>
+            <RNTextInput
+              style={styles.dialogTextInput}
+              placeholder="e.g. 35120-M76R00"
+              placeholderTextColor="#94A3B8"
+              value={tempOemInput}
+              onChangeText={setTempOemInput}
+              autoCapitalize="characters"
+            />
+            <View style={styles.dialogActionsRow}>
+              <TouchableOpacity
+                style={styles.dialogCancelBtn}
+                onPress={() => setActiveSheet(null)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.dialogCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.dialogSaveBtn}
+                onPress={() => {
+                  setOemPartNumber(tempOemInput.trim());
+                  setActiveSheet(null);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.dialogSaveText}>Apply</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============================================================ */}
+      {/* 9. DESCRIPTION EDIT MODAL */}
+      {/* ============================================================ */}
+      <Modal
+        visible={activeSheet === 'description'}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setActiveSheet(null)}
+      >
+        <View style={styles.modalCenterBackdrop}>
+          <View style={[styles.modalDialogCard, { maxHeight: height * 0.7 }]}>
+            <Text style={styles.modalDialogTitle}>Description</Text>
+            <Text style={styles.modalDialogSubtitle}>
+              Detail working condition, part authenticity, and fitment details.
+            </Text>
+            <RNTextInput
+              style={styles.dialogTextArea}
+              placeholder="Provide complete description for buyers..."
+              placeholderTextColor="#94A3B8"
+              value={tempDescInput}
+              onChangeText={setTempDescInput}
+              multiline
+              numberOfLines={6}
+              textAlignVertical="top"
+            />
+            <View style={styles.dialogActionsRow}>
+              <TouchableOpacity
+                style={styles.dialogCancelBtn}
+                onPress={() => setActiveSheet(null)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.dialogCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.dialogSaveBtn}
+                onPress={() => {
+                  setDescription(tempDescInput.trim());
+                  setActiveSheet(null);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.dialogSaveText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeContainer: {
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
-  headerBar: {
+  flex1: {
+    flex: 1,
+  },
+  topHeader: {
+    height: 56,
+    backgroundColor: '#0B132B',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deleteHeaderBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FEF2F2',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
   },
   headerTitle: {
-    color: '#0F172A',
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  headerBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 24,
+    padding: 14,
+    paddingBottom: 40,
+    gap: 12,
   },
-  cardSection: {
+  // Cards
+  card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
   },
-  titleIconRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  sectionHeaderRow: {
+  cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  sectionTitle: {
-    color: '#0F172A',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  helperText: {
-    color: '#64748B',
-    fontSize: 11,
-  },
-  photoRow: {
-    flexDirection: 'row',
-    paddingVertical: 4,
-  },
-  photoContainer: {
-    position: 'relative',
-    marginRight: 10,
-  },
-  photoThumb: {
-    width: 80,
-    height: 80,
-    borderRadius: 10,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  coverBadge: {
-    position: 'absolute',
-    bottom: 4,
-    left: 4,
-    backgroundColor: '#0066FF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  coverBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 8,
-    fontWeight: '800',
-  },
-  deletePhotoBtn: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#EF4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
-  },
-  addPhotoBox: {
-    width: 80,
-    height: 80,
-    borderRadius: 10,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1.5,
-    borderColor: '#0066FF',
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addPhotoText: {
-    color: '#0066FF',
-    fontSize: 10,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  fieldLabel: {
-    color: '#334155',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 6,
-    marginTop: 10,
-  },
-  input: {
-    backgroundColor: '#F8FAFC',
-    fontSize: 14,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-  },
-  togglePill: {
-    flex: 1,
+  iconTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  togglePillActive: {
-    backgroundColor: '#0066FF',
-    borderColor: '#0066FF',
-  },
-  toggleText: {
-    color: '#64748B',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  toggleTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  chipWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
   },
-  choiceChip: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  choiceChipActive: {
-    backgroundColor: '#0066FF',
-    borderColor: '#0066FF',
-  },
-  choiceChipText: {
-    color: '#475569',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  choiceChipTextActive: {
-    color: '#FFFFFF',
+  cardHeading: {
+    fontSize: 15,
     fontWeight: '700',
+    color: '#0F172A',
   },
-  conditionRow: {
+  cardSubheading: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  // Photos Row
+  photosRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
+    paddingVertical: 4,
   },
-  condPill: {
-    flex: 1,
+  photoBox: {
+    width: 90,
+    height: 90,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#F1F5F9',
+  },
+  photoImg: {
+    width: '100%',
+    height: '100%',
+  },
+  coverPill: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    backgroundColor: '#0066FF',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  coverPillText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  removePhotoBadge: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
   },
-  condPillActive: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
+  addPhotoDashed: {
+    width: 90,
+    height: 90,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#93C5FD',
+    backgroundColor: '#F0F7FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
   },
-  condPillText: {
-    color: '#475569',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  condPillTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-  },
-  brandQuickRow: {
-    flexDirection: 'row',
-    marginBottom: 6,
-  },
-  brandQuickPill: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  brandQuickPillActive: {
-    backgroundColor: '#0066FF',
-    borderColor: '#0066FF',
-  },
-  brandQuickText: {
-    color: '#475569',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  brandQuickTextActive: {
-    color: '#FFFFFF',
+  addPhotoText: {
+    fontSize: 11,
     fontWeight: '700',
+    color: '#0066FF',
   },
-  twoColumnRow: {
-    flexDirection: 'row',
-  },
-  fuelRow: {
-    flexDirection: 'row',
-    marginTop: 4,
-  },
-  fuelPill: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  fuelPillActive: {
-    backgroundColor: '#0066FF',
-    borderColor: '#0066FF',
-  },
-  fuelPillText: {
-    color: '#475569',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  fuelPillTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  lockedNotice: {
-    color: '#64748B',
-    fontSize: 12,
-    lineHeight: 16,
-    marginBottom: 12,
-  },
-  lockedFieldCard: {
+  // Fields in Card 2
+  fieldHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  inputContainer: {
     backgroundColor: '#F8FAFC',
-    borderRadius: 10,
-    padding: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  lockedFieldLabel: {
-    color: '#64748B',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  lockedFieldValue: {
+  textInput: {
+    flex: 1,
+    fontSize: 14,
     color: '#0F172A',
+    fontWeight: '500',
+    paddingVertical: 0,
+  },
+  clearBtn: {
+    padding: 4,
+  },
+  // Toggles in Card 2
+  togglesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  toggleItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  toggleDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 8,
+  },
+  toggleLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+    flex: 1,
+  },
+  switchSmall: {
+    transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }],
+  },
+  // Specifications Card Rows
+  specRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
+  specLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  specRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    maxWidth: '50%',
+  },
+  specLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  specValue: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
+    textAlign: 'right',
+  },
+  rowDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+  },
+  // Description Card
+  descCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  descPreviewText: {
     fontSize: 13,
-    fontWeight: '700',
+    color: '#334155',
+    lineHeight: 19,
+  },
+  // Location Card
+  locValueText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0F172A',
     marginTop: 2,
   },
-  bottomBar: {
+  locSubText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 1,
+  },
+  // Bottom Save Button
+  saveBtn: {
+    backgroundColor: '#0066FF',
+    height: 52,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0066FF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  saveBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  // Bottom Sheet Modal
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheetDismissArea: {
+    flex: 1,
+  },
+  sheetCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 20,
+    maxHeight: height * 0.85,
+  },
+  sheetHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 14,
+  },
+  sheetSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    marginBottom: 12,
+    gap: 8,
+  },
+  sheetSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0F172A',
+    paddingVertical: 0,
+  },
+  sheetListContent: {
+    paddingBottom: 16,
+  },
+  // Category Sheet Rows (matches image)
+  categorySheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  categorySheetRowSelected: {
+    backgroundColor: '#F0F7FF',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+  },
+  catLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+  },
+  catItemName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  catItemNameSelected: {
+    color: '#0066FF',
+  },
+  sheetCancelBtn: {
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  sheetCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  // Generic / Simple Sheet Rows
+  simpleSheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  simpleSheetRowSelected: {
+    backgroundColor: '#F0F7FF',
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  brandRowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-  },
-  cancelBtn: {
     flex: 1,
-    borderColor: '#CBD5E1',
   },
-  saveBtn: {
-    flex: 2,
-    backgroundColor: '#0066FF',
+  simpleRowText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  simpleRowTextSelected: {
+    color: '#0066FF',
+    fontWeight: '700',
+  },
+  // Condition Rows
+  conditionSheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  conditionRowLeft: {
+    flex: 1,
+  },
+  conditionDescText: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  // Dialog Modals (OEM & Desc)
+  modalCenterBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalDialogCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 20,
+  },
+  modalDialogTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  modalDialogSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 14,
+  },
+  dialogTextInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 44,
+    fontSize: 14,
+    color: '#0F172A',
+    marginBottom: 16,
+  },
+  dialogTextArea: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 12,
+    height: 120,
+    fontSize: 14,
+    color: '#0F172A',
+    marginBottom: 16,
+  },
+  dialogActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  dialogCancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 8,
   },
+  dialogCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  dialogSaveBtn: {
+    backgroundColor: '#0066FF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  dialogSaveText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  // Error fallback
   errorCenter: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     padding: 24,
+    gap: 12,
   },
   errorText: {
-    color: '#0F172A',
     fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 12,
-    marginBottom: 20,
+    fontWeight: '600',
+    color: '#64748B',
   },
-  btnPrimary: {
+  goBackBtn: {
     backgroundColor: '#0066FF',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  goBackBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 });

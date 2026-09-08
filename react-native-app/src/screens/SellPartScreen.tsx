@@ -49,7 +49,7 @@ import { INDIAN_STATES_AND_DISTRICTS, StateWithDistricts } from '../data/indianL
 const { width } = Dimensions.get('window');
 
 // Default comprehensive taxonomy fallback for instant offline-first & zero-latency cascading
-const DEFAULT_BRAND_MODELS: Record<string, string[]> = {
+export const DEFAULT_BRAND_MODELS: Record<string, string[]> = {
   'Maruti Suzuki': ['Swift', 'Baleno', 'Brezza', 'Dzire', 'Ertiga', 'Wagon R', 'Alto', 'Grand Vitara', 'Ciaz', 'Fronx', 'Jimny', 'XL6', 'Ignis', 'S-Presso', 'Celerio', 'Ritz', 'Zen', '800'],
   'Hyundai': ['Creta', 'i20', 'Venue', 'Verna', 'Grand i10', 'Aura', 'Tucson', 'Exter', 'Alcazar', 'Santro', 'Eon', 'Xcent', 'Elantra', 'Sonata'],
   'Tata': ['Nexon', 'Punch', 'Harrier', 'Safari', 'Altroz', 'Tiago', 'Tigor', 'Curvv', 'Hexa', 'Indica', 'Indigo', 'Sumo', 'Sierra', 'Bolt', 'Zest'],
@@ -354,7 +354,7 @@ export const MODEL_SPECIFIC_VARIANTS: Record<string, string[]> = {
   'Skoda Rapid': ['All Variants (Fits All)', 'Active', 'Ambition', 'Style', 'Onyx', 'Monte Carlo', 'Rider'],
 };
 
-const DEFAULT_CATEGORY_PARTS: Record<string, string[]> = {
+export const DEFAULT_CATEGORY_PARTS: Record<string, string[]> = {
   'Engine & Mechanical': [
     'Complete Engine Assembly',
     'Cylinder Head',

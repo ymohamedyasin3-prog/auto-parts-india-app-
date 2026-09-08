@@ -16,9 +16,7 @@ import {
 import { Icon } from 'react-native-paper';
 import {
   INDIAN_STATES_AND_DISTRICTS,
-  POPULAR_CITIES,
   searchIndianLocations,
-  LocationSearchItem,
 } from '../data/indianLocations';
 import {
   getCurrentLocation,
@@ -33,35 +31,24 @@ interface LocationSelectScreenProps {
   route: any;
 }
 
-const POPULAR_CITY_CHIPS = [
-  { name: 'Chennai', state: 'Tamil Nadu' },
-  { name: 'Coimbatore', state: 'Tamil Nadu' },
-  { name: 'Bengaluru', state: 'Karnataka' },
-  { name: 'Mumbai', state: 'Maharashtra' },
-  { name: 'Delhi', state: 'Delhi' },
-  { name: 'Hyderabad', state: 'Telangana' },
-  { name: 'Pune', state: 'Maharashtra' },
-  { name: 'Kolkata', state: 'West Bengal' },
-  { name: 'Ahmedabad', state: 'Gujarat' },
-  { name: 'Madurai', state: 'Tamil Nadu' },
-  { name: 'Trichy', state: 'Tamil Nadu' },
-  { name: 'Salem', state: 'Tamil Nadu' },
-  { name: 'Karur', state: 'Tamil Nadu' },
-  { name: 'Kochi', state: 'Kerala' },
-  { name: 'Jaipur', state: 'Rajasthan' },
-  { name: 'Lucknow', state: 'Uttar Pradesh' },
-];
+interface StateItem {
+  key: string;
+  state: string;
+  displayName: string;
+  districts: string[];
+}
 
 export default function LocationSelectScreen({ navigation, route }: LocationSelectScreenProps) {
   const currentCity = route?.params?.currentCity || 'All India';
   const [selectedCity, setSelectedCity] = useState<string>(currentCity);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isDetectingGPS, setIsDetectingGPS] = useState<boolean>(false);
-  const [expandedState, setExpandedState] = useState<string | null>(null);
+  const [selectedStateForDrilldown, setSelectedStateForDrilldown] = useState<StateItem | null>(null);
+
   const [adminLocations, setAdminLocations] = useState<string[]>([]);
   const [adminTaxonomyLocations, setAdminTaxonomyLocations] = useState<{ state: string; districts: string[] }[]>([]);
 
-  // Load saved location and sync admin locations in real-time
+  // Load saved user location and sync admin locations
   React.useEffect(() => {
     getUserSavedLocation().then((saved) => {
       if (saved && saved.city) {
@@ -69,14 +56,35 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
       }
     });
 
+    // Immediate local storage fallback for instant reactivity
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cachedLocs = window.localStorage.getItem('taxonomy_locations');
+        if (cachedLocs) {
+          const parsed = JSON.parse(cachedLocs);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setAdminTaxonomyLocations(parsed);
+          }
+        }
+        const cachedConfig = window.localStorage.getItem('config_locations');
+        if (cachedConfig) {
+          const parsed = JSON.parse(cachedConfig);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setAdminLocations((prev) => Array.from(new Set([...prev, ...parsed])));
+          }
+        }
+      } catch (_) {}
+    }
+
     const db = getFirebaseFirestore();
     if (!db) return;
 
     let unsubConfig = () => {};
     let unsubTaxonomy = () => {};
+    let unsubDistricts = () => {};
+    let unsubStates = () => {};
 
     try {
-      // 1. Real-time listener for config/locations
       if (typeof db.doc === 'function') {
         const configRef = db.doc('config/locations');
         if (typeof configRef.onSnapshot === 'function') {
@@ -89,19 +97,8 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
               }
             }
           });
-        } else if (typeof configRef.get === 'function') {
-          configRef.get().then((docSnap: any) => {
-            if (docSnap && docSnap.exists) {
-              const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap.data;
-              const list = Array.isArray(data?.list) ? data.list : Array.isArray(data?.locations) ? data.locations : [];
-              if (list.length > 0) {
-                setAdminLocations((prev) => Array.from(new Set([...prev, ...list])));
-              }
-            }
-          }).catch(() => {});
         }
 
-        // 2. Real-time listener for taxonomy/data (CMS saved states & districts)
         const taxRef = db.doc('taxonomy/data');
         if (typeof taxRef.onSnapshot === 'function') {
           unsubTaxonomy = taxRef.onSnapshot((docSnap: any) => {
@@ -122,61 +119,75 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
               }
             }
           });
-        } else if (typeof taxRef.get === 'function') {
-          taxRef.get().then((docSnap: any) => {
-            if (docSnap && docSnap.exists) {
-              const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap.data;
-              if (data?.locations && Array.isArray(data.locations)) {
-                setAdminTaxonomyLocations(data.locations);
-                const locNames: string[] = [];
-                data.locations.forEach((item: any) => {
-                  if (item.state && item.state.trim()) locNames.push(item.state.trim());
-                  if (Array.isArray(item.districts)) {
-                    item.districts.forEach((d: string) => {
-                      if (d && d.trim()) locNames.push(d.trim());
-                    });
-                  }
-                });
-                setAdminLocations((prev) => Array.from(new Set([...prev, ...locNames])));
-              }
-            }
-          }).catch(() => {});
         }
 
-        // 3. Fallback checks for config/cities and config/districts
-        ['config/cities', 'config/districts'].forEach((path) => {
-          db.doc(path).get().then((snap: any) => {
-            if (snap && snap.exists) {
-              const d = typeof snap.data === 'function' ? snap.data() : snap.data;
-              const list = Array.isArray(d?.list) ? d.list : [];
-              if (list.length > 0) {
-                setAdminLocations((prev) => Array.from(new Set([...prev, ...list])));
+        // Also listen to taxonomy/districts
+        const distRef = db.doc('taxonomy/districts');
+        if (typeof distRef.onSnapshot === 'function') {
+          unsubDistricts = distRef.onSnapshot((docSnap: any) => {
+            if (docSnap && docSnap.exists) {
+              const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap.data;
+              const map = data?.map || {};
+              const taxLocs: { state: string; districts: string[] }[] = [];
+              Object.keys(map).forEach((st) => {
+                taxLocs.push({ state: st, districts: map[st] || [] });
+              });
+              if (taxLocs.length > 0) {
+                setAdminTaxonomyLocations((prev) => {
+                  const combined = [...prev];
+                  taxLocs.forEach((tl) => {
+                    const idx = combined.findIndex((c) => c.state.toLowerCase() === tl.state.toLowerCase());
+                    if (idx >= 0) {
+                      combined[idx] = {
+                        state: combined[idx].state,
+                        districts: Array.from(new Set([...(combined[idx].districts || []), ...(tl.districts || [])])),
+                      };
+                    } else {
+                      combined.push(tl);
+                    }
+                  });
+                  return combined;
+                });
               }
             }
-          }).catch(() => {});
-        });
+          });
+        }
+
+        // Also listen to taxonomy/states
+        const statesRef = db.doc('taxonomy/states');
+        if (typeof statesRef.onSnapshot === 'function') {
+          unsubStates = statesRef.onSnapshot((docSnap: any) => {
+            if (docSnap && docSnap.exists) {
+              const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap.data;
+              const list = data?.list || [];
+              if (Array.isArray(list) && list.length > 0) {
+                setAdminTaxonomyLocations((prev) => {
+                  const combined = [...prev];
+                  list.forEach((st: string) => {
+                    if (!combined.some((c) => c.state.toLowerCase() === st.toLowerCase())) {
+                      combined.push({ state: st, districts: [] });
+                    }
+                  });
+                  return combined;
+                });
+              }
+            }
+          });
+        }
       }
     } catch (e: any) {
       console.warn('Failed to load admin locations', e);
     }
 
-    // Local storage fallback for web
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const localLocs = JSON.parse(window.localStorage.getItem('config_locations') || '[]');
-        if (Array.isArray(localLocs) && localLocs.length > 0) {
-          setAdminLocations((prev) => Array.from(new Set([...prev, ...localLocs])));
-        }
-      }
-    } catch (_) {}
-
     return () => {
       unsubConfig();
       unsubTaxonomy();
+      unsubDistricts();
+      unsubStates();
     };
   }, []);
 
-  // Handle selecting a location
+  // Handle selection of a location
   const handleSelect = useCallback(
     async (
       name: string,
@@ -194,7 +205,6 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
         lng: details?.lng,
       });
 
-      // Navigate back and pass param to Home
       navigation.navigate('MainTabs', {
         screen: 'HomeTab',
         params: { selectedCity: cityToSave },
@@ -203,7 +213,7 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
     [navigation]
   );
 
-  // Handle GPS detection
+  // GPS Auto-detect handler
   const handleGPSDetect = async () => {
     setIsDetectingGPS(true);
     try {
@@ -236,19 +246,29 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
     }
   };
 
-  // Memoized states & districts list including admin added states and districts
-  const allStatesAndDistricts = useMemo(() => {
-    const statesMap = new Map<string, { state: string; districts: string[] }>();
+  // Build sorted list of states with aliases matching screenshot (e.g. Pondicherry, Uttaranchal)
+  const allStates = useMemo(() => {
+    const statesMap = new Map<string, StateItem>();
 
-    // Default Indian states and districts
     INDIAN_STATES_AND_DISTRICTS.forEach((item) => {
-      statesMap.set(item.state.toLowerCase(), {
+      let displayName = item.state;
+      if (item.state.toLowerCase() === 'puducherry') {
+        displayName = 'Pondicherry';
+      } else if (item.state.toLowerCase() === 'uttarakhand') {
+        displayName = 'Uttaranchal';
+      } else if (item.state.toLowerCase() === 'delhi (nct)') {
+        displayName = 'Delhi';
+      }
+
+      statesMap.set(displayName.toLowerCase(), {
+        key: item.state,
         state: item.state,
-        districts: [...item.districts],
+        displayName,
+        districts: [...item.districts].sort((a, b) => a.localeCompare(b)),
       });
     });
 
-    // Merge admin taxonomy locations
+    // Merge admin taxonomy additions
     adminTaxonomyLocations.forEach((item) => {
       if (!item.state) return;
       const key = item.state.toLowerCase();
@@ -262,134 +282,176 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
               currentDistrictsSet.add(d.toLowerCase());
             }
           });
+          existing.districts.sort((a, b) => a.localeCompare(b));
         }
       } else {
         statesMap.set(key, {
+          key: item.state,
           state: item.state,
-          districts: Array.isArray(item.districts) ? [...item.districts] : [],
+          displayName: item.state,
+          districts: Array.isArray(item.districts) ? [...item.districts].sort((a, b) => a.localeCompare(b)) : [],
         });
       }
     });
 
-    return Array.from(statesMap.values());
+    return Array.from(statesMap.values()).sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [adminTaxonomyLocations]);
 
-  // Search results prioritizing Admin added locations
+  // Real-time search results across standard Indian locations + all admin added states and districts
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
 
     const cleanQuery = searchQuery.trim().toLowerCase();
-    const baseResults = searchIndianLocations(searchQuery);
+    const matches: Array<{
+      id: string;
+      name: string;
+      state: string;
+      type: 'state' | 'district' | 'city';
+      score: number;
+    }> = [];
 
-    // 1. Match from adminLocations
-    const adminMatches: any[] = [];
-    adminLocations.forEach((loc) => {
-      if (loc && loc.toLowerCase().includes(cleanQuery)) {
-        adminMatches.push({
-          id: `admin_${loc.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-          name: loc,
-          state: 'Admin Added Location',
-          type: 'city',
-          isAdminAdded: true,
-          isPopular: true,
-        });
-      }
-    });
+    const seenKeys = new Set<string>();
 
-    // 2. Match from adminTaxonomyLocations
-    adminTaxonomyLocations.forEach((item) => {
-      if (item.state && item.state.toLowerCase().includes(cleanQuery)) {
-        adminMatches.push({
-          id: `admin_state_${item.state.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-          name: item.state,
-          state: 'State (Admin Added)',
-          type: 'state',
-          isAdminAdded: true,
-          isPopular: true,
-        });
+    // 1. Search through allStates (contains all states & all districts, including all admin additions)
+    allStates.forEach((stateItem) => {
+      const stateNameLower = stateItem.displayName.toLowerCase();
+      // Match state name
+      if (stateNameLower.includes(cleanQuery)) {
+        const key = `state_${stateNameLower}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          const isPrefix = stateNameLower.startsWith(cleanQuery);
+          matches.push({
+            id: `state_${stateItem.key}`,
+            name: stateItem.displayName,
+            state: 'State',
+            type: 'state',
+            score: isPrefix ? 100 : 50,
+          });
+        }
       }
-      if (Array.isArray(item.districts)) {
-        item.districts.forEach((d) => {
-          if (d && d.toLowerCase().includes(cleanQuery)) {
-            adminMatches.push({
-              id: `admin_dist_${d.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-              name: d,
-              state: `${item.state || 'Custom Region'} (Admin Added)`,
+
+      // Match district names in this state
+      stateItem.districts.forEach((dist) => {
+        const distLower = dist.toLowerCase().trim();
+        if (distLower.includes(cleanQuery)) {
+          const key = `dist_${distLower}`;
+          if (!seenKeys.has(key)) {
+            seenKeys.add(key);
+            const isPrefix = distLower.startsWith(cleanQuery);
+            matches.push({
+              id: `dist_${stateItem.key}_${distLower}`,
+              name: dist,
+              state: stateItem.displayName,
               type: 'district',
-              isAdminAdded: true,
-              isPopular: true,
+              score: isPrefix ? 90 : 40,
             });
           }
+        }
+      });
+    });
+
+    // 2. Search through base Indian locations utility (in case of aliases/extra cities)
+    const baseResults = searchIndianLocations(searchQuery);
+    baseResults.forEach((b: any) => {
+      const bNameLower = b.name.toLowerCase().trim();
+      const key = `dist_${bNameLower}`;
+      const keyAlt = `${b.type || 'loc'}_${bNameLower}`;
+      if (!seenKeys.has(key) && !seenKeys.has(keyAlt)) {
+        seenKeys.add(keyAlt);
+        const isPrefix = bNameLower.startsWith(cleanQuery);
+        matches.push({
+          id: b.id || `base_${bNameLower}`,
+          name: b.name,
+          state: b.state || 'City / Region',
+          type: b.type || 'city',
+          score: isPrefix ? 80 : 30,
         });
       }
     });
 
-    // Deduplicate: prioritize Admin Added items at the very top
-    const seenNames = new Set<string>();
-    const combined: any[] = [];
-
-    adminMatches.forEach((item) => {
-      const key = item.name.toLowerCase().trim();
-      if (!seenNames.has(key)) {
-        seenNames.add(key);
-        combined.push(item);
+    // 3. Search through adminLocations strings list
+    adminLocations.forEach((loc) => {
+      if (!loc) return;
+      const locLower = loc.toLowerCase().trim();
+      if (locLower.includes(cleanQuery)) {
+        const key = `dist_${locLower}`;
+        const keyAlt = `admin_${locLower}`;
+        if (!seenKeys.has(key) && !seenKeys.has(keyAlt)) {
+          seenKeys.add(keyAlt);
+          const isPrefix = locLower.startsWith(cleanQuery);
+          matches.push({
+            id: `admin_${locLower.replace(/[^a-z0-9]/g, '_')}`,
+            name: loc,
+            state: 'City / Region',
+            type: 'city',
+            score: isPrefix ? 85 : 35,
+          });
+        }
       }
     });
 
-    baseResults.forEach((item) => {
-      const key = item.name.toLowerCase().trim();
-      if (!seenNames.has(key)) {
-        seenNames.add(key);
-        combined.push(item);
-      }
+    // Sort by score descending, then alphabetical
+    matches.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.name.localeCompare(b.name);
     });
 
-    return combined;
-  }, [searchQuery, adminLocations, adminTaxonomyLocations]);
+    return matches;
+  }, [searchQuery, allStates, adminLocations]);
 
-  // Toggle state expansion
-  const toggleStateExpand = (stateName: string) => {
-    setExpandedState((prev) => (prev === stateName ? null : stateName));
+  // Current active drilldown state dynamically resolved from allStates (reactive to admin additions)
+  const activeDrilldownState = useMemo(() => {
+    if (!selectedStateForDrilldown) return null;
+    return (
+      allStates.find(
+        (s) =>
+          s.state.toLowerCase() === selectedStateForDrilldown.state.toLowerCase() ||
+          s.displayName.toLowerCase() === selectedStateForDrilldown.displayName.toLowerCase()
+      ) || selectedStateForDrilldown
+    );
+  }, [selectedStateForDrilldown, allStates]);
+
+  // Header Back/Close action
+  const handleHeaderBack = () => {
+    if (selectedStateForDrilldown) {
+      setSelectedStateForDrilldown(null);
+    } else {
+      navigation.goBack();
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Header Bar */}
+      {/* Clean Top Header matching demo image */}
       <View style={styles.headerBar}>
         <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
+          style={styles.headerIconBtn}
+          onPress={handleHeaderBack}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           activeOpacity={0.7}
         >
-          <Icon source="arrow-left" size={24} color="#0F172A" />
+          <Icon
+            source={activeDrilldownState ? 'arrow-left' : 'close'}
+            size={24}
+            color="#000000"
+          />
         </TouchableOpacity>
 
-        <View style={styles.headerTitleWrap}>
-          <Text style={styles.headerTitle}>Select Location</Text>
-          <Text style={styles.headerSub}>Find spare parts near your city or district</Text>
-        </View>
-
-        {selectedCity !== 'All India' && (
-          <TouchableOpacity
-            style={styles.resetBtn}
-            onPress={() => handleSelect('All India')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.resetBtnText}>Reset</Text>
-          </TouchableOpacity>
-        )}
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {activeDrilldownState ? activeDrilldownState.displayName : 'Location'}
+        </Text>
       </View>
 
-      {/* Search Input Box */}
-      <View style={styles.searchContainer}>
+      {/* Search Input matching demo image */}
+      <View style={styles.searchWrapper}>
         <View style={styles.searchBox}>
-          <Icon source="magnify" size={22} color="#0066FF" />
+          <Icon source="magnify" size={20} color="#475569" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search district, city or state in India..."
+            placeholder="Search city, area or neighbourhood"
             placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -402,340 +464,154 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
               onPress={() => setSearchQuery('')}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Icon source="close-circle" size={20} color="#94A3B8" />
+              <Icon source="close-circle" size={18} color="#94A3B8" />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {/* Conditional Content: Search Results vs Browsing View */}
+      {/* 1. When Search is active: Filtered List */}
       {searchQuery.trim().length > 0 ? (
-        // Search Results List
         <FlatList
           data={searchResults}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id || item.name}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={styles.listContainer}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
-            <View style={styles.emptyWrap}>
-              <Icon source="map-marker-question-outline" size={48} color="#CBD5E1" />
-              <Text style={styles.emptyTitle}>No matching locations found</Text>
-              <Text style={styles.emptySub}>
-                Try searching for another Indian district, city, or state name.
-              </Text>
-              <TouchableOpacity
-                style={styles.emptyResetBtn}
-                onPress={() => handleSelect('All India')}
-              >
-                <Text style={styles.emptyResetBtnText}>Select All India</Text>
-              </TouchableOpacity>
+            <View style={styles.emptyContainer}>
+              <Icon source="map-marker-off-outline" size={40} color="#94A3B8" />
+              <Text style={styles.emptyText}>No matching locations found</Text>
             </View>
           }
-          renderItem={({ item }) => {
-            const isSelected = selectedCity.toLowerCase() === item.name.toLowerCase();
-            return (
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.locationRow}
+              activeOpacity={0.6}
+              onPress={() =>
+                handleSelect(item.name, {
+                  state: item.state,
+                  district: item.type === 'district' ? item.name : undefined,
+                })
+              }
+            >
+              <View style={styles.locationTextWrap}>
+                <Text style={styles.locationNameText}>{item.name}</Text>
+                {item.state && item.state !== 'City / Region' && (
+                  <Text style={styles.locationSubText}>{item.state}</Text>
+                )}
+              </View>
+              <Icon source="chevron-right" size={22} color="#000000" />
+            </TouchableOpacity>
+          )}
+        />
+      ) : activeDrilldownState ? (
+        /* 2. When State is selected: Districts / Cities of that state */
+        <ScrollView
+          style={styles.flex1}
+          contentContainerStyle={styles.listContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Option: Choose entire state */}
+          <TouchableOpacity
+            style={[styles.locationRow, styles.allStateRow]}
+            activeOpacity={0.6}
+            onPress={() =>
+              handleSelect(activeDrilldownState.displayName, {
+                state: activeDrilldownState.state,
+              })
+            }
+          >
+            <View style={styles.locationTextWrap}>
+              <Text style={[styles.locationNameText, styles.allStateText]}>
+                All {activeDrilldownState.displayName}
+              </Text>
+            </View>
+            <Icon source="chevron-right" size={22} color="#000000" />
+          </TouchableOpacity>
+          <View style={styles.separator} />
+
+          {/* List of districts in the state */}
+          {activeDrilldownState.districts.map((district) => (
+            <React.Fragment key={district}>
               <TouchableOpacity
-                style={[
-                  styles.resultItem,
-                  isSelected && styles.resultItemActive,
-                  item.isAdminAdded && styles.adminResultItem,
-                ]}
-                activeOpacity={0.7}
+                style={styles.locationRow}
+                activeOpacity={0.6}
                 onPress={() =>
-                  handleSelect(item.name, {
-                    state: item.state,
-                    district: item.type === 'district' ? item.name : undefined,
+                  handleSelect(district, {
+                    state: activeDrilldownState.state,
+                    district,
                   })
                 }
               >
-                <View
-                  style={[
-                    styles.resultIconBox,
-                    item.isAdminAdded && styles.adminResultIconBox,
-                  ]}
-                >
-                  <Icon
-                    source={
-                      item.isAdminAdded
-                        ? 'star-circle'
-                        : item.type === 'state'
-                        ? 'map-outline'
-                        : item.type === 'all'
-                        ? 'earth'
-                        : 'map-marker'
-                    }
-                    size={20}
-                    color={
-                      isSelected
-                        ? '#0066FF'
-                        : item.isAdminAdded
-                        ? '#F59E0B'
-                        : '#64748B'
-                    }
-                  />
-                </View>
-                <View style={styles.resultTextWrap}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text
-                      style={[
-                        styles.resultTitle,
-                        isSelected && styles.resultTitleActive,
-                      ]}
-                    >
-                      {item.name}
-                    </Text>
-                    {item.isAdminAdded && (
-                      <View style={styles.adminBadge}>
-                        <Text style={styles.adminBadgeText}>Admin Added</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.resultSub}>
-                    {item.type === 'state' ? 'State' : item.state}
-                  </Text>
-                </View>
-                {isSelected && <Icon source="check-circle" size={20} color="#0066FF" />}
+                <Text style={styles.locationNameText}>{district}</Text>
+                <Icon source="chevron-right" size={22} color="#000000" />
               </TouchableOpacity>
-            );
-          }}
-        />
+              <View style={styles.separator} />
+            </React.Fragment>
+          ))}
+        </ScrollView>
       ) : (
-        // Default Browsing List
+        /* 3. Root View: All States matching demo image directly */
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          style={styles.flex1}
+          contentContainerStyle={styles.listContainer}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
         >
-          {/* 1. Use Current GPS Location Button */}
+          {/* Quick Actions: Auto-detect GPS & All India */}
           <TouchableOpacity
-            style={styles.gpsCard}
+            style={styles.locationRow}
+            activeOpacity={0.6}
             onPress={handleGPSDetect}
             disabled={isDetectingGPS}
-            activeOpacity={0.8}
           >
-            <View style={styles.gpsIconCircle}>
-              {isDetectingGPS ? (
-                <ActivityIndicator size="small" color="#0066FF" />
-              ) : (
-                <Icon source="crosshairs-gps" size={22} color="#0066FF" />
-              )}
+            <View style={styles.rowLeftGroup}>
+              <Icon source="crosshairs-gps" size={20} color="#0066FF" />
+              <View style={styles.locationTextWrap}>
+                <Text style={[styles.locationNameText, { color: '#0066FF', fontWeight: '500' }]}>
+                  {isDetectingGPS ? 'Detecting current location...' : 'Use current location'}
+                </Text>
+              </View>
             </View>
-            <View style={styles.gpsTextWrap}>
-              <Text style={styles.gpsTitle}>Use Current Location</Text>
-              <Text style={styles.gpsSub}>
-                {isDetectingGPS ? 'Detecting via device GPS...' : 'Auto-detect your location via GPS'}
-              </Text>
-            </View>
-            <Icon source="chevron-right" size={20} color="#94A3B8" />
-          </TouchableOpacity>
-
-          {/* 2. All India (Pan-India) Option */}
-          <TouchableOpacity
-            style={[
-              styles.allIndiaCard,
-              selectedCity === 'All India' && styles.allIndiaCardActive,
-            ]}
-            onPress={() => handleSelect('All India')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.allIndiaIconBox}>
-              <Icon source="earth" size={24} color="#0066FF" />
-            </View>
-            <View style={styles.allIndiaTextWrap}>
-              <Text style={styles.allIndiaTitle}>All India (Pan India)</Text>
-              <Text style={styles.allIndiaSub}>Browse auto parts available across all of India</Text>
-            </View>
-            {selectedCity === 'All India' ? (
-              <Icon source="check-circle" size={22} color="#0066FF" />
+            {isDetectingGPS ? (
+              <ActivityIndicator size="small" color="#0066FF" />
             ) : (
-              <Icon source="chevron-right" size={20} color="#CBD5E1" />
+              <Icon source="chevron-right" size={22} color="#000000" />
             )}
           </TouchableOpacity>
+          <View style={styles.separator} />
 
-          {/* 3. Admin Added Locations (If configured) */}
-          {adminLocations.length > 0 && (
-            <View style={styles.sectionWrap}>
-              <View style={styles.sectionHeaderRow}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Icon source="shield-check" size={16} color="#0066FF" />
-                  <Text style={styles.sectionTitle}>ADMIN ADDED LOCATIONS</Text>
-                </View>
-                <Text style={styles.sectionCount}>{adminLocations.length} Locations</Text>
-              </View>
-
-              <View style={styles.chipsGrid}>
-                {adminLocations.map((loc) => {
-                  const isSelected = selectedCity.toLowerCase() === loc.toLowerCase();
-                  return (
-                    <TouchableOpacity
-                      key={loc}
-                      style={[
-                        styles.cityChip,
-                        styles.adminChip,
-                        isSelected && styles.cityChipActive,
-                      ]}
-                      onPress={() => handleSelect(loc, { district: loc })}
-                      activeOpacity={0.75}
-                    >
-                      <Icon
-                        source="star"
-                        size={14}
-                        color={isSelected ? '#0066FF' : '#F59E0B'}
-                      />
-                      <Text
-                        style={[
-                          styles.cityChipText,
-                          isSelected && styles.cityChipTextActive,
-                        ]}
-                      >
-                        {loc}
-                      </Text>
-                      {isSelected && <Icon source="check" size={14} color="#0066FF" />}
-                    </TouchableOpacity>
-                  );
-                })}
+          <TouchableOpacity
+            style={styles.locationRow}
+            activeOpacity={0.6}
+            onPress={() => handleSelect('All India')}
+          >
+            <View style={styles.rowLeftGroup}>
+              <Icon source="earth" size={20} color="#475569" />
+              <View style={styles.locationTextWrap}>
+                <Text style={[styles.locationNameText, { fontWeight: '500' }]}>
+                  All India
+                </Text>
               </View>
             </View>
-          )}
+            <Icon source="chevron-right" size={22} color="#000000" />
+          </TouchableOpacity>
+          <View style={styles.separator} />
 
-          {/* 4. Popular Cities in India */}
-          <View style={styles.sectionWrap}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>POPULAR CITIES</Text>
-              <Text style={styles.sectionCount}>Top Auto Hubs</Text>
-            </View>
-
-            <View style={styles.chipsGrid}>
-              {POPULAR_CITY_CHIPS.map((item) => {
-                const isSelected = selectedCity.toLowerCase() === item.name.toLowerCase();
-                return (
-                  <TouchableOpacity
-                    key={item.name}
-                    style={[styles.cityChip, isSelected && styles.cityChipActive]}
-                    onPress={() => handleSelect(item.name, { state: item.state })}
-                    activeOpacity={0.75}
-                  >
-                    <Icon
-                      source="map-marker-outline"
-                      size={15}
-                      color={isSelected ? '#0066FF' : '#64748B'}
-                    />
-                    <Text style={[styles.cityChipText, isSelected && styles.cityChipTextActive]}>
-                      {item.name}
-                    </Text>
-                    {isSelected && (
-                      <View style={{ marginLeft: 2 }}>
-                        <Icon source="check" size={14} color="#0066FF" />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* 5. All Indian States & Districts (Merged with Admin Additions) */}
-          <View style={styles.sectionWrap}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>EXPLORE BY STATE</Text>
-              <Text style={styles.sectionCount}>{allStatesAndDistricts.length} States & UTs</Text>
-            </View>
-
-            {allStatesAndDistricts.map((item) => {
-              const isExpanded = expandedState === item.state;
-              const isStateSelected = selectedCity.toLowerCase() === item.state.toLowerCase();
-              return (
-                <View key={item.state} style={styles.stateCard}>
-                  <TouchableOpacity
-                    style={styles.stateHeader}
-                    onPress={() => toggleStateExpand(item.state)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.stateHeaderLeft}>
-                      <View style={styles.stateIconCircle}>
-                        <Icon source="map-marker-radius" size={18} color="#0066FF" />
-                      </View>
-                      <View>
-                        <Text style={styles.stateName}>{item.state}</Text>
-                        <Text style={styles.districtCount}>
-                          {item.districts.length} Districts
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.stateHeaderRight}>
-                      {isStateSelected && (
-                        <View style={styles.selectedBadge}>
-                          <Text style={styles.selectedBadgeText}>Selected</Text>
-                        </View>
-                      )}
-                      <Icon
-                        source={isExpanded ? 'chevron-up' : 'chevron-down'}
-                        size={20}
-                        color="#64748B"
-                      />
-                    </View>
-                  </TouchableOpacity>
-
-                  {/* Expanded Districts List */}
-                  {isExpanded && (
-                    <View style={styles.districtListWrap}>
-                      {/* Option to select entire state */}
-                      <TouchableOpacity
-                        style={[
-                          styles.districtItem,
-                          isStateSelected && styles.districtItemActive,
-                        ]}
-                        onPress={() => handleSelect(item.state, { state: item.state })}
-                        activeOpacity={0.7}
-                      >
-                        <Text
-                          style={[
-                            styles.districtText,
-                            { fontWeight: '700', color: isStateSelected ? '#0066FF' : '#0F172A' },
-                          ]}
-                        >
-                          All of {item.state} (Entire State)
-                        </Text>
-                        {isStateSelected && <Icon source="check" size={16} color="#0066FF" />}
-                      </TouchableOpacity>
-
-                      {/* Districts in this state */}
-                      {item.districts.map((dist) => {
-                        const isDistrictSelected =
-                          selectedCity.toLowerCase() === dist.toLowerCase();
-                        return (
-                          <TouchableOpacity
-                            key={dist}
-                            style={[
-                              styles.districtItem,
-                              isDistrictSelected && styles.districtItemActive,
-                            ]}
-                            onPress={() =>
-                              handleSelect(dist, { state: item.state, district: dist })
-                            }
-                            activeOpacity={0.7}
-                          >
-                            <Text
-                              style={[
-                                styles.districtText,
-                                isDistrictSelected && styles.districtTextActive,
-                              ]}
-                            >
-                              {dist}
-                            </Text>
-                            {isDistrictSelected && (
-                              <Icon source="check" size={16} color="#0066FF" />
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-          </View>
+          {/* Alphabetical list of States as in demo image */}
+          {allStates.map((item) => (
+            <React.Fragment key={item.displayName}>
+              <TouchableOpacity
+                style={styles.locationRow}
+                activeOpacity={0.6}
+                onPress={() => setSelectedStateForDrilldown(item)}
+              >
+                <Text style={styles.locationNameText}>{item.displayName}</Text>
+                <Icon source="chevron-right" size={22} color="#000000" />
+              </TouchableOpacity>
+              <View style={styles.separator} />
+            </React.Fragment>
+          ))}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -745,62 +621,47 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
   },
+  flex1: {
+    flex: 1,
+  },
+  // Top Header Bar
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? 12 : 6,
-    paddingBottom: 12,
+    paddingTop: Platform.OS === 'android' ? 14 : 8,
+    paddingBottom: 14,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
   },
-  backBtn: {
-    padding: 6,
-    marginRight: 8,
-  },
-  headerTitleWrap: {
-    flex: 1,
+  headerIconBtn: {
+    padding: 4,
+    marginRight: 16,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  headerSub: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 1,
-  },
-  resetBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-  },
-  resetBtnText: {
-    fontSize: 13,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#0066FF',
+    color: '#000000',
   },
-  searchContainer: {
-    backgroundColor: '#FFFFFF',
+  // Search Box
+  searchWrapper: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    paddingTop: 12,
+    paddingBottom: 12,
+    backgroundColor: '#FFFFFF',
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 48,
+    height: 44,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    borderRadius: 6,
+    paddingHorizontal: 12,
   },
   searchInput: {
     flex: 1,
@@ -810,304 +671,57 @@ const styles = StyleSheet.create({
     marginRight: 4,
     paddingVertical: 0,
   },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
+  // Location Row Items
+  listContainer: {
+    paddingBottom: 36,
   },
-  listContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  gpsCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: '#BFDBFE',
-    marginBottom: 12,
-  },
-  gpsIconCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#DBEAFE',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
-  gpsTextWrap: {
-    flex: 1,
-  },
-  gpsTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0066FF',
-  },
-  gpsSub: {
-    fontSize: 12,
-    color: '#3B82F6',
-    marginTop: 2,
-  },
-  allIndiaCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 20,
-  },
-  allIndiaCardActive: {
-    borderColor: '#0066FF',
-    backgroundColor: '#F0F7FF',
-  },
-  allIndiaIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
-  allIndiaTextWrap: {
-    flex: 1,
-  },
-  allIndiaTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  allIndiaSub: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  sectionWrap: {
-    marginBottom: 24,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#475569',
-    letterSpacing: 0.5,
-  },
-  sectionCount: {
-    fontSize: 12,
-    color: '#94A3B8',
-    fontWeight: '600',
-  },
-  chipsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  cityChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    gap: 6,
-  },
-  cityChipActive: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#0066FF',
-  },
-  adminChip: {
-    borderColor: '#FCD34D',
-    backgroundColor: '#FFFBEB',
-  },
-  cityChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  cityChipTextActive: {
-    color: '#0066FF',
-    fontWeight: '700',
-  },
-  stateCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    overflow: 'hidden',
-  },
-  stateHeader: {
+  locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 15,
+    backgroundColor: '#FFFFFF',
   },
-  stateHeaderLeft: {
+  rowLeftGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     flex: 1,
   },
-  stateIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stateName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  districtCount: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 1,
-  },
-  stateHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  selectedBadge: {
-    backgroundColor: '#DBEAFE',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  selectedBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0066FF',
-  },
-  districtListWrap: {
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    backgroundColor: '#FAFCFF',
-  },
-  districtItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  districtItemActive: {
-    backgroundColor: '#EFF6FF',
-  },
-  districtText: {
-    fontSize: 13,
-    color: '#334155',
-  },
-  districtTextActive: {
-    color: '#0066FF',
-    fontWeight: '700',
-  },
-  resultItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  resultItemActive: {
-    borderColor: '#0066FF',
-    backgroundColor: '#F0F7FF',
-  },
-  adminResultItem: {
-    borderColor: '#FDE68A',
-    backgroundColor: '#FFFEF5',
-  },
-  resultIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  adminResultIconBox: {
-    backgroundColor: '#FEF3C7',
-  },
-  adminBadge: {
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-  },
-  adminBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#1D4ED8',
-    textTransform: 'uppercase',
-  },
-  resultTextWrap: {
+  locationTextWrap: {
     flex: 1,
   },
-  resultTitle: {
+  locationNameText: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#0F172A',
+    color: '#000000',
+    fontWeight: '400',
   },
-  resultTitleActive: {
-    color: '#0066FF',
-  },
-  resultSub: {
+  locationSubText: {
     fontSize: 12,
     color: '#64748B',
     marginTop: 2,
   },
-  emptyWrap: {
+  allStateRow: {
+    backgroundColor: '#F8FAFC',
+  },
+  allStateText: {
+    fontWeight: '600',
+    color: '#0066FF',
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#F1F5F9',
+    marginLeft: 18,
+  },
+  emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
-    paddingHorizontal: 24,
   },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#334155',
-    marginTop: 16,
-  },
-  emptySub: {
-    fontSize: 13,
-    color: '#64748B',
-    textAlign: 'center',
-    marginTop: 6,
-    lineHeight: 18,
-  },
-  emptyResetBtn: {
-    marginTop: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    backgroundColor: '#0066FF',
-    borderRadius: 10,
-  },
-  emptyResetBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+  emptyText: {
+    marginTop: 10,
     fontSize: 14,
+    color: '#64748B',
   },
 });
