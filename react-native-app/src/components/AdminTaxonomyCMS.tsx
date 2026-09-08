@@ -35,6 +35,11 @@ interface CategoryItem {
   icon?: string;
 }
 
+interface LocationItem {
+  state: string;
+  districts: string[];
+}
+
 const DEFAULT_BRANDS: BrandItem[] = [
   { name: 'Maruti Suzuki', models: ['Swift', 'Baleno', 'Brezza', 'Dzire', 'Ertiga', 'Wagon R', 'Alto', 'Grand Vitara'] },
   { name: 'Hyundai', models: ['Creta', 'i20', 'Venue', 'Verna', 'Grand i10', 'Aura', 'Tucson'] },
@@ -60,6 +65,7 @@ export const AdminTaxonomyCMS: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'brands' | 'categories' | 'locations'>('brands');
   const [brands, setBrands] = useState<BrandItem[]>(DEFAULT_BRANDS);
   const [categories, setCategories] = useState<CategoryItem[]>(DEFAULT_CATEGORIES);
+  const [locations, setLocations] = useState<LocationItem[]>(INDIAN_STATES_AND_DISTRICTS);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -78,6 +84,18 @@ export const AdminTaxonomyCMS: React.FC = () => {
   const [newCategoryImageUrl, setNewCategoryImageUrl] = useState('');
   const [uploadingCatImage, setUploadingCatImage] = useState(false);
 
+  const [subcategoryModalVisible, setSubcategoryModalVisible] = useState(false);
+  const [selectedCategoryIndex, setSelectedCategoryIndex] = useState<number | null>(null);
+  const [newSubcategoryName, setNewSubcategoryName] = useState('');
+
+  const [locationModalVisible, setLocationModalVisible] = useState(false);
+  const [newStateName, setNewStateName] = useState('');
+  const [newDistricts, setNewDistricts] = useState('');
+
+  const [districtModalVisible, setDistrictModalVisible] = useState(false);
+  const [selectedLocationIndex, setSelectedLocationIndex] = useState<number | null>(null);
+  const [newDistrictName, setNewDistrictName] = useState('');
+
   useEffect(() => {
     fetchTaxonomy();
   }, []);
@@ -95,6 +113,9 @@ export const AdminTaxonomyCMS: React.FC = () => {
         }
         if (data?.categories && Array.isArray(data.categories)) {
           setCategories(data.categories);
+        }
+        if (data?.locations && Array.isArray(data.locations)) {
+          setLocations(data.locations);
         }
       }
     } catch (err) {
@@ -134,6 +155,7 @@ export const AdminTaxonomyCMS: React.FC = () => {
       await db.collection('taxonomy').doc('data').set({
         brands,
         categories,
+        locations,
         updatedAt: Date.now(),
       });
 
@@ -252,6 +274,71 @@ export const AdminTaxonomyCMS: React.FC = () => {
     ]);
   };
 
+  const handleAddSubcategory = () => {
+    if (selectedCategoryIndex === null || !newSubcategoryName.trim()) return;
+    const updated = [...categories];
+    if (!updated[selectedCategoryIndex].subcategories.includes(newSubcategoryName.trim())) {
+      updated[selectedCategoryIndex].subcategories.push(newSubcategoryName.trim());
+      setCategories(updated);
+    }
+    setNewSubcategoryName('');
+    setSubcategoryModalVisible(false);
+  };
+
+  const handleDeleteSubcategory = (catIndex: number, subName: string) => {
+    const updated = [...categories];
+    updated[catIndex].subcategories = updated[catIndex].subcategories.filter((s) => s !== subName);
+    setCategories(updated);
+  };
+
+  const handleAddLocation = () => {
+    if (!newStateName.trim()) {
+      Alert.alert('Error', 'State name is required');
+      return;
+    }
+    const distArray = newDistricts
+      .split(',')
+      .map((d) => d.trim())
+      .filter(Boolean);
+
+    setLocations([...locations, { state: newStateName.trim(), districts: distArray }]);
+    setNewStateName('');
+    setNewDistricts('');
+    setLocationModalVisible(false);
+  };
+
+  const handleDeleteLocation = (index: number) => {
+    Alert.alert('Confirm Delete', `Delete ${locations[index].state}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          const updated = [...locations];
+          updated.splice(index, 1);
+          setLocations(updated);
+        },
+      },
+    ]);
+  };
+
+  const handleAddDistrict = () => {
+    if (selectedLocationIndex === null || !newDistrictName.trim()) return;
+    const updated = [...locations];
+    if (!updated[selectedLocationIndex].districts.includes(newDistrictName.trim())) {
+      updated[selectedLocationIndex].districts.push(newDistrictName.trim());
+      setLocations(updated);
+    }
+    setNewDistrictName('');
+    setDistrictModalVisible(false);
+  };
+
+  const handleDeleteDistrict = (locIndex: number, districtName: string) => {
+    const updated = [...locations];
+    updated[locIndex].districts = updated[locIndex].districts.filter((d) => d !== districtName);
+    setLocations(updated);
+  };
+
   return (
     <View style={styles.container}>
       {/* Sub Tabs */}
@@ -279,7 +366,7 @@ export const AdminTaxonomyCMS: React.FC = () => {
           onPress={() => setActiveTab('locations')}
         >
           <Text style={[styles.tabText, activeTab === 'locations' && styles.tabTextActive]}>
-            States & Hubs ({INDIAN_STATES_AND_DISTRICTS.length})
+            States & Hubs ({locations.length})
           </Text>
         </TouchableOpacity>
       </View>
@@ -319,6 +406,18 @@ export const AdminTaxonomyCMS: React.FC = () => {
             icon="plus"
           >
             Add Category
+          </Button>
+        )}
+
+        {activeTab === 'locations' && (
+          <Button
+            mode="outlined"
+            onPress={() => setLocationModalVisible(true)}
+            style={styles.addBtn}
+            labelStyle={{ color: '#1565FF', fontWeight: '700' }}
+            icon="plus"
+          >
+            Add State
           </Button>
         )}
       </View>
@@ -394,12 +493,23 @@ export const AdminTaxonomyCMS: React.FC = () => {
                         <Text style={styles.countChipText}>{c.subcategories.length} subparts</Text>
                       </View>
                     </View>
-                    <IconButton
-                      icon="delete-outline"
-                      size={20}
-                      iconColor="#EF4444"
-                      onPress={() => handleDeleteCategory(cIdx)}
-                    />
+                    <View style={{ flexDirection: 'row' }}>
+                      <IconButton
+                        icon="plus-circle"
+                        size={20}
+                        iconColor="#10B981"
+                        onPress={() => {
+                          setSelectedCategoryIndex(cIdx);
+                          setSubcategoryModalVisible(true);
+                        }}
+                      />
+                      <IconButton
+                        icon="delete-outline"
+                        size={20}
+                        iconColor="#EF4444"
+                        onPress={() => handleDeleteCategory(cIdx)}
+                      />
+                    </View>
                   </View>
 
                   <View style={styles.chipsWrap}>
@@ -421,7 +531,7 @@ export const AdminTaxonomyCMS: React.FC = () => {
           {/* LOCATIONS TAB */}
           {activeTab === 'locations' && (
             <View style={styles.cardsCol}>
-              {INDIAN_STATES_AND_DISTRICTS.map((st) => (
+              {locations.map((st, lIdx) => (
                 <Surface key={st.state} style={styles.cmsCard} elevation={2}>
                   <View style={styles.cmsCardHeader}>
                     <View style={styles.brandTitleRow}>
@@ -431,17 +541,39 @@ export const AdminTaxonomyCMS: React.FC = () => {
                         <Text style={styles.countChipText}>{st.districts.length} districts</Text>
                       </View>
                     </View>
+                    <View style={{ flexDirection: 'row' }}>
+                      <IconButton
+                        icon="plus-circle"
+                        size={20}
+                        iconColor="#10B981"
+                        onPress={() => {
+                          setSelectedLocationIndex(lIdx);
+                          setDistrictModalVisible(true);
+                        }}
+                      />
+                      <IconButton
+                        icon="delete-outline"
+                        size={20}
+                        iconColor="#EF4444"
+                        onPress={() => handleDeleteLocation(lIdx)}
+                      />
+                    </View>
                   </View>
 
                   <View style={styles.chipsWrap}>
-                    {st.districts.slice(0, 12).map((d) => (
-                      <View key={d} style={styles.locPill}>
-                        <Text style={styles.locPillText}>{d}</Text>
-                      </View>
+                    {st.districts.slice(0, 30).map((d) => (
+                      <Chip
+                        key={d}
+                        style={styles.modelChip}
+                        textStyle={{ fontSize: 11, color: '#1E293B', fontWeight: '600' }}
+                        onClose={() => handleDeleteDistrict(lIdx, d)}
+                      >
+                        {d}
+                      </Chip>
                     ))}
-                    {st.districts.length > 12 && (
+                    {st.districts.length > 30 && (
                       <View style={styles.locPillMore}>
-                        <Text style={styles.locPillMoreText}>+{st.districts.length - 12} more</Text>
+                        <Text style={styles.locPillMoreText}>+{st.districts.length - 30} more</Text>
                       </View>
                     )}
                   </View>
@@ -581,6 +713,98 @@ export const AdminTaxonomyCMS: React.FC = () => {
               <Button onPress={() => setCategoryModalVisible(false)}>Cancel</Button>
               <Button mode="contained" onPress={handleAddCategory}>
                 Add Category
+              </Button>
+            </View>
+          </Surface>
+        </View>
+      </Modal>
+
+      {/* Add Subcategory Modal */}
+      <Modal
+        visible={subcategoryModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSubcategoryModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Surface style={styles.modalCard} elevation={5}>
+            <Text style={styles.modalHeader}>
+              Add Subcategory to {selectedCategoryIndex !== null ? categories[selectedCategoryIndex]?.name : ''}
+            </Text>
+            <TextInput
+              label="Subcategory Name"
+              value={newSubcategoryName}
+              onChangeText={setNewSubcategoryName}
+              mode="outlined"
+              style={styles.modalInput}
+            />
+            <View style={styles.modalBtnRow}>
+              <Button onPress={() => setSubcategoryModalVisible(false)}>Cancel</Button>
+              <Button mode="contained" onPress={handleAddSubcategory}>
+                Add Subcategory
+              </Button>
+            </View>
+          </Surface>
+        </View>
+      </Modal>
+
+      {/* Add State Modal */}
+      <Modal
+        visible={locationModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLocationModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Surface style={styles.modalCard} elevation={5}>
+            <Text style={styles.modalHeader}>Add State / Region</Text>
+            <TextInput
+              label="State Name"
+              value={newStateName}
+              onChangeText={setNewStateName}
+              mode="outlined"
+              style={styles.modalInput}
+            />
+            <TextInput
+              label="Initial Districts (comma separated)"
+              value={newDistricts}
+              onChangeText={setNewDistricts}
+              mode="outlined"
+              style={styles.modalInput}
+            />
+            <View style={styles.modalBtnRow}>
+              <Button onPress={() => setLocationModalVisible(false)}>Cancel</Button>
+              <Button mode="contained" onPress={handleAddLocation}>
+                Add State
+              </Button>
+            </View>
+          </Surface>
+        </View>
+      </Modal>
+
+      {/* Add District Modal */}
+      <Modal
+        visible={districtModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDistrictModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Surface style={styles.modalCard} elevation={5}>
+            <Text style={styles.modalHeader}>
+              Add District to {selectedLocationIndex !== null ? locations[selectedLocationIndex]?.state : ''}
+            </Text>
+            <TextInput
+              label="District Name"
+              value={newDistrictName}
+              onChangeText={setNewDistrictName}
+              mode="outlined"
+              style={styles.modalInput}
+            />
+            <View style={styles.modalBtnRow}>
+              <Button onPress={() => setDistrictModalVisible(false)}>Cancel</Button>
+              <Button mode="contained" onPress={handleAddDistrict}>
+                Add District
               </Button>
             </View>
           </Surface>

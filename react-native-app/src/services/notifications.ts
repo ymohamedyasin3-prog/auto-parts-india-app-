@@ -261,29 +261,29 @@ export function subscribeToUserUnreadCounts(
     }
 
     // 1. Listen to unread chats
-    const { Filter } = require('@react-native-firebase/firestore');
     unsubChats = db
       .collection('chats')
-      .where(
-        Filter.or(
-          Filter('participants', 'array-contains', userId),
-          Filter('buyerId', '==', userId),
-          Filter('sellerId', '==', userId)
-        )
-      )
       .onSnapshot(
         (snapshot: any) => {
           let count = 0;
           if (snapshot && typeof snapshot.forEach === 'function') {
             snapshot.forEach((doc: any) => {
               const data = doc.data ? doc.data() : doc;
-              if (
-                data &&
-                data.lastSenderId &&
-                data.lastSenderId !== userId &&
-                data.unread === true
-              ) {
-                count += 1;
+              
+              const isParticipant =
+                (Array.isArray(data.participants) && data.participants.includes(userId)) ||
+                data.buyerId === userId ||
+                data.sellerId === userId ||
+                (typeof (doc.id || data.id) === 'string' && (doc.id || data.id).includes(userId));
+
+              const unreadFromMap = typeof data?.unreadCount?.[userId] === 'number' 
+                ? data.unreadCount[userId] 
+                : 0;
+
+              const hasUnreadFlag = data && data.lastSenderId && data.lastSenderId !== userId && data.unread === true;
+
+              if (isParticipant && (unreadFromMap > 0 || hasUnreadFlag)) {
+                count += Math.max(unreadFromMap, 1);
               }
             });
           }

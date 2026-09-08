@@ -215,8 +215,12 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
             });
 
             try {
+              const currentUnreadMap = mergedChat?.unreadCount || {};
+              const newUnreadMap = { ...currentUnreadMap };
+              newUnreadMap[currentUid] = 0;
+              
               db.collection('chats').doc(chatId).set({
-                unreadCount: { [currentUid]: 0 },
+                unreadCount: newUnreadMap,
                 unread: false,
               }, { merge: true });
               markNotificationAsRead(`${chatId}_${currentUid}`);
@@ -236,7 +240,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
         unsubscribe();
       } catch (_) {}
     };
-  }, [chatId, currentUid]);
+  }, [chatId, currentUid, mergedChat?.unreadCount]);
 
   // 2. Subscribe to Partner Typing Status & Presence Real-time
   useEffect(() => {
@@ -334,21 +338,8 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
       return;
     }
 
-    const tempId = `msg_temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const now = Date.now();
 
-    // Optimistic message
-    const optimisticMessage: ChatMessage = {
-      id: tempId,
-      senderId: currentUid,
-      senderName: currentName,
-      text: cleanText,
-      imageUrl: imageUrl || null,
-      createdAt: now,
-      status: 'pending',
-    };
-
-    setMessages((prev) => [...prev, optimisticMessage]);
     setInputText('');
     emitTyping(false);
     setIsSending(true);
@@ -383,6 +374,12 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
       const participantsList = Array.from(new Set([currentUid, partnerId, resolvedBuyerId, resolvedSellerId].filter(Boolean)));
 
       const chatDocRef = db.collection('chats').doc(chatId);
+      const currentUnreadMap = mergedChat?.unreadCount || {};
+      const newUnreadMap = { ...currentUnreadMap };
+      if (partnerId) {
+        newUnreadMap[partnerId] = (newUnreadMap[partnerId] || 0) + 1;
+      }
+      
       await chatDocRef.set(
         {
           id: chatId,
@@ -399,13 +396,9 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
           lastSenderId: currentUid,
           participants: participantsList,
           unread: true,
+          unreadCount: newUnreadMap,
         },
         { merge: true }
-      );
-
-      // Upgrade optimistic status to sent
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, id: docRef.id || tempId, status: 'sent' } : m))
       );
 
       // Real-time Chat Notification & Push dispatch
@@ -428,12 +421,12 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
 
     } catch (err: any) {
       console.warn('[ChatRoomScreen] Failed to send message:', err);
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m))
-      );
-      Alert.alert('Message Not Sent', 'Could not send your message. Please check your internet and tap to retry.');
+      Alert.alert('Message Not Sent', 'Could not send your message. Please check your internet connection.');
     } finally {
       setIsSending(false);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     }
   };
 

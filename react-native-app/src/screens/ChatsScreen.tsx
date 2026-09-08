@@ -49,14 +49,7 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
       }
 
       // Query chats collection where activeUid is a participant, buyer, or seller
-      const { Filter } = require('@react-native-firebase/firestore');
-      const chatsRef = db.collection('chats').where(
-        Filter.or(
-          Filter('participants', 'array-contains', activeUid),
-          Filter('buyerId', '==', activeUid),
-          Filter('sellerId', '==', activeUid)
-        )
-      );
+      const chatsRef = db.collection('chats');
       
       const unsubscribe = chatsRef.onSnapshot(
         (snapshot: any) => {
