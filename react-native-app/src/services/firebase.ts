@@ -397,17 +397,20 @@ async function fetchCloudCollection(collPath: string, whereClauses?: any[]): Pro
 
     const parsedDocs = Array.from(fetchedMap.values());
 
-    // Update cache with the exact live state from Firestore, preserving very recent local writes
+    const isPartialFetch = whereClauses && whereClauses.length > 0;
     const currentCache = cloudCache[collPath] || {};
-    const liveDocMap: Record<string, any> = {};
+    // If it's a partial fetch (has whereClauses), we MERGE with existing cache so we don't wipe out other queries' data
+    const liveDocMap: Record<string, any> = isPartialFetch ? { ...currentCache } : {};
     
     // 1. Keep local docs that were written in the last 15 seconds (to avoid race conditions)
-    Object.keys(currentCache).forEach((docId) => {
-      const doc = currentCache[docId];
-      if (doc._localTs && Date.now() - doc._localTs < 15000) {
-        liveDocMap[docId] = doc;
-      }
-    });
+    if (!isPartialFetch) {
+      Object.keys(currentCache).forEach((docId) => {
+        const doc = currentCache[docId];
+        if (doc._localTs && Date.now() - doc._localTs < 15000) {
+          liveDocMap[docId] = doc;
+        }
+      });
+    }
 
     // 2. Overwrite with fetched docs
     parsedDocs.forEach((doc) => {
@@ -417,13 +420,15 @@ async function fetchCloudCollection(collPath: string, whereClauses?: any[]): Pro
     cloudCache[collPath] = liveDocMap;
     if (cleanPath !== collPath) {
       const currentCleanCache = cloudCache[cleanPath] || {};
-      const liveCleanDocMap: Record<string, any> = {};
-      Object.keys(currentCleanCache).forEach((docId) => {
-        const doc = currentCleanCache[docId];
-        if (doc._localTs && Date.now() - doc._localTs < 15000) {
-          liveCleanDocMap[docId] = doc;
-        }
-      });
+      const liveCleanDocMap: Record<string, any> = isPartialFetch ? { ...currentCleanCache } : {};
+      if (!isPartialFetch) {
+        Object.keys(currentCleanCache).forEach((docId) => {
+          const doc = currentCleanCache[docId];
+          if (doc._localTs && Date.now() - doc._localTs < 15000) {
+            liveCleanDocMap[docId] = doc;
+          }
+        });
+      }
       parsedDocs.forEach((doc) => {
         liveCleanDocMap[doc.id] = { ...doc };
       });
@@ -431,9 +436,9 @@ async function fetchCloudCollection(collPath: string, whereClauses?: any[]): Pro
     }
 
     try {
-      await AsyncStorage.setItem(STORAGE_KEY_PREFIX + collPath, JSON.stringify(liveDocMap));
+      await AsyncStorage.setItem(STORAGE_KEY_PREFIX + collPath, JSON.stringify(cloudCache[collPath]));
       if (cleanPath !== collPath) {
-        await AsyncStorage.setItem(STORAGE_KEY_PREFIX + cleanPath, JSON.stringify(liveDocMap));
+        await AsyncStorage.setItem(STORAGE_KEY_PREFIX + cleanPath, JSON.stringify(cloudCache[cleanPath]));
       }
     } catch (_) {}
 
