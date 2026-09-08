@@ -2892,6 +2892,124 @@ export async function markMessagesAsDelivered(chatId: string, currentUserId: str
   }
 }
 
+export async function deleteChatMessageForMe(chatId: string, messageId: string, userId: string): Promise<void> {
+  if (useFirebase && db) {
+    try {
+      const msgRef = doc(db, "chats", chatId, "messages", messageId);
+      const msgSnap = await getDoc(msgRef);
+      if (msgSnap.exists()) {
+        const data = msgSnap.data() || {};
+        const deletedFor = Array.from(new Set([...(Array.isArray(data.deletedFor) ? data.deletedFor : []), userId]));
+        await updateDoc(msgRef, { deletedFor });
+      }
+    } catch (err) {
+      console.warn("Error deleting message for me in Firestore:", err);
+    }
+  } else {
+    try {
+      const localMsgKey = `autoparts_chat_messages_${chatId}`;
+      const localMsgRaw = localStorage.getItem(localMsgKey);
+      if (localMsgRaw) {
+        const msgs = JSON.parse(localMsgRaw) as Message[];
+        const updated = msgs.map(m => m.id === messageId ? { ...m, deletedFor: [...(m.deletedFor || []), userId] } : m);
+        localStorage.setItem(localMsgKey, JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent("autoparts_chat_updated", { detail: { chatId } }));
+      }
+    } catch (_) {}
+  }
+}
+
+export async function deleteChatMessageForEveryone(chatId: string, messageId: string): Promise<void> {
+  if (useFirebase && db) {
+    try {
+      const msgRef = doc(db, "chats", chatId, "messages", messageId);
+      await updateDoc(msgRef, {
+        isDeleted: true,
+        text: "This message was deleted",
+        imageUrl: null
+      });
+      try {
+        const chatRef = doc(db, "chats", chatId);
+        await updateDoc(chatRef, {
+          lastMessageText: "This message was deleted"
+        });
+      } catch (_) {}
+    } catch (err) {
+      console.warn("Error deleting message for everyone in Firestore:", err);
+    }
+  } else {
+    try {
+      const localMsgKey = `autoparts_chat_messages_${chatId}`;
+      const localMsgRaw = localStorage.getItem(localMsgKey);
+      if (localMsgRaw) {
+        const msgs = JSON.parse(localMsgRaw) as Message[];
+        const updated = msgs.map(m => m.id === messageId ? { ...m, isDeleted: true, text: "This message was deleted", imageUrl: undefined } : m);
+        localStorage.setItem(localMsgKey, JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent("autoparts_chat_updated", { detail: { chatId } }));
+      }
+    } catch (_) {}
+  }
+}
+
+export async function clearChatHistoryForUser(chatId: string, userId: string): Promise<void> {
+  const now = Date.now();
+  if (useFirebase && db) {
+    try {
+      const chatRef = doc(db, "chats", chatId);
+      await updateDoc(chatRef, {
+        [`clearedAt.${userId}`]: now
+      });
+    } catch (err) {
+      console.warn("Error clearing chat history in Firestore:", err);
+    }
+  } else {
+    try {
+      const key = `autoparts_chat_cleared_${chatId}_${userId}`;
+      localStorage.setItem(key, String(now));
+      window.dispatchEvent(new CustomEvent("autoparts_chat_updated", { detail: { chatId } }));
+    } catch (_) {}
+  }
+}
+
+export async function hideChatForUser(chatId: string, userId: string): Promise<void> {
+  const now = Date.now();
+  if (useFirebase && db) {
+    try {
+      const chatRef = doc(db, "chats", chatId);
+      const chatSnap = await getDoc(chatRef);
+      if (chatSnap.exists()) {
+        const data = chatSnap.data() || {};
+        const hiddenFor = Array.from(new Set([...(Array.isArray(data.hiddenFor) ? data.hiddenFor : []), userId]));
+        await updateDoc(chatRef, {
+          hiddenFor,
+          [`clearedAt.${userId}`]: now
+        });
+      }
+    } catch (err) {
+      console.warn("Error hiding chat in Firestore:", err);
+    }
+  } else {
+    try {
+      const localChatsRaw = localStorage.getItem(LOCAL_STORAGE_CHATS_KEY);
+      if (localChatsRaw) {
+        const chatsList = JSON.parse(localChatsRaw) as Chat[];
+        const updated = chatsList.map(c => {
+          if (c.id === chatId) {
+            return {
+              ...c,
+              hiddenFor: [...(c.hiddenFor || []), userId],
+              clearedAt: { ...(c.clearedAt || {}), [userId]: now }
+            };
+          }
+          return c;
+        });
+        localStorage.setItem(LOCAL_STORAGE_CHATS_KEY, JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent("autoparts_chat_updated", { detail: { chatId } }));
+      }
+    } catch (_) {}
+  }
+}
+
 export function subscribeToUserFavorites(
   userId: string,
   callback: (favorites: string[]) => void,

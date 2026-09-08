@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Send, ShoppingBag, Check, CheckCheck, Camera, ImageIcon, Loader2, AlertCircle, X, ZoomIn, Zap } from "lucide-react";
+import { ArrowLeft, Send, ShoppingBag, Check, CheckCheck, Camera, ImageIcon, Loader2, AlertCircle, X, ZoomIn, Zap, Trash2, Copy, MoreVertical, Ban, CheckCircle2 } from "lucide-react";
 import { User, Chat, Message } from "../types";
 import { 
   subscribeToChatMessages, 
@@ -8,7 +8,10 @@ import {
   setTypingStatus, 
   subscribeToTypingStatus,
   subscribeToUserPresence,
-  uploadProductImage
+  uploadProductImage,
+  deleteChatMessageForMe,
+  deleteChatMessageForEveryone,
+  clearChatHistoryForUser
 } from "../lib/firebase";
 import { compressImageFile } from "../utils/imageCompressor";
 import { useLanguage } from "../lib/LanguageContext";
@@ -40,6 +43,9 @@ export default function ChatRoomWindow({ chat, currentUser, onClose, onOpenUserP
   const [selectedPreviewImage, setSelectedPreviewImage] = useState<string | null>(null);
   const [showImageSourceModal, setShowImageSourceModal] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
+  const [activeMsgOptions, setActiveMsgOptions] = useState<Message | null>(null);
+  const [showClearChatModal, setShowClearChatModal] = useState(false);
+  const [copyToast, setCopyToast] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -51,6 +57,51 @@ export default function ChatRoomWindow({ chat, currentUser, onClose, onOpenUserP
   const partnerName = isUserBuyer ? chat.sellerName : chat.buyerName;
   const partnerId = isUserBuyer ? chat.sellerId : chat.buyerId;
   const partnerRole = isUserBuyer ? "Seller" : "Buyer";
+
+  // Filter messages for deleted / cleared history
+  const clearedAtTimestamp = chat.clearedAt?.[currentUser.id] || 0;
+  const visibleMessages = messages.filter((msg) => {
+    if (Array.isArray(msg.deletedFor) && msg.deletedFor.includes(currentUser.id)) {
+      return false;
+    }
+    if (clearedAtTimestamp > 0 && msg.createdAt <= clearedAtTimestamp) {
+      return false;
+    }
+    return true;
+  });
+
+  const handleDeleteForMe = async (msg: Message) => {
+    setActiveMsgOptions(null);
+    setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+    await deleteChatMessageForMe(chat.id, msg.id, currentUser.id);
+  };
+
+  const handleDeleteForEveryone = async (msg: Message) => {
+    setActiveMsgOptions(null);
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msg.id
+          ? { ...m, isDeleted: true, text: "This message was deleted", imageUrl: undefined }
+          : m
+      )
+    );
+    await deleteChatMessageForEveryone(chat.id, msg.id);
+  };
+
+  const handleCopyText = (text: string) => {
+    setActiveMsgOptions(null);
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+      setCopyToast("Copied to clipboard!");
+      setTimeout(() => setCopyToast(null), 2000);
+    }
+  };
+
+  const handleClearChatHistory = async () => {
+    setShowClearChatModal(false);
+    setMessages([]);
+    await clearChatHistoryForUser(chat.id, currentUser.id);
+  };
 
   // 1. Subscribe to real-time chat messages
   useEffect(() => {
@@ -337,8 +388,16 @@ export default function ChatRoomWindow({ chat, currentUser, onClose, onOpenUserP
           </div>
         </div>
 
-        {/* Partner Avatar & Language Selector */}
+        {/* Partner Avatar & Language Selector & Clear Chat */}
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowClearChatModal(true)}
+            className="p-1.5 rounded-lg text-slate-300 hover:text-rose-400 hover:bg-white/10 transition-colors"
+            title="Clear Chat History"
+          >
+            <Trash2 size={16} />
+          </button>
           <LanguageSelector variant="dark" />
           <UserAvatar
             userId={partnerId}
@@ -379,8 +438,11 @@ export default function ChatRoomWindow({ chat, currentUser, onClose, onOpenUserP
       </div>
 
       {/* Messages Feed Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col bg-slate-50/80">
-        {messages.length === 0 ? (
+      <div 
+        className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col bg-slate-50/80"
+        onClick={() => activeMsgOptions && setActiveMsgOptions(null)}
+      >
+        {visibleMessages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-400">
             <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-3 shadow-sm text-indigo-500">
               <ShoppingBag size={20} />
@@ -411,7 +473,7 @@ export default function ChatRoomWindow({ chat, currentUser, onClose, onOpenUserP
             </div>
           </div>
         ) : (
-          messages.map((msg) => {
+          visibleMessages.map((msg) => {
             const isMe = msg.senderId === currentUser.id;
             const isFailed = msg.status === "failed";
             const isPending = msg.status === "pending";
@@ -437,72 +499,146 @@ export default function ChatRoomWindow({ chat, currentUser, onClose, onOpenUserP
                   </div>
                 )}
                 
-                <div className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+                <div className={`flex flex-col ${isMe ? "items-end" : "items-start"} relative`}>
                   <div 
                     className={`p-3 rounded-2xl text-xs leading-relaxed font-medium shadow-xs break-words relative group ${
-                      isMe 
-                        ? isFailed
-                          ? "bg-rose-500 text-white rounded-tr-none"
-                          : "bg-[#2563EB] text-white rounded-tr-none" 
-                        : "bg-white text-slate-800 border border-slate-200/80 rounded-tl-none"
+                      msg.isDeleted
+                        ? "bg-slate-100 text-slate-500 border border-slate-200 italic"
+                        : isMe 
+                          ? isFailed
+                            ? "bg-rose-500 text-white rounded-tr-none"
+                            : "bg-[#2563EB] text-white rounded-tr-none" 
+                          : "bg-white text-slate-800 border border-slate-200/80 rounded-tl-none"
                     }`}
                   >
-                  {/* Optional Image attachment */}
-                  {msg.imageUrl && (
-                    <div 
-                      onClick={() => setSelectedPreviewImage(msg.imageUrl || null)}
-                      className="mb-2 rounded-xl overflow-hidden border border-black/10 cursor-pointer relative group/img max-w-xs"
-                    >
-                      <img 
-                        src={msg.imageUrl} 
-                        alt="Shared attachment" 
-                        loading="lazy" 
-                        decoding="async" 
-                        className="w-full max-h-56 object-cover rounded-xl hover:opacity-95 transition-opacity" 
-                      />
-                      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity text-white">
-                        <ZoomIn size={18} />
+                    {/* Delete / Options button */}
+                    {!msg.isDeleted && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMsgOptions(activeMsgOptions?.id === msg.id ? null : msg);
+                        }}
+                        className={`absolute top-1.5 ${isMe ? "left-1.5" : "right-1.5"} p-0.5 rounded-full ${isMe ? "bg-black/20 hover:bg-black/35 text-white" : "bg-slate-200/60 hover:bg-slate-300 text-slate-600"} opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-10`}
+                        title="Message options"
+                      >
+                        <MoreVertical size={12} />
+                      </button>
+                    )}
+
+                    {msg.isDeleted ? (
+                      <div className="flex items-center gap-1.5 py-0.5 select-none">
+                        <Ban size={13} className="shrink-0 text-slate-400" />
+                        <span>This message was deleted</span>
                       </div>
+                    ) : (
+                      <>
+                        {/* Optional Image attachment */}
+                        {msg.imageUrl && (
+                          <div 
+                            onClick={() => setSelectedPreviewImage(msg.imageUrl || null)}
+                            className="mb-2 rounded-xl overflow-hidden border border-black/10 cursor-pointer relative group/img max-w-xs"
+                          >
+                            <img 
+                              src={msg.imageUrl} 
+                              alt="Shared attachment" 
+                              loading="lazy" 
+                              decoding="async" 
+                              className="w-full max-h-56 object-cover rounded-xl hover:opacity-95 transition-opacity" 
+                            />
+                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity text-white">
+                              <ZoomIn size={18} />
+                            </div>
+                          </div>
+                        )}
+
+                        {msg.text && <div>{msg.text}</div>}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Options Popup Dropdown for this message */}
+                  {activeMsgOptions?.id === msg.id && (
+                    <div 
+                      className={`absolute z-30 top-10 ${isMe ? "right-0" : "left-0"} bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 min-w-[170px] animate-in fade-in zoom-in-95 duration-100`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {msg.text && !msg.isDeleted && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopyText(msg.text)}
+                          className="w-full px-3 py-1.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                        >
+                          <Copy size={13} className="text-slate-400" />
+                          <span>Copy Text</span>
+                        </button>
+                      )}
+                      
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteForMe(msg)}
+                        className="w-full px-3 py-1.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                      >
+                        <Trash2 size={13} className="text-slate-400" />
+                        <span>Delete for Me</span>
+                      </button>
+
+                      {isMe && !msg.isDeleted && (
+                        (() => {
+                          const isWithin15Min = Date.now() - msg.createdAt <= 15 * 60 * 1000;
+                          return isWithin15Min ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteForEveryone(msg)}
+                              className="w-full px-3 py-1.5 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer border-t border-slate-100 mt-0.5 pt-1.5"
+                            >
+                              <Trash2 size={13} className="text-rose-500" />
+                              <span>Delete for Everyone</span>
+                            </button>
+                          ) : (
+                            <div className="px-3 py-1 text-[10px] text-slate-400 font-medium italic border-t border-slate-100 mt-1">
+                              (Unsend expired &gt;15m)
+                            </div>
+                          );
+                        })()
+                      )}
                     </div>
                   )}
 
-                  {msg.text && <div>{msg.text}</div>}
-                </div>
-
-                {/* Footer time and checkmark status */}
-                <div className="flex items-center gap-1.5 mt-1 px-1">
-                  <span className="text-[8px] text-slate-400 font-bold font-mono">
-                    {formatMessageTime(msg.createdAt)}
-                  </span>
-
-                  {isMe && (
-                    <span className="shrink-0 flex items-center gap-1">
-                      {isPending ? (
-                        <Loader2 size={10} className="animate-spin text-slate-400" />
-                      ) : isFailed ? (
-                        <button 
-                          onClick={() => retrySendMessage(msg.id, msg.text, msg.imageUrl)}
-                          className="flex items-center gap-0.5 text-rose-500 hover:text-rose-600 font-black text-[9px]"
-                          title="Tap to retry"
-                        >
-                          <AlertCircle size={11} />
-                          <span>{t("retry")}</span>
-                        </button>
-                      ) : msg.status === "read" ? (
-                        <CheckCheck size={12} className="text-sky-500 font-black" />
-                      ) : msg.status === "delivered" ? (
-                        <CheckCheck size={12} className="text-slate-400 font-black" />
-                      ) : (
-                        <Check size={12} className="text-slate-400 font-black" />
-                      )}
+                  {/* Footer time and checkmark status */}
+                  <div className="flex items-center gap-1.5 mt-1 px-1">
+                    <span className="text-[8px] text-slate-400 font-bold font-mono">
+                      {formatMessageTime(msg.createdAt)}
                     </span>
-                  )}
+
+                    {isMe && (
+                      <span className="shrink-0 flex items-center gap-1">
+                        {isPending ? (
+                          <Loader2 size={10} className="animate-spin text-slate-400" />
+                        ) : isFailed ? (
+                          <button 
+                            onClick={() => retrySendMessage(msg.id, msg.text, msg.imageUrl)}
+                            className="flex items-center gap-0.5 text-rose-500 hover:text-rose-600 font-black text-[9px]"
+                            title="Tap to retry"
+                          >
+                            <AlertCircle size={11} />
+                            <span>{t("retry")}</span>
+                          </button>
+                        ) : msg.status === "read" ? (
+                          <CheckCheck size={12} className="text-sky-500 font-black" />
+                        ) : msg.status === "delivered" ? (
+                          <CheckCheck size={12} className="text-slate-400 font-black" />
+                        ) : (
+                          <Check size={12} className="text-slate-400 font-black" />
+                        )}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })
-      )}
+            );
+          })
+        )}
 
         {/* Typing indicator bubble */}
         {partnerIsTyping && (
@@ -660,6 +796,45 @@ export default function ChatRoomWindow({ chat, currentUser, onClose, onOpenUserP
         title="Take Photo to Send"
         facingModePreference="environment"
       />
+
+      {/* Clear Chat Confirmation Modal */}
+      {showClearChatModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl p-5 max-w-xs w-full shadow-2xl border border-slate-100">
+            <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mb-3">
+              <Trash2 size={20} />
+            </div>
+            <h3 className="font-extrabold text-sm text-slate-900">Clear chat history?</h3>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              This will clear all messages in this conversation for you only. The other participant will keep their chat history.
+            </p>
+            <div className="flex gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setShowClearChatModal(false)}
+                className="flex-1 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleClearChatHistory}
+                className="flex-1 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors shadow-sm cursor-pointer"
+              >
+                Clear Chat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Copy Notification Toast */}
+      {copyToast && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-bold px-3 py-2 rounded-full shadow-xl flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <CheckCircle2 size={14} className="text-emerald-400" />
+          <span>{copyToast}</span>
+        </div>
+      )}
     </div>
   );
 }

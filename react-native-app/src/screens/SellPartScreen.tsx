@@ -811,15 +811,41 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
     const firstImage = finalImagesToUse[0] || null;
     if (!firstImage && !finalBrand && !finalModel && !finalPartName) {
       setIsAutoFilling(false);
-      Alert.alert('Photo or Details Needed', 'Please upload at least one photo of the vehicle/spare part, or provide brand/model hints for AI analysis.');
+      Alert.alert(
+        'Upload Photo for AI Auto-Fill',
+        'Please add a photo of the spare part or vehicle first so AI can identify the brand, model, and category.',
+        [
+          { text: '📷 Take Photo', onPress: handlePickCamera },
+          { text: '🖼️ Choose from Gallery', onPress: handlePickGallery },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
       return;
     }
 
     try {
       let imageToSend = firstImage;
 
+      // Handle blob: URIs (web / react-native-web preview)
+      if (firstImage && firstImage.startsWith('blob:')) {
+        try {
+          const blobRes = await fetch(firstImage);
+          const blobData = await blobRes.blob();
+          const base64Data = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blobData);
+          });
+          if (base64Data) {
+            imageToSend = base64Data;
+          }
+        } catch (blobErr) {
+          console.warn('[AI AutoFill] Blob to base64 conversion warning:', blobErr);
+        }
+      }
       // If local device file URI (from Android Camera/Gallery), upload to Cloudinary first so the AI backend can access the real image
-      if (firstImage && (firstImage.startsWith('file://') || firstImage.startsWith('content://'))) {
+      else if (firstImage && (firstImage.startsWith('file://') || firstImage.startsWith('content://'))) {
         try {
           const uploadedUrl = await uploadImageToCloudinary(firstImage, 'spare_parts');
           if (uploadedUrl && (uploadedUrl.startsWith('http://') || uploadedUrl.startsWith('https://'))) {
@@ -840,15 +866,15 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
       }
 
       // Backend API Endpoints (prioritize direct origin in web, fallback to live Cloud Run endpoints in Android/iOS APK)
-      const endpoints = [
-        'https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing',
-        'https://ais-pre-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing',
-      ];
-      if (typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')) {
-        endpoints.unshift(`${window.location.origin}/api/ai/autofill-listing`);
+      const endpoints: string[] = [];
+      if (typeof window !== 'undefined' && window.location?.origin) {
+        endpoints.push(`${window.location.origin}/api/ai/autofill-listing`);
       }
+      endpoints.push('https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing');
+      endpoints.push('https://ais-pre-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing');
+      endpoints.push('http://10.0.2.2:3000/api/ai/autofill-listing');
 
-      let res: Response | null = null;
+      let data: any = null;
       let lastFetchErr: any = null;
 
       for (const endpoint of endpoints) {
@@ -872,30 +898,97 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
           });
           clearTimeout(timeoutId);
 
-          if (candidateRes.ok) {
-            res = candidateRes;
+          let resJson: any = null;
+          try {
+            resJson = await candidateRes.json();
+          } catch (_) {}
+
+          if (candidateRes.ok && resJson) {
+            data = resJson;
             break;
+          } else if (resJson && resJson.isAutomotive === false) {
+            // Non-automotive image rejection response from server
+            data = resJson;
+            break;
+          } else if (resJson && (resJson.error || resJson.message)) {
+            lastFetchErr = new Error(resJson.error || resJson.message);
+          } else {
+            lastFetchErr = new Error(`Server returned HTTP ${candidateRes.status}`);
           }
         } catch (err) {
           lastFetchErr = err;
         }
       }
 
-      if (!res) {
+      if (!data) {
         throw new Error(lastFetchErr?.message || 'Unable to connect to AI server');
       }
 
-      const data = await res.json();
-
       if (data && data.success && data.data) {
         const aiData = data.data;
-        if (aiData.title) setTitle(aiData.title);
-        if (aiData.carBrand) setCarBrand(aiData.carBrand);
-        if (aiData.carModel) setCarModel(aiData.carModel);
-        if (aiData.category) setCategory(aiData.category);
-        if (aiData.partName) setPartName(aiData.partName);
-        if (aiData.condition) setCondition(aiData.condition);
-        if (aiData.description) setDescription(aiData.description);
+
+        // Auto-match Brand with taxonomy
+        if (aiData.carBrand) {
+          const matchedBrand = Object.keys(taxonomyBrands).find(
+            (b) => b.toLowerCase() === aiData.carBrand.trim().toLowerCase() ||
+                   b.toLowerCase().includes(aiData.carBrand.trim().toLowerCase()) ||
+                   aiData.carBrand.trim().toLowerCase().includes(b.toLowerCase())
+          ) || aiData.carBrand;
+          setCarBrand(matchedBrand);
+
+          // Auto-match Model with taxonomy
+          if (aiData.carModel) {
+            const modelList = taxonomyBrands[matchedBrand] || [];
+            const matchedModel = modelList.find(
+              (m) => m.toLowerCase() === aiData.carModel.trim().toLowerCase() ||
+                     m.toLowerCase().includes(aiData.carModel.trim().toLowerCase()) ||
+                     aiData.carModel.trim().toLowerCase().includes(m.toLowerCase())
+            ) || aiData.carModel;
+            setCarModel(matchedModel);
+          }
+        } else if (aiData.carModel) {
+          setCarModel(aiData.carModel);
+        }
+
+        // Auto-match Category with taxonomy
+        if (aiData.category) {
+          const matchedCategory = Object.keys(taxonomyCategories).find(
+            (c) => c.toLowerCase() === aiData.category.trim().toLowerCase() ||
+                   c.toLowerCase().includes(aiData.category.trim().toLowerCase()) ||
+                   aiData.category.trim().toLowerCase().includes(c.toLowerCase())
+          ) || aiData.category;
+          setCategory(matchedCategory);
+
+          // Auto-match Part Name with taxonomy
+          if (aiData.partName) {
+            const partList = taxonomyCategories[matchedCategory] || [];
+            const matchedPart = partList.find(
+              (p) => p.toLowerCase() === aiData.partName.trim().toLowerCase() ||
+                     p.toLowerCase().includes(aiData.partName.trim().toLowerCase()) ||
+                     aiData.partName.trim().toLowerCase().includes(p.toLowerCase())
+            ) || aiData.partName;
+            setPartName(matchedPart);
+          }
+        } else if (aiData.partName) {
+          setPartName(aiData.partName);
+        }
+
+        // Ad Title
+        if (aiData.title) {
+          setTitle(aiData.title);
+        }
+
+        // Condition (Normalize to 'New' or 'Used')
+        if (aiData.condition) {
+          const condStr = String(aiData.condition).toLowerCase();
+          setCondition(condStr.includes('new') ? 'New' : 'Used');
+        }
+
+        // Description
+        if (aiData.description) {
+          setDescription(aiData.description);
+        }
+
         // CRITICAL: Price / Rate is intentionally NEVER filled by AI, preserving seller's choice.
 
         setAiSuccessMessage('✨ AI analyzed your vehicle/part photo and auto-filled details!');
@@ -911,7 +1004,13 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
       }
     } catch (err: any) {
       console.warn('Backend AI auto-fill error:', err?.message);
-      Alert.alert('AI Auto-Fill Notice', 'Unable to reach AI service. Please check your internet connection and enter details manually.');
+      const isHighDemand = err?.message?.toLowerCase()?.includes('high demand');
+      Alert.alert(
+        'AI Auto-Fill Notice',
+        isHighDemand
+          ? 'The AI service is experiencing high demand right now. Please try again in a few moments or enter details manually.'
+          : (err?.message || 'Unable to reach AI service. Please check your internet connection and enter details manually.')
+      );
     } finally {
       setIsAutoFilling(false);
     }

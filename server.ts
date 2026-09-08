@@ -246,19 +246,41 @@ Respond strictly in valid JSON format matching this schema:
 
       promptParts.push({ text: analysisPrompt });
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
-        contents: [{ role: "user", parts: promptParts }],
-        config: {
-          responseMimeType: "application/json"
-        }
-      });
+      // Candidate Gemini models with automatic fallback cascade in case of temporary high demand or quota
+      const candidateModels = [
+        "gemini-3.8-flash",
+        "gemini-3.1-flash-lite",
+        "gemini-flash-latest"
+      ];
+      let responseText: string | null = null;
+      let lastModelError: any = null;
 
-      const responseText = response.text?.trim();
+      for (const modelName of candidateModels) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: [{ role: "user", parts: promptParts }],
+            config: {
+              responseMimeType: "application/json"
+            }
+          });
+          const text = response.text?.trim();
+          if (text) {
+            responseText = text;
+            break;
+          }
+        } catch (modelErr: any) {
+          lastModelError = modelErr;
+          console.warn(`[Gemini AutoFill] Model ${modelName} unavailable, attempting fallback:`, modelErr?.message?.slice(0, 120) || modelErr);
+        }
+      }
+
       if (!responseText) {
-        return res.status(500).json({
+        return res.status(503).json({
           success: false,
-          error: "AI did not return a response. Please enter details manually."
+          error: lastModelError?.message?.includes("high demand")
+            ? "AI model is currently experiencing temporary high demand. Please try again in a moment or enter details manually."
+            : "AI service temporarily unavailable. Please enter details manually."
         });
       }
 
@@ -281,6 +303,9 @@ Respond strictly in valid JSON format matching this schema:
         });
       }
 
+      const rawCondition = String(generatedData.condition || "Used");
+      const normalizedCondition = rawCondition.toLowerCase().includes("new") ? "New" : "Used";
+
       return res.json({
         success: true,
         data: {
@@ -289,7 +314,8 @@ Respond strictly in valid JSON format matching this schema:
           carModel: generatedData.carModel || currentModel || "",
           category: generatedData.category || currentCategory || "",
           partName: generatedData.partName || currentPartName || "",
-          condition: generatedData.condition || "Used (Good)",
+          condition: normalizedCondition,
+          rawCondition: rawCondition,
           description: generatedData.description || ""
           // Explicitly no price field
         }

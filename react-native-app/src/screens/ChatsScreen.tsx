@@ -30,9 +30,58 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'buyers' | 'sellers'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'buy' | 'sell'>('all');
   const activeUser = initialUser || getCurrentUser();
   const { translateDynamic } = useLanguage();
+
+  const getCleanId = (val: any): string => {
+    if (!val) return '';
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') return val.id || val.uid || val._id || '';
+    return String(val);
+  };
+
+  // Helper to accurately determine if current user is the buyer in a chat
+  const isCurrentUserBuyer = (chat: any, activeUid: string): boolean => {
+    if (!chat || !activeUid) return true;
+    const buyerId = getCleanId(chat.buyerId);
+    const sellerId = getCleanId(chat.sellerId);
+
+    // 1. If sellerId equals activeUid, the current user is definitely the SELLER -> NOT the buyer
+    if (sellerId && sellerId === activeUid) {
+      return false;
+    }
+    // 2. If buyerId equals activeUid, the current user is definitely the BUYER
+    if (buyerId && buyerId === activeUid) {
+      return true;
+    }
+    // 3. Fallback: if sellerId is someone else, the user initiated the chat as buyer
+    if (sellerId && sellerId !== activeUid) {
+      return true;
+    }
+    // 4. Fallback: if buyerId is someone else, user is the seller
+    if (buyerId && buyerId !== activeUid) {
+      return false;
+    }
+    return true;
+  };
+
+  // Helper to get the other party's user ID
+  const getPartnerIdFromChat = (c: any, uid: string): string => {
+    if (!c) return '';
+    const bId = getCleanId(c.buyerId);
+    const sId = getCleanId(c.sellerId);
+    if (sId && sId !== uid && sId !== 'seller') return sId;
+    if (bId && bId !== uid && bId !== 'buyer') return bId;
+    if (Array.isArray(c.participants)) {
+      const other = c.participants.find((p: any) => {
+        const pid = getCleanId(p);
+        return pid && pid !== uid && pid !== 'seller' && pid !== 'buyer';
+      });
+      if (other) return getCleanId(other);
+    }
+    return isCurrentUserBuyer(c, uid) ? sId : bId;
+  };
 
   const loadUserChats = useCallback(() => {
     const activeUid = activeUser?.uid || activeUser?.id;
@@ -78,15 +127,12 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
         setLoading(false);
         setRefreshing(false);
 
-        // Enrich with live user photos from Firestore
+        // Enrich with live user profile photos from Firestore
         const partnerIds = Array.from(
           new Set(
-            list.map((c: any) => {
-              const isUserBuyer = c.buyerId === activeUid || c.buyerId?.id === activeUid;
-              return isUserBuyer 
-                ? c.sellerId || (Array.isArray(c.participants) ? c.participants.find((p: string) => p !== activeUid) : null)
-                : c.buyerId || (Array.isArray(c.participants) ? c.participants.find((p: string) => p !== activeUid) : null);
-            }).filter(Boolean)
+            list
+              .map((c: any) => getPartnerIdFromChat(c, activeUid))
+              .filter((id: string) => id && id !== 'seller' && id !== 'buyer')
           )
         );
 
@@ -96,9 +142,18 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
               try {
                 if (!pId) return { pId, photo: null };
                 const uDoc = await db.collection('users').doc(pId).get();
-                if (uDoc && uDoc.exists) {
-                  const uData = uDoc.data();
-                  return { pId, photo: uData?.photoURL || uData?.profilePhoto || null };
+                const exists = typeof uDoc?.exists === 'function' ? uDoc.exists() : Boolean(uDoc?.exists);
+                if (exists) {
+                  const uData = typeof uDoc?.data === 'function' ? uDoc.data() : uDoc?.data;
+                  const photo =
+                    uData?.photoURL ||
+                    uData?.profilePhoto ||
+                    uData?.profileImageUrl ||
+                    uData?.avatarUrl ||
+                    uData?.photo ||
+                    uData?.customPhoto ||
+                    null;
+                  return { pId, photo };
                 }
               } catch (_) {}
               return { pId, photo: null };
@@ -111,17 +166,16 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
             if (Object.keys(photoMap).length > 0) {
               setChats((prev) =>
                 prev.map((c) => {
-                  const isUserBuyer = c.buyerId === activeUid || c.buyerId?.id === activeUid;
-                  const pId = isUserBuyer 
-                    ? c.sellerId || (Array.isArray(c.participants) ? c.participants.find((p: string) => p !== activeUid) : null)
-                    : c.buyerId || (Array.isArray(c.participants) ? c.participants.find((p: string) => p !== activeUid) : null);
-                  const livePhoto = photoMap[pId];
+                  const pId = getPartnerIdFromChat(c, activeUid);
+                  const livePhoto = pId ? photoMap[pId] : null;
+                  const isUserBuyer = isCurrentUserBuyer(c, activeUid);
                   if (livePhoto) {
-                    if (isUserBuyer) {
-                      return { ...c, sellerPhoto: livePhoto };
-                    } else {
-                      return { ...c, buyerPhoto: livePhoto };
-                    }
+                    return {
+                      ...c,
+                      partnerPhoto: livePhoto,
+                      sellerPhoto: isUserBuyer ? livePhoto : (c.sellerPhoto || livePhoto),
+                      buyerPhoto: !isUserBuyer ? livePhoto : (c.buyerPhoto || livePhoto),
+                    };
                   }
                   return c;
                 })
@@ -261,7 +315,7 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
   if (!activeUser) {
     return (
       <View style={styles.authPromptContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#083B84" />
+        <StatusBar barStyle="light-content" backgroundColor="#0066FF" />
         <View style={styles.authCard}>
           <View style={styles.authIconCircle}>
             <Icon source="message-text-lock-outline" size={36} color="#0072F5" />
@@ -288,15 +342,19 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
   }
 
   const filteredChats = chats.filter((chat) => {
-    const activeUid = activeUser.uid || activeUser.id;
-    const isUserBuyer = chat.buyerId ? activeUid === chat.buyerId : activeUid !== chat.sellerId;
-
-    if (activeFilter === 'buyers' && isUserBuyer) {
-      // Current user is buyer, so the partner is a seller. Filter out if looking for buyers.
+    const activeUid = activeUser?.uid || activeUser?.id || '';
+    if (Array.isArray(chat.hiddenFor) && chat.hiddenFor.includes(activeUid)) {
       return false;
     }
-    if (activeFilter === 'sellers' && !isUserBuyer) {
-      // Current user is seller, so partner is buyer. Filter out if looking for sellers.
+    const isUserBuyer = isCurrentUserBuyer(chat, activeUid);
+
+    // Filter by Tab:
+    // 'buy' tab: ONLY show chats where current user is BUYING from a seller
+    if (activeFilter === 'buy' && !isUserBuyer) {
+      return false;
+    }
+    // 'sell' tab: ONLY show chats where current user is SELLING to a buyer
+    if (activeFilter === 'sell' && isUserBuyer) {
       return false;
     }
 
@@ -313,13 +371,19 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
   });
 
   const renderChatItem = ({ item }: { item: any }) => {
-    const activeUid = activeUser.uid || activeUser.id;
-    const isUserBuyer = item.buyerId ? activeUid === item.buyerId : activeUid !== item.sellerId;
+    const activeUid = activeUser?.uid || activeUser?.id || '';
+    const isUserBuyer = isCurrentUserBuyer(item, activeUid);
     const partnerName = isUserBuyer
-      ? item.sellerName || 'Verified Seller'
-      : item.buyerName || 'Buyer';
-    const partnerPhoto = isUserBuyer ? item.sellerPhoto : item.buyerPhoto;
-    const displayAvatar = partnerPhoto || item.partImageUrl;
+      ? item.sellerName || translateDynamic('Verified Seller')
+      : item.buyerName || translateDynamic('Buyer');
+    const partnerId = getPartnerIdFromChat(item, activeUid);
+    const userProfilePicture = (
+      item.partnerPhoto ||
+      (isUserBuyer
+        ? (item.sellerPhoto || item.sellerPhotoURL || item.sellerAvatar)
+        : (item.buyerPhoto || item.buyerPhotoURL || item.buyerAvatar)) ||
+      null
+    );
 
     const unreadCount =
       item.unreadCount?.[activeUid] ||
@@ -327,21 +391,30 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
 
     const handleDeleteChat = (chatItem: any) => {
       Alert.alert(
-        'Delete Conversation',
-        `Are you sure you want to delete the chat history with ${partnerName}?`,
+        translateDynamic('Delete Conversation'),
+        `${translateDynamic('Are you sure you want to delete the chat with')} ${partnerName}?`,
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: translateDynamic('Cancel'), style: 'cancel' },
           {
-            text: 'Delete',
+            text: translateDynamic('Delete'),
             style: 'destructive',
             onPress: async () => {
               try {
                 const db = getFirebaseFirestore();
                 if (db && typeof db.collection === 'function' && chatItem.id) {
-                  await db.collection('chats').doc(chatItem.id).delete();
+                  const chatRef = db.collection('chats').doc(chatItem.id);
+                  const snap = await chatRef.get();
+                  const currentHidden = snap?.exists ? (snap.data()?.hiddenFor || []) : [];
+                  const nextHidden = Array.from(new Set([...currentHidden, activeUid]));
+                  await chatRef.set({
+                    hiddenFor: nextHidden,
+                    clearedAt: {
+                      ...(snap.data()?.clearedAt || {}),
+                      [activeUid]: Date.now(),
+                    },
+                  }, { merge: true });
                 }
                 setChats((prev) => prev.filter((c) => c.id !== chatItem.id));
-                Alert.alert('Deleted', 'Conversation removed.');
               } catch (err: any) {
                 console.warn('[ChatsScreen] Delete error:', err);
               }
@@ -362,6 +435,9 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
           }
           navigation.navigate('ChatRoom', {
             chatId: item.id,
+            partnerId: partnerId,
+            partnerName: partnerName,
+            partnerPhoto: userProfilePicture,
             part: {
               id: item.partId,
               title: item.partTitle || 'Spare Part',
@@ -370,14 +446,19 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
               sellerId: item.sellerId,
               sellerName: item.sellerName,
             },
-            chat: item,
+            chat: {
+              ...item,
+              partnerPhoto: userProfilePicture,
+              sellerPhoto: isUserBuyer ? (userProfilePicture || item.sellerPhoto) : item.sellerPhoto,
+              buyerPhoto: !isUserBuyer ? (userProfilePicture || item.buyerPhoto) : item.buyerPhoto,
+            },
           });
         }}
       >
-        {/* Avatar */}
+        {/* User Profile Avatar */}
         <View style={styles.avatarContainer}>
-          {displayAvatar ? (
-            <Image source={{ uri: displayAvatar }} style={styles.avatarImage} />
+          {userProfilePicture ? (
+            <Image source={{ uri: userProfilePicture }} style={styles.avatarImage} />
           ) : (
             <View style={styles.avatarPlaceholder}>
               <Text style={styles.avatarInitial}>
@@ -385,13 +466,44 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
               </Text>
             </View>
           )}
+
+          {/* Small Product Part Thumbnail Badge */}
+          {item.partImageUrl ? (
+            <View style={styles.partBadgeContainer}>
+              <Image source={{ uri: item.partImageUrl }} style={styles.partBadgeImage} />
+            </View>
+          ) : null}
         </View>
 
-        {/* Middle Content: Name & Last Message */}
+        {/* Middle Content: Name, Role Badge, Part Title & Last Message */}
         <View style={styles.chatInfo}>
-          <Text numberOfLines={1} style={styles.partnerNameText}>
-            {partnerName}
-          </Text>
+          <View style={styles.nameAndBadgeRow}>
+            <Text numberOfLines={1} style={styles.partnerNameText}>
+              {partnerName}
+            </Text>
+            <View
+              style={[
+                styles.roleBadge,
+                isUserBuyer ? styles.roleBadgeBuy : styles.roleBadgeSell,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.roleBadgeText,
+                  isUserBuyer ? styles.roleBadgeTextBuy : styles.roleBadgeTextSell,
+                ]}
+              >
+                {isUserBuyer ? translateDynamic('Buy') : translateDynamic('Sell')}
+              </Text>
+            </View>
+          </View>
+
+          {item.partTitle ? (
+            <Text numberOfLines={1} style={styles.partTitleSub}>
+              {item.partTitle}
+            </Text>
+          ) : null}
+
           <Text numberOfLines={1} style={styles.lastMessageText}>
             {item.lastMessageText || translateDynamic('Tap to start conversation...')}
           </Text>
@@ -418,9 +530,9 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#083B84" />
+      <StatusBar barStyle="light-content" backgroundColor="#0066FF" />
 
-      {/* Royal Navy Blue Top Header Bar matching image */}
+      {/* Royal Blue Top Header Bar matching Home Screen */}
       <View style={styles.header}>
         {/* Row 1: Brand title Auto Parts India */}
         <View style={styles.brandRow}>
@@ -464,7 +576,7 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
           </View>
         )}
 
-        {/* Row 3: Filter Tabs: All, Buyers, Sellers */}
+        {/* Row 3: Filter Tabs: All, Buy, Sell */}
         <View style={styles.filterTabsRow}>
           <TouchableOpacity
             style={[
@@ -487,36 +599,36 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
           <TouchableOpacity
             style={[
               styles.filterTabPill,
-              activeFilter === 'buyers' ? styles.filterTabPillActive : styles.filterTabPillInactive,
+              activeFilter === 'buy' ? styles.filterTabPillActive : styles.filterTabPillInactive,
             ]}
-            onPress={() => setActiveFilter('buyers')}
+            onPress={() => setActiveFilter('buy')}
             activeOpacity={0.8}
           >
             <Text
               style={[
                 styles.filterTabText,
-                activeFilter === 'buyers' ? styles.filterTabTextActive : styles.filterTabTextInactive,
+                activeFilter === 'buy' ? styles.filterTabTextActive : styles.filterTabTextInactive,
               ]}
             >
-              {translateDynamic('Buyers')}
+              {translateDynamic('Buy')}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[
               styles.filterTabPill,
-              activeFilter === 'sellers' ? styles.filterTabPillActive : styles.filterTabPillInactive,
+              activeFilter === 'sell' ? styles.filterTabPillActive : styles.filterTabPillInactive,
             ]}
-            onPress={() => setActiveFilter('sellers')}
+            onPress={() => setActiveFilter('sell')}
             activeOpacity={0.8}
           >
             <Text
               style={[
                 styles.filterTabText,
-                activeFilter === 'sellers' ? styles.filterTabTextActive : styles.filterTabTextInactive,
+                activeFilter === 'sell' ? styles.filterTabTextActive : styles.filterTabTextInactive,
               ]}
             >
-              {translateDynamic('Sellers')}
+              {translateDynamic('Sell')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -547,28 +659,54 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconCircle}>
-                  <Icon source="chat-outline" size={44} color="#94A3B8" />
+                  <Icon
+                    source={
+                      activeFilter === 'buy'
+                        ? 'shopping-outline'
+                        : activeFilter === 'sell'
+                        ? 'tag-outline'
+                        : 'chat-outline'
+                    }
+                    size={44}
+                    color="#94A3B8"
+                  />
                 </View>
                 <Text variant="titleMedium" style={styles.emptyTitle}>
                   {searchQuery
                     ? translateDynamic('No matching conversations found')
+                    : activeFilter === 'buy'
+                    ? translateDynamic('No buying chats yet')
+                    : activeFilter === 'sell'
+                    ? translateDynamic('No selling inquiries yet')
                     : translateDynamic('No active conversations yet')}
                 </Text>
                 <Text variant="bodySmall" style={styles.emptySub}>
                   {searchQuery
                     ? translateDynamic('Try a different search query for parts or sellers.')
+                    : activeFilter === 'buy'
+                    ? translateDynamic('When you chat with sellers to buy auto spare parts, those conversations appear here.')
+                    : activeFilter === 'sell'
+                    ? translateDynamic('When buyers send inquiries for parts you posted for sale, those messages appear here.')
                     : translateDynamic('Browse spare parts and click "Chat" to contact sellers in real-time.')}
                 </Text>
                 {!searchQuery && (
                   <Button
                     mode="contained-tonal"
-                    onPress={() => navigation.navigate('MainTabs', { screen: 'HomeTab' })}
+                    onPress={() => {
+                      if (activeFilter === 'sell') {
+                        navigation.navigate('MainTabs', { screen: 'Sell' });
+                      } else {
+                        navigation.navigate('MainTabs', { screen: 'HomeTab' });
+                      }
+                    }}
                     style={{ marginTop: 16 }}
                     buttonColor="#EFF6FF"
                     textColor="#0072F5"
-                    icon="car-search"
+                    icon={activeFilter === 'sell' ? 'plus-circle' : 'car-search'}
                   >
-                    {translateDynamic('Browse Spare Parts')}
+                    {activeFilter === 'sell'
+                      ? translateDynamic('Post an Ad to Sell Parts')
+                      : translateDynamic('Browse Spare Parts to Buy')}
                   </Button>
                 )}
               </View>
@@ -583,10 +721,10 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#083B84',
+    backgroundColor: '#0066FF',
   },
   header: {
-    backgroundColor: '#083B84',
+    backgroundColor: '#0066FF',
     paddingTop: Platform.OS === 'android' ? 14 : 8,
     paddingHorizontal: 16,
     paddingBottom: 16,
@@ -692,13 +830,14 @@ const styles = StyleSheet.create({
   },
   avatarContainer: {
     marginRight: 14,
+    position: 'relative',
   },
   avatarImage: {
     width: 52,
     height: 52,
     borderRadius: 26,
     backgroundColor: '#F1F5F9',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E2E8F0',
   },
   avatarPlaceholder: {
@@ -714,16 +853,72 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
+  partBadgeContainer: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    overflow: 'hidden',
+    backgroundColor: '#0F172A',
+  },
+  partBadgeImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
   chatInfo: {
     flex: 1,
     justifyContent: 'center',
     marginRight: 12,
   },
+  nameAndBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
   partnerNameText: {
     fontSize: 16,
     fontWeight: '700',
     color: '#0F172A',
-    marginBottom: 4,
+    flex: 1,
+    marginRight: 8,
+  },
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  roleBadgeBuy: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  roleBadgeSell: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  roleBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  roleBadgeTextBuy: {
+    color: '#1D4ED8',
+  },
+  roleBadgeTextSell: {
+    color: '#B45309',
+  },
+  partTitleSub: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0066FF',
+    marginBottom: 3,
   },
   lastMessageText: {
     fontSize: 14,
@@ -801,7 +996,7 @@ const styles = StyleSheet.create({
   },
   authPromptContainer: {
     flex: 1,
-    backgroundColor: '#083B84',
+    backgroundColor: '#0066FF',
     justifyContent: 'center',
     padding: 24,
   },

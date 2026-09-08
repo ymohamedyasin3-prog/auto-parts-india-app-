@@ -259,6 +259,8 @@ export interface Message {
   imageUrl?: string;
   senderName?: string;
   senderAvatar?: string;
+  isDeleted?: boolean;
+  deletedFor?: string[];
 }
 
 export interface Chat {
@@ -278,6 +280,8 @@ export interface Chat {
   lastSenderId?: string;
   lastMessage?: string;
   updatedAt?: number;
+  clearedAt?: Record<string, number>;
+  hiddenFor?: string[];
 }
 
 export interface SellerReview {

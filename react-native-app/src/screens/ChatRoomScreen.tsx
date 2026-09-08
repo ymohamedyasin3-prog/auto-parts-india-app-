@@ -38,17 +38,33 @@ interface ChatMessage {
   createdAt: number | any;
   status?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
   readBy?: string[];
+  isDeleted?: boolean;
+  deletedFor?: string[];
 }
 
 export default function ChatRoomScreen({ route, navigation, user: initialUser }: any) {
   const insets = useSafeAreaInsets();
   const { language, t, translateDynamic } = useLanguage();
 
-  const { chatId: routeChatId, part: routePart, chat: routeChat } = route.params || {};
+  const {
+    chatId: routeChatId,
+    part: routePart,
+    chat: routeChat,
+    partnerId: routePartnerId,
+    partnerPhoto: routePartnerPhoto,
+    partnerName: routePartnerName,
+  } = route.params || {};
   const activeUser = initialUser || getCurrentUser();
   const currentUid = activeUser?.uid || activeUser?.id || 'guest';
   const currentName = activeUser?.displayName || activeUser?.name || activeUser?.email?.split('@')[0] || 'User';
-  const currentUserPhoto = activeUser?.photoURL || '';
+  const currentUserPhoto = activeUser?.photoURL || activeUser?.profilePhoto || '';
+
+  const getCleanId = (val: any): string => {
+    if (!val) return '';
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') return val.id || val.uid || val._id || '';
+    return String(val);
+  };
 
   // Determine item & chatId
   const part = routePart || (routeChat ? {
@@ -58,10 +74,11 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
     price: routeChat.partPrice,
     sellerId: routeChat.sellerId,
     sellerName: routeChat.sellerName,
+    sellerPhoto: routeChat.sellerPhoto,
     contactPhone: routeChat.contactPhone,
   } : null);
 
-  const chatId = routeChatId || (part && currentUid ? `${currentUid}_${part.sellerId || 'seller'}_${part.id || 'item'}` : 'default_chat');
+  const chatId = routeChatId || (part && currentUid ? `${currentUid}_${getCleanId(part.sellerId) || 'seller'}_${part.id || 'item'}` : 'default_chat');
 
   // Loaded chat document state from Firestore (in case routeChat wasn't fully populated)
   const [remoteChatDoc, setRemoteChatDoc] = useState<any>(null);
@@ -86,37 +103,49 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
 
   const mergedChat = remoteChatDoc || routeChat;
 
+  const buyerId = getCleanId(mergedChat?.buyerId);
+  const sellerId = getCleanId(mergedChat?.sellerId) || getCleanId(part?.sellerId);
+
   // Partner Identification logic
-  const isCurrentUserBuyer = mergedChat?.buyerId
-    ? mergedChat.buyerId === currentUid
-    : (part?.sellerId ? part.sellerId !== currentUid : true);
+  const isCurrentUserBuyer = sellerId
+    ? sellerId !== currentUid
+    : (buyerId ? buyerId === currentUid : true);
 
   // Compute partnerId accurately
-  let resolvedPartnerId = 'seller';
-  if (mergedChat) {
-    if (mergedChat.buyerId === currentUid) {
-      resolvedPartnerId = mergedChat.sellerId || 'seller';
-    } else if (mergedChat.sellerId === currentUid) {
-      resolvedPartnerId = mergedChat.buyerId || 'buyer';
-    } else if (Array.isArray(mergedChat.participants)) {
-      const other = mergedChat.participants.find((p: string) => p && p !== currentUid);
-      if (other) resolvedPartnerId = other;
+  let resolvedPartnerId = getCleanId(routePartnerId);
+  if (!resolvedPartnerId || resolvedPartnerId === 'seller' || resolvedPartnerId === 'buyer') {
+    if (sellerId && sellerId !== currentUid) {
+      resolvedPartnerId = sellerId;
+    } else if (buyerId && buyerId !== currentUid) {
+      resolvedPartnerId = buyerId;
+    } else if (Array.isArray(mergedChat?.participants)) {
+      const other = mergedChat.participants.find((p: any) => {
+        const pid = getCleanId(p);
+        return pid && pid !== currentUid && pid !== 'seller' && pid !== 'buyer';
+      });
+      if (other) resolvedPartnerId = getCleanId(other);
     }
-  } else if (part) {
-    resolvedPartnerId = part.sellerId === currentUid ? 'buyer' : (part.sellerId || 'seller');
   }
 
-  const partnerId = resolvedPartnerId;
+  const partnerId = resolvedPartnerId || (isCurrentUserBuyer ? sellerId : buyerId) || 'seller';
 
-  const partnerName = mergedChat
+  const partnerName = routePartnerName || (mergedChat
     ? (isCurrentUserBuyer ? (mergedChat.sellerName || 'Verified Seller') : (mergedChat.buyerName || 'Buyer'))
-    : (part ? (part.sellerName || 'Verified Seller') : 'Seller');
+    : (part ? (part.sellerName || 'Verified Seller') : 'Seller'));
   const partnerRole = isCurrentUserBuyer ? 'Seller' : 'Buyer';
-  const partnerPhoto = mergedChat
-    ? (isCurrentUserBuyer ? mergedChat.sellerPhoto : mergedChat.buyerPhoto)
-    : (part ? part.sellerPhoto : '');
 
-  const [livePartnerPhoto, setLivePartnerPhoto] = useState<string | null>(null);
+  const partnerPhoto = (
+    routePartnerPhoto ||
+    mergedChat?.partnerPhoto ||
+    (isCurrentUserBuyer
+      ? (mergedChat?.sellerPhoto || mergedChat?.sellerPhotoURL || mergedChat?.sellerAvatar)
+      : (mergedChat?.buyerPhoto || mergedChat?.buyerPhotoURL || mergedChat?.buyerAvatar)) ||
+    part?.sellerPhoto ||
+    part?.sellerPhotoURL ||
+    ''
+  );
+
+  const [livePartnerPhoto, setLivePartnerPhoto] = useState<string | null>(partnerPhoto || null);
 
   useEffect(() => {
     if (!partnerId || partnerId === 'seller' || partnerId === 'buyer') return;
@@ -125,10 +154,19 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
       const db = getFirebaseFirestore();
       if (db && typeof db.collection === 'function') {
         unsub = db.collection('users').doc(partnerId).onSnapshot((docSnap: any) => {
-          if (docSnap && docSnap.exists) {
-            const uData = docSnap.data();
-            if (uData?.photoURL || uData?.profilePhoto) {
-              setLivePartnerPhoto(uData.photoURL || uData.profilePhoto);
+          const exists = typeof docSnap?.exists === 'function' ? docSnap.exists() : Boolean(docSnap?.exists);
+          if (exists) {
+            const uData = typeof docSnap?.data === 'function' ? docSnap.data() : docSnap?.data;
+            const photo =
+              uData?.photoURL ||
+              uData?.profilePhoto ||
+              uData?.profileImageUrl ||
+              uData?.avatarUrl ||
+              uData?.photo ||
+              uData?.customPhoto ||
+              null;
+            if (photo) {
+              setLivePartnerPhoto(photo);
             }
           }
         }, () => {});
@@ -137,7 +175,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
     return () => { try { unsub(); } catch (_) {} };
   }, [partnerId]);
 
-  const effectivePartnerPhoto = livePartnerPhoto || partnerPhoto;
+  const effectivePartnerPhoto = livePartnerPhoto || partnerPhoto || null;
 
   // State Management
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -382,6 +420,13 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
         newUnreadMap[partnerId] = (newUnreadMap[partnerId] || 0) + 1;
       }
       
+      const resolvedBuyerPhoto = isCurrentUserBuyer
+        ? (currentUserPhoto || mergedChat?.buyerPhoto || '')
+        : (effectivePartnerPhoto || mergedChat?.buyerPhoto || '');
+      const resolvedSellerPhoto = !isCurrentUserBuyer
+        ? (currentUserPhoto || mergedChat?.sellerPhoto || '')
+        : (effectivePartnerPhoto || mergedChat?.sellerPhoto || '');
+
       await chatDocRef.set(
         {
           id: chatId,
@@ -391,8 +436,10 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
           partPrice: Number(part?.price || part?.partPrice || mergedChat?.partPrice) || 0,
           buyerId: resolvedBuyerId,
           buyerName: resolvedBuyerName,
+          buyerPhoto: resolvedBuyerPhoto,
           sellerId: resolvedSellerId,
           sellerName: resolvedSellerName,
+          sellerPhoto: resolvedSellerPhoto,
           lastMessageText: imageUrl ? '📷 Photo Attachment' : cleanText,
           lastMessageAt: now,
           lastSenderId: currentUid,
@@ -599,15 +646,62 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
     return `${d.getDate()} ${months[d.getMonth()]}`;
   };
 
-  const handleDeleteMessage = (msgItem: ChatMessage) => {
-    if (msgItem.senderId !== currentUid) return;
-    Alert.alert(
-      'Delete Message',
-      'Are you sure you want to delete this message for everyone?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
+  const clearedAtTimestamp = mergedChat?.clearedAt?.[currentUid] || remoteChatDoc?.clearedAt?.[currentUid] || 0;
+  const visibleMessages = messages.filter((msg) => {
+    if (Array.isArray(msg.deletedFor) && msg.deletedFor.includes(currentUid)) {
+      return false;
+    }
+    const msgTime = parseTimestamp(msg.createdAt);
+    if (clearedAtTimestamp > 0 && msgTime <= clearedAtTimestamp) {
+      return false;
+    }
+    return true;
+  });
+
+  const handleMessageAction = (msgItem: ChatMessage) => {
+    if (msgItem.isDeleted) return;
+
+    const isMe = msgItem.senderId === currentUid;
+    const msgTime = parseTimestamp(msgItem.createdAt);
+    const isWithin15Min = Date.now() - msgTime <= 15 * 60 * 1000;
+
+    const buttons: any[] = [];
+
+    // Copy text if present
+    if (msgItem.text) {
+      buttons.push({
+        text: translateDynamic('Copy Text'),
+        onPress: () => {
+          Alert.alert(translateDynamic('Copied'), translateDynamic('Message text copied to clipboard'));
+        },
+      });
+    }
+
+    // Delete for Me (always available)
+    buttons.push({
+      text: translateDynamic('Delete for Me'),
+      onPress: async () => {
+        try {
+          const db = getFirebaseFirestore();
+          if (db && typeof db.collection === 'function' && chatId && msgItem.id) {
+            const msgRef = db.collection('chats').doc(chatId).collection('messages').doc(msgItem.id);
+            const docSnap = await msgRef.get();
+            const currentDeletedFor = docSnap?.exists ? (docSnap.data()?.deletedFor || []) : [];
+            const nextDeletedFor = Array.from(new Set([...currentDeletedFor, currentUid]));
+            await msgRef.set({ deletedFor: nextDeletedFor }, { merge: true });
+          }
+          setMessages((prev) => prev.filter((m) => m.id !== msgItem.id));
+        } catch (err) {
+          console.warn('[ChatRoomScreen] Delete for me error:', err);
+        }
+      },
+    });
+
+    // Delete for Everyone (if sent by current user and within 15 minutes)
+    if (isMe) {
+      if (isWithin15Min) {
+        buttons.push({
+          text: translateDynamic('Delete for Everyone'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -618,16 +712,44 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
                   .doc(chatId)
                   .collection('messages')
                   .doc(msgItem.id)
-                  .delete();
+                  .set({
+                    isDeleted: true,
+                    text: 'This message was deleted',
+                    imageUrl: null,
+                  }, { merge: true });
+
+                await db.collection('chats').doc(chatId).set({
+                  lastMessageText: 'This message was deleted',
+                }, { merge: true });
               }
-              setMessages((prev) => prev.filter((m) => m.id !== msgItem.id));
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === msgItem.id
+                    ? { ...m, isDeleted: true, text: 'This message was deleted', imageUrl: null }
+                    : m
+                )
+              );
             } catch (err: any) {
-              console.warn('[ChatRoomScreen] Delete message error:', err);
+              console.warn('[ChatRoomScreen] Delete for everyone error:', err);
             }
           },
-        },
-      ]
-    );
+        });
+      } else {
+        buttons.push({
+          text: translateDynamic('Delete for Everyone (15m Limit Expired)'),
+          onPress: () => {
+            Alert.alert(
+              translateDynamic('15-Minute Limit Expired'),
+              translateDynamic('Delete for everyone is only available within 15 minutes of sending.')
+            );
+          },
+        });
+      }
+    }
+
+    buttons.push({ text: translateDynamic('Cancel'), style: 'cancel' });
+
+    Alert.alert(translateDynamic('Message Options'), undefined, buttons);
   };
 
   const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
@@ -635,7 +757,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
     const isFailed = item.status === 'failed';
     const isPending = item.status === 'pending';
 
-    const prevMessage = index > 0 ? messages[index - 1] : null;
+    const prevMessage = index > 0 ? visibleMessages[index - 1] : null;
     const showDatePill = !prevMessage || !isSameDay(prevMessage.createdAt, item.createdAt);
 
     return (
@@ -656,57 +778,91 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
             isMe ? styles.myMessageRow : styles.theirMessageRow,
           ]}
         >
+          {!isMe && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                if (partnerId && partnerId !== 'seller' && partnerId !== 'buyer') {
+                  navigation.navigate('SellerProfile', { sellerId: partnerId, sellerName: partnerName });
+                }
+              }}
+              style={styles.messageSenderAvatarWrap}
+            >
+              {effectivePartnerPhoto ? (
+                <Image source={{ uri: effectivePartnerPhoto }} style={styles.messageSenderAvatar} />
+              ) : (
+                <View style={styles.messageSenderAvatarPlaceholder}>
+                  <Text style={styles.messageSenderAvatarInitial}>
+                    {(partnerName || 'U').charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
           <View style={[styles.bubbleWrapper, isMe ? styles.myBubbleWrapper : styles.theirBubbleWrapper]}>
             <TouchableOpacity
               activeOpacity={0.88}
-              onLongPress={() => isMe && handleDeleteMessage(item)}
+              onLongPress={() => handleMessageAction(item)}
               style={[
                 styles.bubbleBox,
-                isMe
-                  ? isFailed
-                    ? styles.failedBubble
-                    : styles.myBubble
-                  : styles.theirBubble,
+                item.isDeleted
+                  ? styles.deletedBubble
+                  : isMe
+                    ? isFailed
+                      ? styles.failedBubble
+                      : styles.myBubble
+                    : styles.theirBubble,
               ]}
             >
-              {/* Image attachment */}
-              {item.imageUrl ? (
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() => setSelectedPreviewImage(item.imageUrl || null)}
-                  onLongPress={() => isMe && handleDeleteMessage(item)}
-                  style={styles.imageAttachmentContainer}
-                >
-                  <Image
-                    source={{ uri: item.imageUrl }}
-                    style={styles.messageImage}
-                    resizeMode="cover"
-                  />
-                  <View style={styles.zoomOverlayIcon}>
-                    <Icon source="magnify-plus-outline" size={18} color="#FFFFFF" />
-                  </View>
-                </TouchableOpacity>
-              ) : null}
+              {item.isDeleted ? (
+                <View style={styles.deletedMessageRow}>
+                  <Icon source="cancel" size={14} color="#64748B" />
+                  <Text style={styles.deletedMessageText}>
+                    {translateDynamic('This message was deleted')}
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {/* Image attachment */}
+                  {item.imageUrl ? (
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      onPress={() => setSelectedPreviewImage(item.imageUrl || null)}
+                      onLongPress={() => handleMessageAction(item)}
+                      style={styles.imageAttachmentContainer}
+                    >
+                      <Image
+                        source={{ uri: item.imageUrl }}
+                        style={styles.messageImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.zoomOverlayIcon}>
+                        <Icon source="magnify-plus-outline" size={18} color="#FFFFFF" />
+                      </View>
+                    </TouchableOpacity>
+                  ) : null}
 
-              {/* Message text content */}
-              {item.text ? (
-                <Text
-                  style={[
-                    styles.messageText,
-                    isMe ? styles.myMessageText : styles.theirMessageText,
-                  ]}
-                >
-                  {item.text}
-                </Text>
-              ) : null}
+                  {/* Message text content */}
+                  {item.text ? (
+                    <Text
+                      style={[
+                        styles.messageText,
+                        isMe ? styles.myMessageText : styles.theirMessageText,
+                      ]}
+                    >
+                      {item.text}
+                    </Text>
+                  ) : null}
+                </>
+              )}
 
               {/* Timestamp & Status ticks */}
-              <View style={[styles.metaRow, isMe ? styles.myMetaRow : styles.theirMetaRow]}>
-                <Text style={[styles.timeText, isMe ? styles.myTimeText : styles.theirTimeText]}>
+              <View style={[styles.metaRow, isMe && !item.isDeleted ? styles.myMetaRow : styles.theirMetaRow]}>
+                <Text style={[styles.timeText, isMe && !item.isDeleted ? styles.myTimeText : styles.theirTimeText]}>
                   {formatMessageTime(item.createdAt)}
                 </Text>
 
-                {isMe && (
+                {isMe && !item.isDeleted && (
                   <View style={styles.statusTickContainer}>
                     {isPending ? (
                       <ActivityIndicator size={10} color="#BAE6FD" />
@@ -737,9 +893,9 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
 
   return (
     <View style={styles.outerContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="#083B84" />
+      <StatusBar barStyle="light-content" backgroundColor="#0066FF" />
 
-      {/* 1. ROYAL NAVY BLUE HEADER */}
+      {/* 1. ROYAL BLUE HEADER */}
       <View style={[styles.headerBar, { paddingTop: Math.max(insets.top, 10) }]}>
         {/* Back Button */}
         <TouchableOpacity
@@ -755,7 +911,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
           style={styles.partnerHeaderInfo}
           activeOpacity={0.8}
           onPress={() => {
-            if (partnerId && partnerId !== 'seller') {
+            if (partnerId && partnerId !== 'seller' && partnerId !== 'buyer') {
               navigation.navigate('SellerProfile', { sellerId: partnerId, sellerName: partnerName });
             }
           }}
@@ -852,7 +1008,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
       >
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={visibleMessages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageListContainer}
@@ -1046,6 +1202,45 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
               onPress={() => {
                 setShowOptionsMenu(false);
                 Alert.alert(
+                  translateDynamic('Clear Chat History'),
+                  translateDynamic('Are you sure you want to clear all messages in this conversation for you?'),
+                  [
+                    { text: translateDynamic('Cancel'), style: 'cancel' },
+                    {
+                      text: translateDynamic('Clear Chat'),
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          const db = getFirebaseFirestore();
+                          if (db && typeof db.collection === 'function' && chatId) {
+                            await db.collection('chats').doc(chatId).set({
+                              clearedAt: {
+                                ...(remoteChatDoc?.clearedAt || {}),
+                                [currentUid]: Date.now(),
+                              },
+                            }, { merge: true });
+                          }
+                          setMessages([]);
+                        } catch (err) {
+                          console.warn('Error clearing chat:', err);
+                        }
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              <Icon source="delete-sweep-outline" size={20} color="#EF4444" />
+              <Text style={[styles.optionItemText, { color: '#EF4444' }]}>
+                {translateDynamic('Clear Chat History')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => {
+                setShowOptionsMenu(false);
+                Alert.alert(
                   'Report or Block',
                   `Do you want to report or block ${partnerName}?`,
                   [
@@ -1111,15 +1306,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerBar: {
-    backgroundColor: '#083B84',
+    backgroundColor: '#0066FF',
     paddingBottom: 12,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#073373',
+    borderBottomColor: '#0052CC',
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: '#0066FF',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.18,
     shadowRadius: 4,
@@ -1271,6 +1466,33 @@ const styles = StyleSheet.create({
   },
   theirMessageRow: {
     alignSelf: 'flex-start',
+    alignItems: 'flex-end',
+  },
+  messageSenderAvatarWrap: {
+    marginRight: 8,
+    marginBottom: 4,
+    alignSelf: 'flex-end',
+  },
+  messageSenderAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#E2E8F0',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+  },
+  messageSenderAvatarPlaceholder: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#0072F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  messageSenderAvatarInitial: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   bubbleWrapper: {
     maxWidth: '100%',
@@ -1304,6 +1526,23 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 1,
+  },
+  deletedBubble: {
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  deletedMessageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+  },
+  deletedMessageText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: '#64748B',
   },
   imageAttachmentContainer: {
     borderRadius: 10,
@@ -1407,7 +1646,7 @@ const styles = StyleSheet.create({
   },
   uploadingImageText: {
     fontSize: 11,
-    color: '#083B84',
+    color: '#0066FF',
     fontWeight: '700',
   },
   emptyFeedContainer: {

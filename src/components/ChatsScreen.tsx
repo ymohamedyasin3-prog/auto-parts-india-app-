@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { MessageSquare, ArrowRight, Compass, Search, Bell } from "lucide-react";
+import { MessageSquare, ArrowRight, Compass, Search, Bell, Trash2 } from "lucide-react";
 import { User, Chat } from "../types";
-import { subscribeToUserChats } from "../lib/firebase";
+import { subscribeToUserChats, hideChatForUser } from "../lib/firebase";
 import BrandLogo from "./BrandLogo";
 import UserAvatar from "./UserAvatar";
 import PullToRefresh from "./PullToRefresh";
@@ -25,6 +25,7 @@ export default function ChatsScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState<"all" | "buy" | "sell">("all");
 
   useEffect(() => {
     setLoading(true);
@@ -49,15 +50,40 @@ export default function ChatsScreen({
     };
   }, [currentUser.id]);
 
+  const isCurrentUserBuyer = (chat: Chat): boolean => {
+    if (chat.sellerId && chat.sellerId === currentUser.id) return false;
+    if (chat.buyerId && chat.buyerId === currentUser.id) return true;
+    if (chat.sellerId && chat.sellerId !== currentUser.id) return true;
+    if (chat.buyerId && chat.buyerId !== currentUser.id) return false;
+    return true;
+  };
+
+  const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
+
   const filteredChats = chats.filter((chat) => {
-    const isUserBuyer = currentUser.id === chat.buyerId;
+    if (Array.isArray(chat.hiddenFor) && chat.hiddenFor.includes(currentUser.id)) {
+      return false;
+    }
+    const isUserBuyer = isCurrentUserBuyer(chat);
+    if (activeFilter === "buy" && !isUserBuyer) return false;
+    if (activeFilter === "sell" && isUserBuyer) return false;
+
     const partnerName = isUserBuyer ? chat.sellerName : chat.buyerName;
     const query = (searchQuery || "").toLowerCase();
     return (
       (partnerName || "").toLowerCase().includes(query) ||
-      (chat.partTitle || "").toLowerCase().includes(query)
+      (chat.partTitle || "").toLowerCase().includes(query) ||
+      (chat.lastMessageText || "").toLowerCase().includes(query)
     );
   });
+
+  const handleDeleteChat = async () => {
+    if (!chatToDelete) return;
+    const id = chatToDelete.id;
+    setChatToDelete(null);
+    setChats(prev => prev.filter(c => c.id !== id));
+    await hideChatForUser(id, currentUser.id);
+  };
 
   const parseTimestamp = (ts: any): number => {
     if (!ts) return Date.now();
@@ -110,7 +136,7 @@ export default function ChatsScreen({
         </div>
         
         {/* Custom Inbox Search */}
-        <div className="relative">
+        <div className="relative mb-3">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -120,6 +146,43 @@ export default function ChatsScreen({
             className="w-full bg-[#131D31] border border-[#1E2D4A] rounded-2xl py-2 pl-9 pr-4 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-[#2563EB] font-medium transition-all"
             id="chats-search-input"
           />
+        </div>
+
+        {/* Filter Tabs: All, Buy, Sell */}
+        <div className="flex items-center gap-2" id="chats-filter-tabs">
+          <button
+            type="button"
+            onClick={() => setActiveFilter("all")}
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+              activeFilter === "all"
+                ? "bg-[#0072F5] text-white shadow-xs"
+                : "bg-white/10 text-slate-300 hover:bg-white/15"
+            }`}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveFilter("buy")}
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+              activeFilter === "buy"
+                ? "bg-[#0072F5] text-white shadow-xs"
+                : "bg-white/10 text-slate-300 hover:bg-white/15"
+            }`}
+          >
+            Buy
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveFilter("sell")}
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+              activeFilter === "sell"
+                ? "bg-[#0072F5] text-white shadow-xs"
+                : "bg-white/10 text-slate-300 hover:bg-white/15"
+            }`}
+          >
+            Sell
+          </button>
         </div>
       </div>
 
@@ -219,18 +282,29 @@ export default function ChatsScreen({
                   {/* Chat Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
-                      <span 
-                        onClick={(e) => {
-                          if (onOpenUserProfile && partnerId) {
-                            e.stopPropagation();
-                            onOpenUserProfile(partnerId, partnerName);
-                          }
-                        }}
-                        className={`text-xs font-bold text-slate-900 truncate font-display ${onOpenUserProfile ? "hover:text-blue-600 transition-colors" : ""}`}
-                        title={onOpenUserProfile ? `View ${partnerName}'s Profile` : undefined}
-                      >
-                        {partnerName}
-                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span 
+                          onClick={(e) => {
+                            if (onOpenUserProfile && partnerId) {
+                              e.stopPropagation();
+                              onOpenUserProfile(partnerId, partnerName);
+                            }
+                          }}
+                          className={`text-xs font-bold text-slate-900 truncate font-display ${onOpenUserProfile ? "hover:text-blue-600 transition-colors" : ""}`}
+                          title={onOpenUserProfile ? `View ${partnerName}'s Profile` : undefined}
+                        >
+                          {partnerName}
+                        </span>
+                        <span
+                          className={`text-[9px] uppercase font-extrabold px-1.5 py-0.5 rounded-md shrink-0 border ${
+                            isUserBuyer
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : "bg-amber-50 text-amber-700 border-amber-200"
+                          }`}
+                        >
+                          {isUserBuyer ? "Buy" : "Sell"}
+                        </span>
+                      </div>
                       <span className="text-[9px] font-mono font-semibold text-slate-400 shrink-0">
                         {getRelativeTime(chat.updatedAt)}
                       </span>
@@ -253,7 +327,20 @@ export default function ChatsScreen({
                     </div>
                   </div>
 
-                  <ArrowRight size={14} className="text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-1" />
+                  <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setChatToDelete(chat);
+                      }}
+                      className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                      title="Delete Conversation"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                    <ArrowRight size={14} className="text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" />
+                  </div>
                 </div>
               );
             })}
@@ -261,6 +348,37 @@ export default function ChatsScreen({
         )}
         </PullToRefresh>
       </div>
+
+      {/* Delete Chat Confirmation Modal */}
+      {chatToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl p-5 max-w-xs w-full shadow-2xl border border-slate-100">
+            <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mb-3">
+              <Trash2 size={20} />
+            </div>
+            <h3 className="font-extrabold text-sm text-slate-900">Delete this conversation?</h3>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              This will remove the chat with {isCurrentUserBuyer(chatToDelete) ? chatToDelete.sellerName : chatToDelete.buyerName} from your inbox.
+            </p>
+            <div className="flex gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setChatToDelete(null)}
+                className="flex-1 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteChat}
+                className="flex-1 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors shadow-sm cursor-pointer"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
