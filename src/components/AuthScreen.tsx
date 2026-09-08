@@ -3,6 +3,7 @@ import { signInWithGoogle } from "../lib/firebase";
 import { User } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 import { CheckCircle2, X, AlertCircle } from "lucide-react";
+import AutoPartsBrandLogo from "./AutoPartsBrandLogo";
 
 interface AuthScreenProps {
   onAuthSuccess: (user: User) => void;
@@ -102,12 +103,7 @@ export default function AuthScreen({ onAuthSuccess, logoutMessage, onClearLogout
         transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-[340px] flex flex-col items-center justify-center my-auto"
       >
-        <img
-          src="/assets/auth_logo.png"
-          alt="Auto Parts INDIA"
-          className="w-full max-w-[340px] h-auto object-contain drop-shadow-sm select-none pointer-events-none"
-          draggable={false}
-        />
+        <AutoPartsBrandLogo size={330} variant="splash" />
       </motion.div>
 
       {/* Bottom Spacer */}

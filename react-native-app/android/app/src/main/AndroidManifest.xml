@@ -74,7 +74,7 @@
       <!-- FCM Default Channel -->
       <meta-data
         android:name="com.google.firebase.messaging.default_notification_channel_id"
-        android:value="auto_parts_notifications"
+        android:value="auto_parts_alerts_v2"
         tools:replace="android:value" />
 
       <!-- FCM Default Icon & Color -->

@@ -190,6 +190,73 @@ export async function markNotificationAsRead(notificationId: string): Promise<vo
   }
 }
 
+const DELETED_ANNOUNCEMENTS_STORAGE_KEY = '@autoparts_deleted_announcements';
+
+/**
+ * Gets all announcement IDs that have been dismissed/deleted by current device/user
+ */
+export async function getLocalDeletedAnnouncementIds(): Promise<Set<string>> {
+  try {
+    const raw = await AsyncStorage.getItem(DELETED_ANNOUNCEMENTS_STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        return new Set<string>(arr);
+      }
+    }
+  } catch (err) {
+    console.warn('[notifications] Error reading local deleted announcements:', err);
+  }
+  return new Set<string>();
+}
+
+/**
+ * Deletes or dismisses an announcement for current user locally and in user preferences
+ */
+export async function deleteAnnouncementForUser(announcementId: string): Promise<void> {
+  if (!announcementId) return;
+  try {
+    const existingSet = await getLocalDeletedAnnouncementIds();
+    existingSet.add(announcementId);
+    await AsyncStorage.setItem(
+      DELETED_ANNOUNCEMENTS_STORAGE_KEY,
+      JSON.stringify(Array.from(existingSet))
+    );
+
+    const user = getCurrentUser();
+    const uid = user?.uid || user?.id;
+    if (uid) {
+      const db = getFirebaseFirestore();
+      if (db && typeof db.collection === 'function') {
+        await db
+          .collection('users')
+          .doc(uid)
+          .collection('deleted_announcements')
+          .doc(announcementId)
+          .set({ deletedAt: Date.now() }, { merge: true })
+          .catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('[notifications] Error deleting announcement for user:', err);
+  }
+}
+
+/**
+ * Deletes a personal chat notification from Firestore
+ */
+export async function deleteNotification(notificationId: string): Promise<void> {
+  if (!notificationId) return;
+  try {
+    const db = getFirebaseFirestore();
+    if (db && typeof db.collection === 'function') {
+      await db.collection('notifications').doc(notificationId).delete();
+    }
+  } catch (e) {
+    console.warn('[notifications] Error deleting notification:', e);
+  }
+}
+
 /**
  * Marks all notifications for a user as read
  */

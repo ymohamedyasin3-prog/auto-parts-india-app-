@@ -7,6 +7,7 @@ import {
   RefreshControl,
   StatusBar,
   Image,
+  Alert,
 } from 'react-native';
 import { Text, Surface, ActivityIndicator, Icon } from 'react-native-paper';
 import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
@@ -14,11 +15,14 @@ import {
   markAnnouncementsAsRead, 
   markNotificationAsRead, 
   markAllUserNotificationsAsRead,
-  getLocalReadAnnouncementIds 
+  deleteNotification,
+  deleteAnnouncementForUser,
+  getLocalReadAnnouncementIds,
+  getLocalDeletedAnnouncementIds 
 } from '../services/notifications';
 
 export default function NotificationsScreen({ navigation }: any) {
-  const [activeTab, setActiveTab] = useState<'all' | 'chats' | 'announcements'>('all');
+  const [activeTab, setActiveTab] = useState<'chats' | 'announcements'>('chats');
   const [personalNotifs, setPersonalNotifs] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,12 +88,18 @@ export default function NotificationsScreen({ navigation }: any) {
           async (snapshot: any) => {
             const list: any[] = [];
             const readSet = await getLocalReadAnnouncementIds();
+            const deletedSet = await getLocalDeletedAnnouncementIds();
             if (snapshot && typeof snapshot.forEach === 'function') {
               snapshot.forEach((doc: any) => {
+                const docId = doc.id;
+                // Skip if deleted/dismissed by this user
+                if (docId && deletedSet.has(docId)) {
+                  return;
+                }
                 const data = doc.data ? doc.data() : doc;
-                const isRead = readSet.has(doc.id);
+                const isRead = readSet.has(docId);
                 list.push({ 
-                  id: doc.id, 
+                  id: docId, 
                   ...data, 
                   type: 'announcement', 
                   read: isRead 
@@ -134,16 +144,39 @@ export default function NotificationsScreen({ navigation }: any) {
   };
 
   const handleMarkAllRead = async () => {
-    if (currentUid) {
+    if (activeTab === 'chats' && currentUid) {
       await markAllUserNotificationsAsRead(currentUid);
+      setPersonalNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
+    } else if (activeTab === 'announcements') {
+      const annIds = announcements.map((a) => a.id).filter(Boolean);
+      if (annIds.length > 0) {
+        await markAnnouncementsAsRead(annIds);
+        setAnnouncements((prev) => prev.map((a) => ({ ...a, read: true })));
+      }
     }
-    const annIds = announcements.map((a) => a.id).filter(Boolean);
-    if (annIds.length > 0) {
-      await markAnnouncementsAsRead(annIds);
-    }
-    // Update local state optimistically
-    setPersonalNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
-    setAnnouncements((prev) => prev.map((a) => ({ ...a, read: true })));
+  };
+
+  const handleDeleteNotification = (item: any) => {
+    Alert.alert(
+      'Delete Notification',
+      'Are you sure you want to remove this notification?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (item.type === 'chat_message' || item.chatId) {
+              setPersonalNotifs((prev) => prev.filter((n) => n.id !== item.id));
+              await deleteNotification(item.id);
+            } else {
+              setAnnouncements((prev) => prev.filter((a) => a.id !== item.id));
+              await deleteAnnouncementForUser(item.id);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleNotificationPress = (item: any) => {
@@ -176,6 +209,12 @@ export default function NotificationsScreen({ navigation }: any) {
           sellerName: item.sellerName,
         }
       });
+    } else {
+      // Mark announcement as read on tap
+      markAnnouncementsAsRead([item.id]);
+      setAnnouncements((prev) =>
+        prev.map((a) => (a.id === item.id ? { ...a, read: true } : a))
+      );
     }
   };
 
@@ -197,12 +236,10 @@ export default function NotificationsScreen({ navigation }: any) {
     });
   };
 
-  // Merge and filter items based on selected tab
-  const combinedList = React.useMemo(() => {
+  // Filter items based on selected tab ('chats' or 'announcements')
+  const currentList = React.useMemo(() => {
     let list: any[] = [];
-    if (activeTab === 'all') {
-      list = [...personalNotifs, ...announcements];
-    } else if (activeTab === 'chats') {
+    if (activeTab === 'chats') {
       list = [...personalNotifs];
     } else {
       list = [...announcements];
@@ -210,11 +247,12 @@ export default function NotificationsScreen({ navigation }: any) {
     return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }, [activeTab, personalNotifs, announcements]);
 
-  const unreadTotal = React.useMemo(() => {
-    const unreadPersonal = personalNotifs.filter((n) => !n.read).length;
-    const unreadAnn = announcements.filter((a) => !a.read).length;
-    return unreadPersonal + unreadAnn;
-  }, [personalNotifs, announcements]);
+  const unreadCurrentTab = React.useMemo(() => {
+    if (activeTab === 'chats') {
+      return personalNotifs.filter((n) => !n.read).length;
+    }
+    return announcements.filter((a) => !a.read).length;
+  }, [activeTab, personalNotifs, announcements]);
 
   const renderItem = ({ item }: { item: any }) => {
     const isChat = item.type === 'chat_message' || Boolean(item.chatId);
@@ -248,6 +286,15 @@ export default function NotificationsScreen({ navigation }: any) {
                 <View style={styles.timeBadgeContainer}>
                   {isUnread && <View style={styles.unreadDot} />}
                   <Text style={styles.timeText}>{formatRelativeTime(item.createdAt)}</Text>
+                  
+                  {/* Delete / Remove Action */}
+                  <TouchableOpacity
+                    style={styles.deleteBtn}
+                    onPress={() => handleDeleteNotification(item)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Icon source="trash-can-outline" size={17} color="#94A3B8" />
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -285,20 +332,11 @@ export default function NotificationsScreen({ navigation }: any) {
       <View style={styles.topControlBar}>
         <View style={styles.tabPillContainer}>
           <TouchableOpacity
-            style={[styles.tabPill, activeTab === 'all' && styles.tabPillActive]}
-            onPress={() => setActiveTab('all')}
-          >
-            <Text style={[styles.tabPillText, activeTab === 'all' && styles.tabPillTextActive]}>
-              All ({personalNotifs.length + announcements.length})
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
             style={[styles.tabPill, activeTab === 'chats' && styles.tabPillActive]}
             onPress={() => setActiveTab('chats')}
           >
             <Text style={[styles.tabPillText, activeTab === 'chats' && styles.tabPillTextActive]}>
-              Chats ({personalNotifs.length})
+              Chat ({personalNotifs.length})
             </Text>
           </TouchableOpacity>
 
@@ -307,12 +345,12 @@ export default function NotificationsScreen({ navigation }: any) {
             onPress={() => setActiveTab('announcements')}
           >
             <Text style={[styles.tabPillText, activeTab === 'announcements' && styles.tabPillTextActive]}>
-              Broadcasts ({announcements.length})
+              Broadcast ({announcements.length})
             </Text>
           </TouchableOpacity>
         </View>
 
-        {unreadTotal > 0 && (
+        {unreadCurrentTab > 0 && (
           <TouchableOpacity style={styles.markReadBtn} onPress={handleMarkAllRead}>
             <Icon source="check-all" size={16} color="#38BDF8" />
             <Text style={styles.markReadText}>Mark Read</Text>
@@ -325,21 +363,23 @@ export default function NotificationsScreen({ navigation }: any) {
           <ActivityIndicator color="#0066FF" size="large" />
           <Text style={styles.loadingText}>Loading notifications...</Text>
         </View>
-      ) : combinedList.length === 0 ? (
+      ) : currentList.length === 0 ? (
         <View style={styles.centerContainer}>
           <View style={styles.emptyIconBox}>
-            <Icon source="bell-off-outline" size={48} color="#64748B" />
+            <Icon source={activeTab === 'chats' ? "comment-off-outline" : "bell-off-outline"} size={48} color="#64748B" />
           </View>
           <Text variant="titleMedium" style={styles.emptyTitle}>
-            No Notifications Yet
+            {activeTab === 'chats' ? 'No Chat Notifications' : 'No Broadcasts Yet'}
           </Text>
           <Text style={styles.emptySubtitle}>
-            When buyers or sellers send you messages, or when platform updates are published, they will appear here.
+            {activeTab === 'chats'
+              ? 'When buyers or sellers send you inquiries and chat messages, they will appear here.'
+              : 'When platform announcements or official updates are published, they will appear here.'}
           </Text>
         </View>
       ) : (
         <FlatList
-          data={combinedList}
+          data={currentList}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
@@ -374,11 +414,11 @@ const styles = StyleSheet.create({
   },
   tabPillContainer: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
   },
   tabPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
     borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
@@ -387,7 +427,7 @@ const styles = StyleSheet.create({
   },
   tabPillText: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
   },
   tabPillTextActive: {
@@ -465,7 +505,7 @@ const styles = StyleSheet.create({
   timeBadgeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   unreadDot: {
     width: 8,
@@ -477,6 +517,11 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 11,
     fontWeight: '500',
+  },
+  deleteBtn: {
+    padding: 3,
+    marginLeft: 4,
+    borderRadius: 6,
   },
   partTitleSub: {
     color: '#38BDF8',

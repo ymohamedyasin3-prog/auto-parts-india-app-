@@ -90,11 +90,8 @@ export default function SplashScreen({
               className="w-full flex flex-col items-center justify-center"
             >
               <AutoPartsBrandLogo 
-                size={310}
-                color="#FFFFFF"
-                bgColor="#0075FF"
-                showText={true}
-                useExactAsset={true}
+                size={340}
+                variant="splash"
               />
             </motion.div>
           </div>

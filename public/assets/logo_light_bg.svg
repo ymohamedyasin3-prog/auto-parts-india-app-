@@ -9,14 +9,14 @@
         font-weight: 900;
         font-style: italic;
         font-size: 210px;
-        fill: #FFFFFF;
+        fill: #0F172A;
       }
       .logo-parts {
         font-family: 'Montserrat', 'Poppins', -apple-system, sans-serif;
         font-weight: 900;
         font-style: italic;
         font-size: 210px;
-        fill: #0B478A;
+        fill: #0A3B73;
       }
       .logo-india {
         font-family: 'Montserrat', 'Poppins', -apple-system, sans-serif;

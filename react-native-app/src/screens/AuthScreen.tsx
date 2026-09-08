@@ -69,8 +69,8 @@ export default function AuthScreen({ navigation }: any) {
     }
   };
 
-  const logoWidth = Math.min(screenWidth * 0.72, 270);
-  const logoHeight = logoWidth * 0.72;
+  const logoWidth = Math.min(screenWidth * 0.82, 320);
+  const logoHeight = 140;
 
   return (
     <View style={styles.container}>

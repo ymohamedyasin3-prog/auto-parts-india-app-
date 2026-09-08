@@ -367,6 +367,12 @@ export default function HomeScreen({ navigation, route, user }: any) {
 
   // Instant cache load on boot so categories, brands, and banners never disappear when reopening the app
   useEffect(() => {
+    // Proactively request notification permissions and register high-priority channels for status bar alerts
+    requestNotificationPermission().catch(() => {});
+    if (activeUser?.uid) {
+      saveFcmTokenToFirestore(activeUser.uid).catch(() => {});
+    }
+
     initializeTaxonomyDefaults().catch((e) => console.warn('Init taxonomy defaults notice:', e));
 
     AsyncStorage.getItem('@autoparts_firestore_topCategories').then((val) => {

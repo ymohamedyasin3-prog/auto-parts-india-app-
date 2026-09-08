@@ -35,13 +35,22 @@ function getMessagingSafely() {
 }
 
 /**
- * Ensures the native Android Notification Channel with Sound and Vibration is created
+ * Ensures the native Android Notification Channels with Sound, Vibration and Heads-up popups are created
  */
 export async function ensureNotificationChannel(): Promise<void> {
   try {
     await notifee.createChannel({
       id: 'auto_parts_alerts_v2',
       name: 'Auto Parts Messages & Alerts',
+      importance: AndroidImportance.HIGH,
+      sound: 'default',
+      vibration: true,
+      badge: true,
+    });
+    // Also create matching default channel for FCM payload compatibility
+    await notifee.createChannel({
+      id: 'auto_parts_notifications',
+      name: 'Auto Parts Notifications',
       importance: AndroidImportance.HIGH,
       sound: 'default',
       vibration: true,
