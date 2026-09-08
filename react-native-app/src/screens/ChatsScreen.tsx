@@ -48,79 +48,137 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
         return () => {};
       }
 
-      // Query chats collection where activeUid is in the participants array
-      const chatsRef = db.collection('chats').where('participants', 'array-contains', activeUid);
-      
-      const unsubscribe = chatsRef.onSnapshot(
-        (snapshot: any) => {
-          const list: any[] = [];
-          if (snapshot && typeof snapshot.forEach === 'function') {
-            snapshot.forEach((doc: any) => {
-              const data = doc.data ? doc.data() : doc;
-              const chatId = doc.id || data.id;
-              list.push({ id: chatId, ...data });
+      // To support legacy chats and new chats simultaneously, we fetch where buyerId == activeUid, sellerId == activeUid, and participants array-contains activeUid.
+      let buyerChats: any[] = [];
+      let sellerChats: any[] = [];
+      let partChats: any[] = [];
+      let buyerLoaded = false;
+      let sellerLoaded = false;
+      let partLoaded = false;
+
+      const mergeChats = () => {
+        if (!buyerLoaded || !sellerLoaded || !partLoaded) return;
+        const chatsMap = new Map<string, any>();
+        buyerChats.forEach(c => chatsMap.set(c.id, c));
+        sellerChats.forEach(c => chatsMap.set(c.id, c));
+        partChats.forEach(c => chatsMap.set(c.id, c));
+        
+        const list = Array.from(chatsMap.values());
+        
+        // Sort by latest message time
+        list.sort((a, b) => {
+          const timeA = parseTimestamp(a.lastMessageAt || a.updatedAt || a.createdAt || 0);
+          const timeB = parseTimestamp(b.lastMessageAt || b.updatedAt || b.createdAt || 0);
+          return timeB - timeA;
+        });
+
+        setChats(list);
+        setLoading(false);
+        setRefreshing(false);
+
+        // Enrich with live user photos from Firestore
+        const partnerIds = Array.from(
+          new Set(
+            list.map((c: any) => {
+              const isUserBuyer = c.buyerId === activeUid || c.buyerId?.id === activeUid;
+              return isUserBuyer 
+                ? c.sellerId || (Array.isArray(c.participants) ? c.participants.find((p: string) => p !== activeUid) : null)
+                : c.buyerId || (Array.isArray(c.participants) ? c.participants.find((p: string) => p !== activeUid) : null);
+            }).filter(Boolean)
+          )
+        );
+
+        if (partnerIds.length > 0) {
+          Promise.all(
+            partnerIds.map(async (pId) => {
+              try {
+                if (!pId) return { pId, photo: null };
+                const uDoc = await db.collection('users').doc(pId).get();
+                if (uDoc && uDoc.exists) {
+                  const uData = uDoc.data();
+                  return { pId, photo: uData?.photoURL || uData?.profilePhoto || null };
+                }
+              } catch (_) {}
+              return { pId, photo: null };
+            })
+          ).then((results) => {
+            const photoMap: Record<string, string> = {};
+            results.forEach((r) => {
+              if (r.photo) photoMap[r.pId] = r.photo;
             });
-          }
-
-          // Sort by latest message time
-          list.sort((a, b) => {
-            const timeA = parseTimestamp(a.lastMessageAt || a.updatedAt || a.createdAt || 0);
-            const timeB = parseTimestamp(b.lastMessageAt || b.updatedAt || b.createdAt || 0);
-            return timeB - timeA;
-          });
-
-          setChats(list);
-          setLoading(false);
-          setRefreshing(false);
-
-          // Enrich with live user photos from Firestore
-          const partnerIds = Array.from(
-            new Set(list.map((c) => (c.buyerId === activeUid ? c.sellerId : c.buyerId)).filter(Boolean))
-          );
-          if (partnerIds.length > 0) {
-            Promise.all(
-              partnerIds.map(async (pId) => {
-                try {
-                  const uDoc = await db.collection('users').doc(pId).get();
-                  if (uDoc && uDoc.exists) {
-                    const uData = uDoc.data();
-                    return { pId, photo: uData?.photoURL || uData?.profilePhoto || null };
-                  }
-                } catch (_) {}
-                return { pId, photo: null };
-              })
-            ).then((results) => {
-              const photoMap: Record<string, string> = {};
-              results.forEach((r) => {
-                if (r.photo) photoMap[r.pId] = r.photo;
-              });
-              if (Object.keys(photoMap).length > 0) {
-                setChats((prev) =>
-                  prev.map((c) => {
-                    const pId = c.buyerId === activeUid ? c.sellerId : c.buyerId;
-                    const livePhoto = photoMap[pId];
-                    if (livePhoto) {
-                      if (c.buyerId === activeUid) {
-                        return { ...c, sellerPhoto: livePhoto };
-                      } else {
-                        return { ...c, buyerPhoto: livePhoto };
-                      }
+            if (Object.keys(photoMap).length > 0) {
+              setChats((prev) =>
+                prev.map((c) => {
+                  const isUserBuyer = c.buyerId === activeUid || c.buyerId?.id === activeUid;
+                  const pId = isUserBuyer 
+                    ? c.sellerId || (Array.isArray(c.participants) ? c.participants.find((p: string) => p !== activeUid) : null)
+                    : c.buyerId || (Array.isArray(c.participants) ? c.participants.find((p: string) => p !== activeUid) : null);
+                  const livePhoto = photoMap[pId];
+                  if (livePhoto) {
+                    if (isUserBuyer) {
+                      return { ...c, sellerPhoto: livePhoto };
+                    } else {
+                      return { ...c, buyerPhoto: livePhoto };
                     }
-                    return c;
-                  })
-                );
-              }
-            });
+                  }
+                  return c;
+                })
+              );
+            }
+          });
+        }
+      };
+
+      const unsubBuyer = db.collection('chats').where('buyerId', '==', activeUid).onSnapshot(
+        (snapshot: any) => {
+          buyerChats = [];
+          if (snapshot && typeof snapshot.forEach === 'function') {
+            snapshot.forEach((doc: any) => buyerChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
           }
+          buyerLoaded = true;
+          mergeChats();
         },
-        (err: any) => {
-          console.warn('[ChatsScreen] Snapshot error:', err);
-          setLoading(false);
-          setRefreshing(false);
+        () => {
+          buyerLoaded = true;
+          mergeChats();
         }
       );
 
-      return unsubscribe;
+      const unsubSeller = db.collection('chats').where('sellerId', '==', activeUid).onSnapshot(
+        (snapshot: any) => {
+          sellerChats = [];
+          if (snapshot && typeof snapshot.forEach === 'function') {
+            snapshot.forEach((doc: any) => sellerChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
+          }
+          sellerLoaded = true;
+          mergeChats();
+        },
+        () => {
+          sellerLoaded = true;
+          mergeChats();
+        }
+      );
+
+      const unsubPart = db.collection('chats').where('participants', 'array-contains', activeUid).onSnapshot(
+        (snapshot: any) => {
+          partChats = [];
+          if (snapshot && typeof snapshot.forEach === 'function') {
+            snapshot.forEach((doc: any) => partChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
+          }
+          partLoaded = true;
+          mergeChats();
+        },
+        () => {
+          partLoaded = true;
+          mergeChats();
+        }
+      );
+
+      return () => {
+        unsubBuyer();
+        unsubSeller();
+        unsubPart();
+      };
     } catch (e) {
       console.warn('[ChatsScreen] Error in loadUserChats:', e);
       setLoading(false);

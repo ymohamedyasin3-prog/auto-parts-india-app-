@@ -261,35 +261,87 @@ export function subscribeToUserUnreadCounts(
     }
 
     // 1. Listen to unread chats
-    unsubChats = db
-      .collection('chats')
-      .where('participants', 'array-contains', userId)
-      .onSnapshot(
-        (snapshot: any) => {
-          let count = 0;
-          if (snapshot && typeof snapshot.forEach === 'function') {
-            snapshot.forEach((doc: any) => {
-              const data = doc.data ? doc.data() : doc;
-              
-              const unreadFromMap = typeof data?.unreadCount?.[userId] === 'number' 
-                ? data.unreadCount[userId] 
-                : 0;
+    // Replicate the 3-way merge logic used in the Web app to ensure all legacy chats are counted.
+    let buyerChats: any[] = [];
+    let sellerChats: any[] = [];
+    let partChats: any[] = [];
+    let buyerLoaded = false;
+    let sellerLoaded = false;
+    let partLoaded = false;
 
-              const hasUnreadFlag = data && data.lastSenderId && data.lastSenderId !== userId && data.unread === true;
+    const computeUnread = () => {
+      if (!isMounted || !buyerLoaded || !sellerLoaded || !partLoaded) return;
+      const chatsMap = new Map<string, any>();
+      buyerChats.forEach(c => chatsMap.set(c.id || (c.data && c.data().id), c.data ? c.data() : c));
+      sellerChats.forEach(c => chatsMap.set(c.id || (c.data && c.data().id), c.data ? c.data() : c));
+      partChats.forEach(c => chatsMap.set(c.id || (c.data && c.data().id), c.data ? c.data() : c));
 
-              if (unreadFromMap > 0 || hasUnreadFlag) {
-                count += Math.max(unreadFromMap, 1);
-              }
-            });
-          }
-          unreadChatCount = count;
-          emit();
-        },
-        () => {
-          unreadChatCount = 0;
-          emit();
+      let count = 0;
+      chatsMap.forEach((data) => {
+        const unreadFromMap = typeof data?.unreadCount?.[userId] === 'number' 
+          ? data.unreadCount[userId] 
+          : 0;
+
+        const hasUnreadFlag = data && data.lastSenderId && data.lastSenderId !== userId && data.unread === true;
+
+        if (unreadFromMap > 0 || hasUnreadFlag) {
+          count += Math.max(unreadFromMap, 1);
         }
-      );
+      });
+      unreadChatCount = count;
+      emit();
+    };
+
+    const unsubBuyer = db.collection('chats').where('buyerId', '==', userId).onSnapshot(
+      (snapshot: any) => {
+        buyerChats = [];
+        if (snapshot && typeof snapshot.forEach === 'function') {
+          snapshot.forEach((doc: any) => buyerChats.push(doc));
+        }
+        buyerLoaded = true;
+        computeUnread();
+      },
+      () => {
+        buyerLoaded = true;
+        computeUnread();
+      }
+    );
+
+    const unsubSeller = db.collection('chats').where('sellerId', '==', userId).onSnapshot(
+      (snapshot: any) => {
+        sellerChats = [];
+        if (snapshot && typeof snapshot.forEach === 'function') {
+          snapshot.forEach((doc: any) => sellerChats.push(doc));
+        }
+        sellerLoaded = true;
+        computeUnread();
+      },
+      () => {
+        sellerLoaded = true;
+        computeUnread();
+      }
+    );
+
+    const unsubPart = db.collection('chats').where('participants', 'array-contains', userId).onSnapshot(
+      (snapshot: any) => {
+        partChats = [];
+        if (snapshot && typeof snapshot.forEach === 'function') {
+          snapshot.forEach((doc: any) => partChats.push(doc));
+        }
+        partLoaded = true;
+        computeUnread();
+      },
+      () => {
+        partLoaded = true;
+        computeUnread();
+      }
+    );
+
+    unsubChats = () => {
+      unsubBuyer();
+      unsubSeller();
+      unsubPart();
+    };
 
     // 2. Listen to unread personal notifications
     unsubNotifs = db

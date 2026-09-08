@@ -293,7 +293,7 @@ function normalizeCollectionPath(collPath: string): string {
 }
 
 // Fetch real documents from Cloud Firestore
-async function fetchCloudCollection(collPath: string): Promise<any[]> {
+async function fetchCloudCollection(collPath: string, whereClauses?: any[]): Promise<any[]> {
   try {
     const cleanPath = normalizeCollectionPath(collPath);
     const pathsToQuery: string[] = [];
@@ -307,19 +307,58 @@ async function fetchCloudCollection(collPath: string): Promise<any[]> {
     const fetchedMap = new Map<string, any>();
     const runQueryUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DB_ID}/documents:runQuery?key=${FIREBASE_API_KEY}`;
 
-    // Query each cloud endpoint in parallel using structuredQuery (Zero permission-drop)
     await Promise.all(
       pathsToQuery.map(async (collectionId) => {
         try {
+          const structuredQuery: any = {
+            from: [{ collectionId }],
+            limit: 100,
+          };
+
+          if (whereClauses && whereClauses.length > 0) {
+            const filters = whereClauses.map((clause: any) => {
+              let op = 'EQUAL';
+              if (clause.op === '==') op = 'EQUAL';
+              else if (clause.op === 'array-contains') op = 'ARRAY_CONTAINS';
+              else if (clause.op === 'in') op = 'IN';
+              else if (clause.op === '>') op = 'GREATER_THAN';
+              else if (clause.op === '<') op = 'LESS_THAN';
+              else if (clause.op === '>=') op = 'GREATER_THAN_OR_EQUAL';
+              else if (clause.op === '<=') op = 'LESS_THAN_OR_EQUAL';
+
+              const value: any = {};
+              if (typeof clause.val === 'string') value.stringValue = clause.val;
+              else if (typeof clause.val === 'boolean') value.booleanValue = clause.val;
+              else if (typeof clause.val === 'number') {
+                if (Number.isInteger(clause.val)) value.integerValue = clause.val;
+                else value.doubleValue = clause.val;
+              }
+
+              return {
+                fieldFilter: {
+                  field: { fieldPath: clause.field },
+                  op,
+                  value
+                }
+              };
+            });
+
+            if (filters.length === 1) {
+              structuredQuery.where = filters[0];
+            } else {
+              structuredQuery.where = {
+                compositeFilter: {
+                  op: 'AND',
+                  filters
+                }
+              };
+            }
+          }
+
           const res = await fetch(runQueryUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              structuredQuery: {
-                from: [{ collectionId }],
-                limit: 100,
-              },
-            }),
+            body: JSON.stringify({ structuredQuery }),
           });
 
           if (res.ok) {
@@ -558,7 +597,7 @@ function createRealFirestoreQuery(rawCollectionPath: string) {
       return queryObj;
     },
     get: async () => {
-      const liveDocs = await fetchCloudCollection(collectionPath);
+      const liveDocs = await fetchCloudCollection(collectionPath, whereClauses);
       let filtered = [...liveDocs];
 
       // Apply in-memory filtering on fetched documents
@@ -659,7 +698,7 @@ function createRealFirestoreQuery(rawCollectionPath: string) {
       }
 
       // 2. Trigger cloud fetch
-      fetchCloudCollection(collectionPath).then((items) => {
+      fetchCloudCollection(collectionPath, whereClauses).then((items) => {
         subscriber({
           docs: items.map((i) => ({ id: i.id, data: () => ({ ...i }), exists: true })),
           empty: items.length === 0,
