@@ -26,6 +26,7 @@ import {
   saveUserLocation,
   getUserSavedLocation,
 } from '../services/location';
+import { getFirebaseFirestore } from '../services/firebase';
 
 interface LocationSelectScreenProps {
   navigation: any;
@@ -57,6 +58,7 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isDetectingGPS, setIsDetectingGPS] = useState<boolean>(false);
   const [expandedState, setExpandedState] = useState<string | null>(null);
+  const [adminLocations, setAdminLocations] = useState<string[]>([]);
 
   // Load saved location on mount
   React.useEffect(() => {
@@ -65,6 +67,18 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
         setSelectedCity(saved.city);
       }
     });
+
+    const db = getFirebaseFirestore();
+    if (db && typeof db.doc === 'function') {
+      db.doc('config/locations').get().then((docSnap: any) => {
+        if (docSnap && docSnap.exists) {
+          const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap.data;
+          if (data && Array.isArray(data.list)) {
+            setAdminLocations(data.list);
+          }
+        }
+      }).catch((e: any) => console.warn('Failed to load admin locations', e));
+    }
   }, []);
 
   // Handle selecting a location
@@ -130,8 +144,27 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
   // Search results
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    return searchIndianLocations(searchQuery);
-  }, [searchQuery]);
+    
+    const baseResults = searchIndianLocations(searchQuery);
+    
+    // Add matching admin locations
+    const cleanQuery = searchQuery.trim().toLowerCase();
+    const adminMatches = adminLocations
+      .filter((loc) => loc.toLowerCase().includes(cleanQuery))
+      .map((loc) => ({
+        id: `admin_${loc.toLowerCase().replace(/\s+/g, '_')}`,
+        name: loc,
+        state: 'Custom Location',
+        type: 'city' as const,
+        isPopular: true
+      }));
+      
+    // Deduplicate by name
+    const existingNames = new Set(baseResults.map(r => r.name.toLowerCase()));
+    const uniqueAdminMatches = adminMatches.filter(m => !existingNames.has(m.name.toLowerCase()));
+    
+    return [...uniqueAdminMatches, ...baseResults];
+  }, [searchQuery, adminLocations]);
 
   // Toggle state expansion
   const toggleStateExpand = (stateName: string) => {

@@ -292,6 +292,18 @@ function normalizeCollectionPath(collPath: string): string {
   return p;
 }
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const auth = getFirebaseAuth();
+    if (auth && auth.currentUser && typeof auth.currentUser.getIdToken === 'function') {
+      const token = await auth.currentUser.getIdToken(false);
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+    }
+  } catch (_) {}
+  return headers;
+}
+
 // Fetch real documents from Cloud Firestore
 async function fetchCloudCollection(collPath: string, whereClauses?: any[]): Promise<any[]> {
   try {
@@ -306,6 +318,9 @@ async function fetchCloudCollection(collPath: string, whereClauses?: any[]): Pro
 
     const fetchedMap = new Map<string, any>();
     const runQueryUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIRESTORE_DB_ID}/documents:runQuery?key=${FIREBASE_API_KEY}`;
+    
+    let hasFetchError = false;
+    const authHeaders = await getAuthHeaders();
 
     await Promise.all(
       pathsToQuery.map(async (collectionId) => {
@@ -357,7 +372,7 @@ async function fetchCloudCollection(collPath: string, whereClauses?: any[]): Pro
 
           const res = await fetch(runQueryUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders,
             body: JSON.stringify({ structuredQuery }),
           });
 
@@ -374,9 +389,11 @@ async function fetchCloudCollection(collPath: string, whereClauses?: any[]): Pro
               });
             }
           } else {
-            // Fallback to GET listing if runQuery returns an unexpected status
+            // Fallback to GET listing if runQuery returns an unexpected status (e.g. 400 for subcollections)
             try {
-              const fallbackRes = await fetch(`${firestoreBaseUrl}/${collectionId}?key=${FIREBASE_API_KEY}&pageSize=100`);
+              const fallbackRes = await fetch(`${firestoreBaseUrl}/${collectionId}?key=${FIREBASE_API_KEY}&pageSize=100`, {
+                headers: authHeaders
+              });
               if (fallbackRes.ok) {
                 const json: any = await fallbackRes.json();
                 const docs = json.documents || [];
@@ -386,14 +403,25 @@ async function fetchCloudCollection(collPath: string, whereClauses?: any[]): Pro
                     fetchedMap.set(decoded.id, decoded);
                   }
                 });
+              } else {
+                hasFetchError = true;
               }
-            } catch (_) {}
+            } catch (_) {
+              hasFetchError = true;
+            }
           }
         } catch (fetchErr) {
+          hasFetchError = true;
           console.warn(`[Firestore Cloud] Fetch query error for ${collectionId}:`, fetchErr);
         }
       })
     );
+
+    if (hasFetchError && fetchedMap.size === 0) {
+      // If we failed to fetch anything (e.g. due to 403 or network), DO NOT wipe the cache.
+      // Just return existing cached items.
+      return Object.values(cloudCache[collPath] || {});
+    }
 
     const parsedDocs = Array.from(fetchedMap.values());
 
@@ -722,8 +750,10 @@ function createRealFirestoreQuery(rawCollectionPath: string) {
         id: docId,
         collection: (subCollName: string) => createRealFirestoreQuery(`${docPath}/${subCollName}`),
         get: async () => {
+          let hasFetchError = false;
           try {
-            const res = await fetch(`${firestoreBaseUrl}/${docPath}?key=${FIREBASE_API_KEY}`);
+            const authHeaders = await getAuthHeaders();
+            const res = await fetch(`${firestoreBaseUrl}/${docPath}?key=${FIREBASE_API_KEY}`, { headers: authHeaders });
             if (res.ok) {
               const data = await res.json();
               const decoded = decodeFirestoreDoc(data);
@@ -741,14 +771,18 @@ function createRealFirestoreQuery(rawCollectionPath: string) {
                 delete cloudCache[collectionPath][docId];
               }
               return { id: docId, data: () => null, exists: false };
+            } else {
+              hasFetchError = true;
             }
-          } catch (_) {}
+          } catch (_) {
+            hasFetchError = true;
+          }
 
           const cached = cloudCache[collectionPath]?.[docId];
           return {
             id: docId,
             data: () => cached ? { ...cached } : null,
-            exists: Boolean(cached),
+            exists: hasFetchError && cached ? true : Boolean(cached),
           };
         },
         set: async (data: any, options?: { merge?: boolean }) => {
@@ -777,8 +811,10 @@ function createRealFirestoreQuery(rawCollectionPath: string) {
 
           // 2. Fetch from cloud REST to ensure fresh data
           const fetchAndNotify = async () => {
+            let hasFetchError = false;
             try {
-              const res = await fetch(`${firestoreBaseUrl}/${docPath}?key=${FIREBASE_API_KEY}`);
+              const authHeaders = await getAuthHeaders();
+              const res = await fetch(`${firestoreBaseUrl}/${docPath}?key=${FIREBASE_API_KEY}`, { headers: authHeaders });
               if (res.ok) {
                 const data = await res.json();
                 const decoded = decodeFirestoreDoc(data);
@@ -794,10 +830,16 @@ function createRealFirestoreQuery(rawCollectionPath: string) {
                 }
                 onNext({ id: docId, data: () => null, exists: false });
                 return;
+              } else {
+                hasFetchError = true;
               }
-            } catch (_) {}
-            const fallbackCached = cloudCache[collectionPath]?.[docId];
-            onNext({ id: docId, data: () => fallbackCached ? { ...fallbackCached } : null, exists: Boolean(fallbackCached) });
+            } catch (_) {
+              hasFetchError = true;
+            }
+            if (hasFetchError) {
+              const fallbackCached = cloudCache[collectionPath]?.[docId];
+              onNext({ id: docId, data: () => fallbackCached ? { ...fallbackCached } : null, exists: Boolean(fallbackCached) });
+            }
           };
           fetchAndNotify();
 
