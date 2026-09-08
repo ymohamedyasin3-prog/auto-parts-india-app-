@@ -59,8 +59,9 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
   const [isDetectingGPS, setIsDetectingGPS] = useState<boolean>(false);
   const [expandedState, setExpandedState] = useState<string | null>(null);
   const [adminLocations, setAdminLocations] = useState<string[]>([]);
+  const [adminTaxonomyLocations, setAdminTaxonomyLocations] = useState<{ state: string; districts: string[] }[]>([]);
 
-  // Load saved location on mount
+  // Load saved location and sync admin locations in real-time
   React.useEffect(() => {
     getUserSavedLocation().then((saved) => {
       if (saved && saved.city) {
@@ -69,16 +70,110 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
     });
 
     const db = getFirebaseFirestore();
-    if (db && typeof db.doc === 'function') {
-      db.doc('config/locations').get().then((docSnap: any) => {
-        if (docSnap && docSnap.exists) {
-          const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap.data;
-          if (data && Array.isArray(data.list)) {
-            setAdminLocations(data.list);
-          }
+    if (!db) return;
+
+    let unsubConfig = () => {};
+    let unsubTaxonomy = () => {};
+
+    try {
+      // 1. Real-time listener for config/locations
+      if (typeof db.doc === 'function') {
+        const configRef = db.doc('config/locations');
+        if (typeof configRef.onSnapshot === 'function') {
+          unsubConfig = configRef.onSnapshot((docSnap: any) => {
+            if (docSnap && docSnap.exists) {
+              const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap.data;
+              const list = Array.isArray(data?.list) ? data.list : Array.isArray(data?.locations) ? data.locations : [];
+              if (list.length > 0) {
+                setAdminLocations((prev) => Array.from(new Set([...prev, ...list])));
+              }
+            }
+          });
+        } else if (typeof configRef.get === 'function') {
+          configRef.get().then((docSnap: any) => {
+            if (docSnap && docSnap.exists) {
+              const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap.data;
+              const list = Array.isArray(data?.list) ? data.list : Array.isArray(data?.locations) ? data.locations : [];
+              if (list.length > 0) {
+                setAdminLocations((prev) => Array.from(new Set([...prev, ...list])));
+              }
+            }
+          }).catch(() => {});
         }
-      }).catch((e: any) => console.warn('Failed to load admin locations', e));
+
+        // 2. Real-time listener for taxonomy/data (CMS saved states & districts)
+        const taxRef = db.doc('taxonomy/data');
+        if (typeof taxRef.onSnapshot === 'function') {
+          unsubTaxonomy = taxRef.onSnapshot((docSnap: any) => {
+            if (docSnap && docSnap.exists) {
+              const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap.data;
+              if (data?.locations && Array.isArray(data.locations)) {
+                setAdminTaxonomyLocations(data.locations);
+                const locNames: string[] = [];
+                data.locations.forEach((item: any) => {
+                  if (item.state && item.state.trim()) locNames.push(item.state.trim());
+                  if (Array.isArray(item.districts)) {
+                    item.districts.forEach((d: string) => {
+                      if (d && d.trim()) locNames.push(d.trim());
+                    });
+                  }
+                });
+                setAdminLocations((prev) => Array.from(new Set([...prev, ...locNames])));
+              }
+            }
+          });
+        } else if (typeof taxRef.get === 'function') {
+          taxRef.get().then((docSnap: any) => {
+            if (docSnap && docSnap.exists) {
+              const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap.data;
+              if (data?.locations && Array.isArray(data.locations)) {
+                setAdminTaxonomyLocations(data.locations);
+                const locNames: string[] = [];
+                data.locations.forEach((item: any) => {
+                  if (item.state && item.state.trim()) locNames.push(item.state.trim());
+                  if (Array.isArray(item.districts)) {
+                    item.districts.forEach((d: string) => {
+                      if (d && d.trim()) locNames.push(d.trim());
+                    });
+                  }
+                });
+                setAdminLocations((prev) => Array.from(new Set([...prev, ...locNames])));
+              }
+            }
+          }).catch(() => {});
+        }
+
+        // 3. Fallback checks for config/cities and config/districts
+        ['config/cities', 'config/districts'].forEach((path) => {
+          db.doc(path).get().then((snap: any) => {
+            if (snap && snap.exists) {
+              const d = typeof snap.data === 'function' ? snap.data() : snap.data;
+              const list = Array.isArray(d?.list) ? d.list : [];
+              if (list.length > 0) {
+                setAdminLocations((prev) => Array.from(new Set([...prev, ...list])));
+              }
+            }
+          }).catch(() => {});
+        });
+      }
+    } catch (e: any) {
+      console.warn('Failed to load admin locations', e);
     }
+
+    // Local storage fallback for web
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const localLocs = JSON.parse(window.localStorage.getItem('config_locations') || '[]');
+        if (Array.isArray(localLocs) && localLocs.length > 0) {
+          setAdminLocations((prev) => Array.from(new Set([...prev, ...localLocs])));
+        }
+      }
+    } catch (_) {}
+
+    return () => {
+      unsubConfig();
+      unsubTaxonomy();
+    };
   }, []);
 
   // Handle selecting a location
@@ -141,30 +236,116 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
     }
   };
 
-  // Search results
+  // Memoized states & districts list including admin added states and districts
+  const allStatesAndDistricts = useMemo(() => {
+    const statesMap = new Map<string, { state: string; districts: string[] }>();
+
+    // Default Indian states and districts
+    INDIAN_STATES_AND_DISTRICTS.forEach((item) => {
+      statesMap.set(item.state.toLowerCase(), {
+        state: item.state,
+        districts: [...item.districts],
+      });
+    });
+
+    // Merge admin taxonomy locations
+    adminTaxonomyLocations.forEach((item) => {
+      if (!item.state) return;
+      const key = item.state.toLowerCase();
+      if (statesMap.has(key)) {
+        const existing = statesMap.get(key)!;
+        const currentDistrictsSet = new Set(existing.districts.map((d) => d.toLowerCase()));
+        if (Array.isArray(item.districts)) {
+          item.districts.forEach((d) => {
+            if (d && !currentDistrictsSet.has(d.toLowerCase())) {
+              existing.districts.push(d);
+              currentDistrictsSet.add(d.toLowerCase());
+            }
+          });
+        }
+      } else {
+        statesMap.set(key, {
+          state: item.state,
+          districts: Array.isArray(item.districts) ? [...item.districts] : [],
+        });
+      }
+    });
+
+    return Array.from(statesMap.values());
+  }, [adminTaxonomyLocations]);
+
+  // Search results prioritizing Admin added locations
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    
-    const baseResults = searchIndianLocations(searchQuery);
-    
-    // Add matching admin locations
+
     const cleanQuery = searchQuery.trim().toLowerCase();
-    const adminMatches = adminLocations
-      .filter((loc) => loc.toLowerCase().includes(cleanQuery))
-      .map((loc) => ({
-        id: `admin_${loc.toLowerCase().replace(/\s+/g, '_')}`,
-        name: loc,
-        state: 'Custom Location',
-        type: 'city' as const,
-        isPopular: true
-      }));
-      
-    // Deduplicate by name
-    const existingNames = new Set(baseResults.map(r => r.name.toLowerCase()));
-    const uniqueAdminMatches = adminMatches.filter(m => !existingNames.has(m.name.toLowerCase()));
-    
-    return [...uniqueAdminMatches, ...baseResults];
-  }, [searchQuery, adminLocations]);
+    const baseResults = searchIndianLocations(searchQuery);
+
+    // 1. Match from adminLocations
+    const adminMatches: any[] = [];
+    adminLocations.forEach((loc) => {
+      if (loc && loc.toLowerCase().includes(cleanQuery)) {
+        adminMatches.push({
+          id: `admin_${loc.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+          name: loc,
+          state: 'Admin Added Location',
+          type: 'city',
+          isAdminAdded: true,
+          isPopular: true,
+        });
+      }
+    });
+
+    // 2. Match from adminTaxonomyLocations
+    adminTaxonomyLocations.forEach((item) => {
+      if (item.state && item.state.toLowerCase().includes(cleanQuery)) {
+        adminMatches.push({
+          id: `admin_state_${item.state.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+          name: item.state,
+          state: 'State (Admin Added)',
+          type: 'state',
+          isAdminAdded: true,
+          isPopular: true,
+        });
+      }
+      if (Array.isArray(item.districts)) {
+        item.districts.forEach((d) => {
+          if (d && d.toLowerCase().includes(cleanQuery)) {
+            adminMatches.push({
+              id: `admin_dist_${d.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+              name: d,
+              state: `${item.state || 'Custom Region'} (Admin Added)`,
+              type: 'district',
+              isAdminAdded: true,
+              isPopular: true,
+            });
+          }
+        });
+      }
+    });
+
+    // Deduplicate: prioritize Admin Added items at the very top
+    const seenNames = new Set<string>();
+    const combined: any[] = [];
+
+    adminMatches.forEach((item) => {
+      const key = item.name.toLowerCase().trim();
+      if (!seenNames.has(key)) {
+        seenNames.add(key);
+        combined.push(item);
+      }
+    });
+
+    baseResults.forEach((item) => {
+      const key = item.name.toLowerCase().trim();
+      if (!seenNames.has(key)) {
+        seenNames.add(key);
+        combined.push(item);
+      }
+    });
+
+    return combined;
+  }, [searchQuery, adminLocations, adminTaxonomyLocations]);
 
   // Toggle state expansion
   const toggleStateExpand = (stateName: string) => {
@@ -254,7 +435,11 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
             const isSelected = selectedCity.toLowerCase() === item.name.toLowerCase();
             return (
               <TouchableOpacity
-                style={[styles.resultItem, isSelected && styles.resultItemActive]}
+                style={[
+                  styles.resultItem,
+                  isSelected && styles.resultItemActive,
+                  item.isAdminAdded && styles.adminResultItem,
+                ]}
                 activeOpacity={0.7}
                 onPress={() =>
                   handleSelect(item.name, {
@@ -263,23 +448,48 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
                   })
                 }
               >
-                <View style={styles.resultIconBox}>
+                <View
+                  style={[
+                    styles.resultIconBox,
+                    item.isAdminAdded && styles.adminResultIconBox,
+                  ]}
+                >
                   <Icon
                     source={
-                      item.type === 'state'
+                      item.isAdminAdded
+                        ? 'star-circle'
+                        : item.type === 'state'
                         ? 'map-outline'
                         : item.type === 'all'
                         ? 'earth'
                         : 'map-marker'
                     }
                     size={20}
-                    color={isSelected ? '#0066FF' : '#64748B'}
+                    color={
+                      isSelected
+                        ? '#0066FF'
+                        : item.isAdminAdded
+                        ? '#F59E0B'
+                        : '#64748B'
+                    }
                   />
                 </View>
                 <View style={styles.resultTextWrap}>
-                  <Text style={[styles.resultTitle, isSelected && styles.resultTitleActive]}>
-                    {item.name}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text
+                      style={[
+                        styles.resultTitle,
+                        isSelected && styles.resultTitleActive,
+                      ]}
+                    >
+                      {item.name}
+                    </Text>
+                    {item.isAdminAdded && (
+                      <View style={styles.adminBadge}>
+                        <Text style={styles.adminBadgeText}>Admin Added</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.resultSub}>
                     {item.type === 'state' ? 'State' : item.state}
                   </Text>
@@ -342,7 +552,53 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
             )}
           </TouchableOpacity>
 
-          {/* 3. Popular Cities in India */}
+          {/* 3. Admin Added Locations (If configured) */}
+          {adminLocations.length > 0 && (
+            <View style={styles.sectionWrap}>
+              <View style={styles.sectionHeaderRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Icon source="shield-check" size={16} color="#0066FF" />
+                  <Text style={styles.sectionTitle}>ADMIN ADDED LOCATIONS</Text>
+                </View>
+                <Text style={styles.sectionCount}>{adminLocations.length} Locations</Text>
+              </View>
+
+              <View style={styles.chipsGrid}>
+                {adminLocations.map((loc) => {
+                  const isSelected = selectedCity.toLowerCase() === loc.toLowerCase();
+                  return (
+                    <TouchableOpacity
+                      key={loc}
+                      style={[
+                        styles.cityChip,
+                        styles.adminChip,
+                        isSelected && styles.cityChipActive,
+                      ]}
+                      onPress={() => handleSelect(loc, { district: loc })}
+                      activeOpacity={0.75}
+                    >
+                      <Icon
+                        source="star"
+                        size={14}
+                        color={isSelected ? '#0066FF' : '#F59E0B'}
+                      />
+                      <Text
+                        style={[
+                          styles.cityChipText,
+                          isSelected && styles.cityChipTextActive,
+                        ]}
+                      >
+                        {loc}
+                      </Text>
+                      {isSelected && <Icon source="check" size={14} color="#0066FF" />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          {/* 4. Popular Cities in India */}
           <View style={styles.sectionWrap}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>POPULAR CITIES</Text>
@@ -378,14 +634,14 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
             </View>
           </View>
 
-          {/* 4. All Indian States & Districts (28 States & 8 UTs) */}
+          {/* 5. All Indian States & Districts (Merged with Admin Additions) */}
           <View style={styles.sectionWrap}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>EXPLORE BY STATE</Text>
-              <Text style={styles.sectionCount}>28 States & 8 UTs</Text>
+              <Text style={styles.sectionCount}>{allStatesAndDistricts.length} States & UTs</Text>
             </View>
 
-            {INDIAN_STATES_AND_DISTRICTS.map((item) => {
+            {allStatesAndDistricts.map((item) => {
               const isExpanded = expandedState === item.state;
               const isStateSelected = selectedCity.toLowerCase() === item.state.toLowerCase();
               return (
@@ -670,6 +926,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#EFF6FF',
     borderColor: '#0066FF',
   },
+  adminChip: {
+    borderColor: '#FCD34D',
+    backgroundColor: '#FFFBEB',
+  },
   cityChipText: {
     fontSize: 13,
     fontWeight: '600',
@@ -773,6 +1033,10 @@ const styles = StyleSheet.create({
     borderColor: '#0066FF',
     backgroundColor: '#F0F7FF',
   },
+  adminResultItem: {
+    borderColor: '#FDE68A',
+    backgroundColor: '#FFFEF5',
+  },
   resultIconBox: {
     width: 36,
     height: 36,
@@ -781,6 +1045,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  adminResultIconBox: {
+    backgroundColor: '#FEF3C7',
+  },
+  adminBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  adminBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1D4ED8',
+    textTransform: 'uppercase',
   },
   resultTextWrap: {
     flex: 1,

@@ -159,6 +159,30 @@ export const AdminTaxonomyCMS: React.FC = () => {
         updatedAt: Date.now(),
       });
 
+      // Sync all location state and district names to config/locations for real-time search
+      try {
+        const allLocs: string[] = [];
+        locations.forEach((loc) => {
+          if (loc.state && loc.state.trim()) allLocs.push(loc.state.trim());
+          if (Array.isArray(loc.districts)) {
+            loc.districts.forEach((d) => {
+              if (d && d.trim()) allLocs.push(d.trim());
+            });
+          }
+        });
+        const uniqueLocs = Array.from(new Set(allLocs));
+        await db.collection('config').doc('locations').set({
+          list: uniqueLocs,
+          updatedAt: Date.now(),
+        }, { merge: true });
+
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem('config_locations', JSON.stringify(uniqueLocs));
+        }
+      } catch (locSyncErr) {
+        console.warn('[AdminTaxonomyCMS] location sync error:', locSyncErr);
+      }
+
       // Sync categories directly to topCategories collection in Firestore
       const batch = db.batch ? db.batch() : null;
       if (batch) {

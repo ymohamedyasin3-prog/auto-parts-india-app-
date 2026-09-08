@@ -29,6 +29,8 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'buyers' | 'sellers'>('all');
   const activeUser = initialUser || getCurrentUser();
   const { translateDynamic } = useLanguage();
 
@@ -216,18 +218,39 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
     return Date.now();
   };
 
-  const getRelativeTime = (timestamp: any) => {
+  const formatChatTime = (timestamp: any) => {
     const millis = parseTimestamp(timestamp);
-    const difference = Date.now() - millis;
-    if (difference < 0) return translateDynamic('Just now');
-    const minutes = Math.floor(difference / (60 * 1000));
-    if (minutes < 1) return translateDynamic('Just now');
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days > 30) return translateDynamic('Recently');
-    return `${days}d ago`;
+    const date = new Date(millis);
+    const now = new Date();
+    
+    const isToday =
+      date.getDate() === now.getDate() &&
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear();
+
+    if (isToday) {
+      let hours = date.getHours();
+      const minutes = date.getMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+      return `${hours}:${minutesStr} ${ampm}`;
+    }
+
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday =
+      date.getDate() === yesterday.getDate() &&
+      date.getMonth() === yesterday.getMonth() &&
+      date.getFullYear() === yesterday.getFullYear();
+
+    if (isYesterday) {
+      return translateDynamic('Yesterday');
+    }
+
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${date.getDate()} ${months[date.getMonth()]}`;
   };
 
   const formatPrice = (price: number) => {
@@ -238,10 +261,10 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
   if (!activeUser) {
     return (
       <View style={styles.authPromptContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#0B1220" />
+        <StatusBar barStyle="light-content" backgroundColor="#083B84" />
         <View style={styles.authCard}>
           <View style={styles.authIconCircle}>
-            <Icon source="message-text-lock-outline" size={36} color="#1565FF" />
+            <Icon source="message-text-lock-outline" size={36} color="#0072F5" />
           </View>
           <Text variant="titleLarge" style={styles.authTitle}>
             {translateDynamic('Sign in to View Chats')}
@@ -253,7 +276,7 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
             mode="contained"
             onPress={() => navigation.navigate('Auth')}
             style={styles.signInBtn}
-            buttonColor="#1565FF"
+            buttonColor="#0072F5"
             textColor="#FFFFFF"
             icon="login"
           >
@@ -267,6 +290,16 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
   const filteredChats = chats.filter((chat) => {
     const activeUid = activeUser.uid || activeUser.id;
     const isUserBuyer = chat.buyerId ? activeUid === chat.buyerId : activeUid !== chat.sellerId;
+
+    if (activeFilter === 'buyers' && isUserBuyer) {
+      // Current user is buyer, so the partner is a seller. Filter out if looking for buyers.
+      return false;
+    }
+    if (activeFilter === 'sellers' && !isUserBuyer) {
+      // Current user is seller, so partner is buyer. Filter out if looking for sellers.
+      return false;
+    }
+
     const partnerName = isUserBuyer ? chat.sellerName : chat.buyerName;
     const query = searchQuery.trim().toLowerCase();
     if (!query) return true;
@@ -285,19 +318,12 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
     const partnerName = isUserBuyer
       ? item.sellerName || 'Verified Seller'
       : item.buyerName || 'Buyer';
-    const partnerRole = isUserBuyer ? 'Seller' : 'Buyer';
     const partnerPhoto = isUserBuyer ? item.sellerPhoto : item.buyerPhoto;
-    const partnerId = isUserBuyer 
-      ? item.sellerId || (Array.isArray(item.participants) ? item.participants.find((p: string) => p !== activeUid) : 'seller')
-      : item.buyerId || (Array.isArray(item.participants) ? item.participants.find((p: string) => p !== activeUid) : 'buyer');
+    const displayAvatar = partnerPhoto || item.partImageUrl;
 
     const unreadCount =
       item.unreadCount?.[activeUid] ||
       (item.lastSenderId && item.lastSenderId !== activeUid && item.unread ? 1 : 0);
-
-    const partImage =
-      item.partImageUrl ||
-      'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&q=80&w=200';
 
     const handleDeleteChat = (chatItem: any) => {
       Alert.alert(
@@ -327,7 +353,7 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
 
     return (
       <TouchableOpacity
-        activeOpacity={0.7}
+        activeOpacity={0.75}
         style={styles.chatCard}
         onLongPress={() => handleDeleteChat(item)}
         onPress={() => {
@@ -348,10 +374,10 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
           });
         }}
       >
-        {/* Avatar with part thumbnail badge */}
+        {/* Avatar */}
         <View style={styles.avatarContainer}>
-          {partnerPhoto ? (
-            <Image source={{ uri: partnerPhoto }} style={styles.avatarImage} />
+          {displayAvatar ? (
+            <Image source={{ uri: displayAvatar }} style={styles.avatarImage} />
           ) : (
             <View style={styles.avatarPlaceholder}>
               <Text style={styles.avatarInitial}>
@@ -359,74 +385,32 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
               </Text>
             </View>
           )}
-
-          {/* Small thumbnail badge of the spare part */}
-          {item.partImageUrl ? (
-            <View style={styles.partBadgeOverlay}>
-              <Image source={{ uri: item.partImageUrl }} style={styles.partBadgeImg} />
-            </View>
-          ) : null}
-
-          {unreadCount > 0 && <View style={styles.unreadPulseDot} />}
         </View>
 
-        {/* Middle content info */}
+        {/* Middle Content: Name & Last Message */}
         <View style={styles.chatInfo}>
-          <View style={styles.chatHeaderRow}>
-            <View style={styles.partnerNameRow}>
-              <Text variant="titleSmall" numberOfLines={1} style={styles.partnerNameText}>
-                {partnerName}
+          <Text numberOfLines={1} style={styles.partnerNameText}>
+            {partnerName}
+          </Text>
+          <Text numberOfLines={1} style={styles.lastMessageText}>
+            {item.lastMessageText || translateDynamic('Tap to start conversation...')}
+          </Text>
+        </View>
+
+        {/* Right Content: Timestamp & Blue Unread Count */}
+        <View style={styles.metaContainer}>
+          <Text style={styles.timestampText}>
+            {formatChatTime(item.lastMessageAt || item.updatedAt || item.createdAt)}
+          </Text>
+          {unreadCount > 0 ? (
+            <View style={styles.unreadCircleBadge}>
+              <Text style={styles.unreadCircleBadgeText}>
+                {unreadCount > 99 ? '99+' : unreadCount}
               </Text>
-              <View
-                style={[
-                  styles.roleTag,
-                  isUserBuyer ? styles.sellerTag : styles.buyerTag,
-                ]}
-              >
-                <Text
-                  style={[
-                    { fontSize: 10, fontWeight: '700' },
-                    { color: isUserBuyer ? '#3B82F6' : '#10B981' },
-                  ]}
-                >
-                  {partnerRole}
-                </Text>
-              </View>
             </View>
-
-            <Text style={styles.timestampText}>
-              {getRelativeTime(item.lastMessageAt || item.updatedAt || item.createdAt)}
-            </Text>
-          </View>
-
-          {/* Spare part title badge */}
-          <View style={styles.partTitleRow}>
-            <Icon source="car-wrench" size={13} color="#2563EB" />
-            <Text numberOfLines={1} style={styles.partTitleText}>
-              {item.partTitle || translateDynamic('Spare Part Inquiry')}
-            </Text>
-            {item.partPrice ? (
-              <Text style={styles.partPriceText}>{formatPrice(item.partPrice)}</Text>
-            ) : null}
-          </View>
-
-          {/* Last message preview */}
-          <View style={styles.lastMessageRow}>
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.lastMessageText,
-                unreadCount > 0 && styles.lastMessageTextUnread,
-              ]}
-            >
-              {item.lastMessageText || translateDynamic('Tap to start conversation...')}
-            </Text>
-            {unreadCount > 0 ? (
-              <Badge size={20} style={styles.unreadBadge}>
-                {unreadCount}
-              </Badge>
-            ) : null}
-          </View>
+          ) : (
+            <View style={{ height: 20 }} />
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -434,84 +418,164 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0066FF" />
+      <StatusBar barStyle="light-content" backgroundColor="#083B84" />
 
-      {/* Modern Blue Header matching Home Screen Theme */}
+      {/* Royal Navy Blue Top Header Bar matching image */}
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <Text style={styles.headerTitle}>{translateDynamic('Chats & Messages')}</Text>
+        {/* Row 1: Brand title Auto Parts India */}
+        <View style={styles.brandRow}>
+          <Text style={styles.brandAutoParts}>Auto Parts </Text>
+          <Text style={styles.brandIndia}>India</Text>
+        </View>
+
+        {/* Row 2: Chats Title & Icons */}
+        <View style={styles.titleRow}>
+          <Text style={styles.headerMainTitle}>{translateDynamic('Chats')}</Text>
+          <View style={styles.headerActionIcons}>
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              onPress={() => setShowSearch(!showSearch)}
+              activeOpacity={0.7}
+            >
+              <Icon source="magnify" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              onPress={onRefresh}
+              activeOpacity={0.7}
+            >
+              <Icon source="dots-vertical" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Expandable Search Input */}
+        {showSearch && (
+          <View style={styles.searchbarWrap}>
+            <Searchbar
+              placeholder={translateDynamic('Search chats or parts...')}
+              onChangeText={setSearchQuery}
+              value={searchQuery}
+              style={styles.searchbar}
+              inputStyle={styles.searchInput}
+              iconColor="#FFFFFF"
+              placeholderTextColor="rgba(255, 255, 255, 0.7)"
+            />
+          </View>
+        )}
+
+        {/* Row 3: Filter Tabs: All, Buyers, Sellers */}
+        <View style={styles.filterTabsRow}>
           <TouchableOpacity
-            style={styles.notifIconBtn}
-            onPress={() => navigation.navigate('Notifications')}
+            style={[
+              styles.filterTabPill,
+              activeFilter === 'all' ? styles.filterTabPillActive : styles.filterTabPillInactive,
+            ]}
+            onPress={() => setActiveFilter('all')}
+            activeOpacity={0.8}
           >
-            <Icon source="bell-outline" size={22} color="#FFFFFF" />
+            <Text
+              style={[
+                styles.filterTabText,
+                activeFilter === 'all' ? styles.filterTabTextActive : styles.filterTabTextInactive,
+              ]}
+            >
+              {translateDynamic('All')}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.filterTabPill,
+              activeFilter === 'buyers' ? styles.filterTabPillActive : styles.filterTabPillInactive,
+            ]}
+            onPress={() => setActiveFilter('buyers')}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.filterTabText,
+                activeFilter === 'buyers' ? styles.filterTabTextActive : styles.filterTabTextInactive,
+              ]}
+            >
+              {translateDynamic('Buyers')}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.filterTabPill,
+              activeFilter === 'sellers' ? styles.filterTabPillActive : styles.filterTabPillInactive,
+            ]}
+            onPress={() => setActiveFilter('sellers')}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.filterTabText,
+                activeFilter === 'sellers' ? styles.filterTabTextActive : styles.filterTabTextInactive,
+              ]}
+            >
+              {translateDynamic('Sellers')}
+            </Text>
           </TouchableOpacity>
         </View>
-
-        {/* Inbox Search input */}
-        <Searchbar
-          placeholder={translateDynamic('Search conversations or parts...')}
-          onChangeText={setSearchQuery}
-          value={searchQuery}
-          style={styles.searchbar}
-          inputStyle={styles.searchInput}
-          iconColor="#FFFFFF"
-          placeholderTextColor="rgba(255, 255, 255, 0.7)"
-        />
       </View>
 
-      {/* Main Conversation List */}
-      {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#1565FF" />
-          <Text style={styles.loadingText}>{translateDynamic('Syncing conversations...')}</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredChats}
-          keyExtractor={(item) => item.id}
-          renderItem={renderChatItem}
-          ItemSeparatorComponent={() => <Divider style={styles.divider} />}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={['#1565FF']}
-              tintColor="#1565FF"
-            />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyIconCircle}>
-                <Icon source="chat-outline" size={44} color="#94A3B8" />
+      {/* Main White Curved List Container */}
+      <View style={styles.sheetContainer}>
+        {loading ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color="#0072F5" />
+            <Text style={styles.loadingText}>{translateDynamic('Syncing conversations...')}</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredChats}
+            keyExtractor={(item) => item.id}
+            renderItem={renderChatItem}
+            ItemSeparatorComponent={() => <Divider style={styles.divider} />}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#0072F5']}
+                tintColor="#0072F5"
+              />
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconCircle}>
+                  <Icon source="chat-outline" size={44} color="#94A3B8" />
+                </View>
+                <Text variant="titleMedium" style={styles.emptyTitle}>
+                  {searchQuery
+                    ? translateDynamic('No matching conversations found')
+                    : translateDynamic('No active conversations yet')}
+                </Text>
+                <Text variant="bodySmall" style={styles.emptySub}>
+                  {searchQuery
+                    ? translateDynamic('Try a different search query for parts or sellers.')
+                    : translateDynamic('Browse spare parts and click "Chat" to contact sellers in real-time.')}
+                </Text>
+                {!searchQuery && (
+                  <Button
+                    mode="contained-tonal"
+                    onPress={() => navigation.navigate('MainTabs', { screen: 'HomeTab' })}
+                    style={{ marginTop: 16 }}
+                    buttonColor="#EFF6FF"
+                    textColor="#0072F5"
+                    icon="car-search"
+                  >
+                    {translateDynamic('Browse Spare Parts')}
+                  </Button>
+                )}
               </View>
-              <Text variant="titleMedium" style={styles.emptyTitle}>
-                {searchQuery
-                  ? translateDynamic('No matching conversations found')
-                  : translateDynamic('No active conversations yet')}
-              </Text>
-              <Text variant="bodySmall" style={styles.emptySub}>
-                {searchQuery
-                  ? translateDynamic('Try a different search query for parts or sellers.')
-                  : translateDynamic('Browse spare parts and click "Chat" to contact sellers in real-time.')}
-              </Text>
-              {!searchQuery && (
-                <Button
-                  mode="contained-tonal"
-                  onPress={() => navigation.navigate('MainTabs', { screen: 'HomeTab' })}
-                  style={{ marginTop: 16 }}
-                  buttonColor="#EFF6FF"
-                  textColor="#1565FF"
-                  icon="car-search"
-                >
-                  {translateDynamic('Browse Spare Parts')}
-                </Button>
-              )}
-            </View>
-          }
-        />
-      )}
+            }
+          />
+        )}
+      </View>
     </View>
   );
 }
@@ -519,42 +583,59 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#083B84',
   },
   header: {
-    backgroundColor: '#0066FF',
-    paddingTop: Platform.OS === 'android' ? 12 : 6,
-    paddingBottom: 16,
+    backgroundColor: '#083B84',
+    paddingTop: Platform.OS === 'android' ? 14 : 8,
     paddingHorizontal: 16,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
+    paddingBottom: 16,
   },
-  headerTop: {
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  brandAutoParts: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  brandIndia: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FF6B00',
+    letterSpacing: 0.2,
+  },
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 14,
   },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
+  headerMainTitle: {
+    fontSize: 28,
     fontWeight: '800',
+    color: '#FFFFFF',
   },
-  notifIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+  headerActionIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  searchbarWrap: {
+    marginBottom: 12,
+  },
   searchbar: {
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
     borderRadius: 14,
     height: 42,
     elevation: 0,
@@ -565,32 +646,66 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     minHeight: 0,
   },
-  listContent: {
+  filterTabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterTabPill: {
+    paddingHorizontal: 22,
     paddingVertical: 8,
+    borderRadius: 20,
+  },
+  filterTabPillActive: {
+    backgroundColor: '#0072F5',
+  },
+  filterTabPillInactive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  filterTabText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  filterTabTextActive: {
+    color: '#FFFFFF',
+  },
+  filterTabTextInactive: {
+    color: '#CBD5E1',
+  },
+  sheetContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+  },
+  listContent: {
+    paddingVertical: 6,
     flexGrow: 1,
   },
   chatCard: {
     flexDirection: 'row',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
   },
   avatarContainer: {
-    position: 'relative',
-    marginRight: 12,
+    marginRight: 14,
   },
   avatarImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#E2E8F0',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   avatarPlaceholder: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#1565FF',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#0072F5',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -599,125 +714,50 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
-  partBadgeOverlay: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    overflow: 'hidden',
-    backgroundColor: '#0F172A',
-  },
-  partBadgeImg: {
-    width: '100%',
-    height: '100%',
-  },
-  unreadPulseDot: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#EF4444',
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
-  },
   chatInfo: {
     flex: 1,
     justifyContent: 'center',
-  },
-  chatHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 3,
-  },
-  partnerNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 8,
+    marginRight: 12,
   },
   partnerNameText: {
+    fontSize: 16,
     fontWeight: '700',
     color: '#0F172A',
-    fontSize: 14,
-    maxWidth: '70%',
-  },
-  roleTag: {
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-    borderRadius: 6,
-    marginLeft: 6,
-  },
-  sellerTag: {
-    backgroundColor: 'rgba(37, 99, 235, 0.12)',
-  },
-  sellerTagText: {
-    color: '#2563EB',
-    fontSize: 9,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  buyerTag: {
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-  },
-  buyerTagText: {
-    color: '#059669',
-    fontSize: 9,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  timestampText: {
-    fontSize: 11,
-    color: '#94A3B8',
-    fontWeight: '500',
-  },
-  partTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     marginBottom: 4,
-    gap: 4,
-  },
-  partTitleText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#2563EB',
-    flex: 1,
-  },
-  partPriceText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  lastMessageRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
   lastMessageText: {
+    fontSize: 14,
+    color: '#64748B',
+    lineHeight: 18,
+  },
+  metaContainer: {
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: 44,
+  },
+  timestampText: {
     fontSize: 12,
     color: '#64748B',
-    flex: 1,
-    marginRight: 8,
+    fontWeight: '500',
   },
-  lastMessageTextUnread: {
-    color: '#0F172A',
-    fontWeight: '700',
+  unreadCircleBadge: {
+    backgroundColor: '#0072F5',
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
   },
-  unreadBadge: {
-    backgroundColor: '#EF4444',
+  unreadCircleBadgeText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 10,
+    fontSize: 11,
+    fontWeight: '800',
   },
   divider: {
     backgroundColor: '#F1F5F9',
     height: 1,
+    marginLeft: 82,
   },
   centerContainer: {
     flex: 1,
@@ -761,7 +801,7 @@ const styles = StyleSheet.create({
   },
   authPromptContainer: {
     flex: 1,
-    backgroundColor: '#0B1220',
+    backgroundColor: '#083B84',
     justifyContent: 'center',
     padding: 24,
   },
@@ -780,7 +820,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: 'rgba(21, 101, 255, 0.1)',
+    backgroundColor: 'rgba(0, 114, 245, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,

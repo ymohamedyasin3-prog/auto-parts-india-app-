@@ -145,6 +145,8 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
   const [isSending, setIsSending] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [selectedPreviewImage, setSelectedPreviewImage] = useState<string | null>(null);
 
   // Unified Back Navigation Logic
@@ -536,21 +538,65 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
   };
 
   const handleCallPartner = () => {
-    if (!part?.contactPhone) {
-      Alert.alert('Contact', 'Phone number not available for this seller.');
-      return;
+    const phone = part?.contactPhone || mergedChat?.partnerPhone || mergedChat?.sellerPhone || mergedChat?.contactPhone;
+    if (phone) {
+      Alert.alert(
+        'Call ' + (partnerName || 'Partner'),
+        `Do you want to call ${partnerName || 'the partner'} at ${phone}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Call Now',
+            onPress: () => Linking.openURL(`tel:${phone}`),
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Contact ' + (partnerName || 'Seller'),
+        `Phone number is kept private by ${partnerName || 'this user'}. You can ask for their contact number in this chat or visit their profile.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Ask for Phone',
+            onPress: () => executeSend('Could you please share your contact phone number?'),
+          },
+        ]
+      );
     }
-    Alert.alert(
-      'Call Seller',
-      `Do you want to call ${partnerName || 'the seller'} at ${part.contactPhone}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Call Now',
-          onPress: () => Linking.openURL(`tel:${part.contactPhone}`),
-        },
-      ]
+  };
+
+  const isSameDay = (ts1: any, ts2: any) => {
+    const d1 = new Date(parseTimestamp(ts1));
+    const d2 = new Date(parseTimestamp(ts2));
+    return (
+      d1.getFullYear() === d2.getFullYear() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getDate() === d2.getDate()
     );
+  };
+
+  const getDisplayDateLabel = (ts: any) => {
+    const d = new Date(parseTimestamp(ts));
+    const now = new Date();
+    if (
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate()
+    ) {
+      return translateDynamic('Today');
+    }
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (
+      d.getFullYear() === yesterday.getFullYear() &&
+      d.getMonth() === yesterday.getMonth() &&
+      d.getDate() === yesterday.getDate()
+    ) {
+      return translateDynamic('Yesterday');
+    }
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${d.getDate()} ${months[d.getMonth()]}`;
   };
 
   const handleDeleteMessage = (msgItem: ChatMessage) => {
@@ -584,91 +630,106 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
     );
   };
 
-  const renderMessage = ({ item }: { item: ChatMessage }) => {
+  const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
     const isMe = item.senderId === currentUid;
     const isFailed = item.status === 'failed';
     const isPending = item.status === 'pending';
 
+    const prevMessage = index > 0 ? messages[index - 1] : null;
+    const showDatePill = !prevMessage || !isSameDay(prevMessage.createdAt, item.createdAt);
+
     return (
-      <View
-        style={[
-          styles.messageRow,
-          isMe ? styles.myMessageRow : styles.theirMessageRow,
-        ]}
-      >
-        <View style={[styles.bubbleWrapper, isMe ? styles.myBubbleWrapper : styles.theirBubbleWrapper]}>
-          <TouchableOpacity
-            activeOpacity={0.88}
-            onLongPress={() => isMe && handleDeleteMessage(item)}
-            style={[
-              styles.bubbleBox,
-              isMe
-                ? isFailed
-                  ? styles.failedBubble
-                  : styles.myBubble
-                : styles.theirBubble,
-            ]}
-          >
-            {/* Image attachment */}
-            {item.imageUrl ? (
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() => setSelectedPreviewImage(item.imageUrl || null)}
-                onLongPress={() => isMe && handleDeleteMessage(item)}
-                style={styles.imageAttachmentContainer}
-              >
-                <Image
-                  source={{ uri: item.imageUrl }}
-                  style={styles.messageImage}
-                  resizeMode="cover"
-                />
-                <View style={styles.zoomOverlayIcon}>
-                  <Icon source="magnify-plus-outline" size={18} color="#FFFFFF" />
-                </View>
-              </TouchableOpacity>
-            ) : null}
-
-            {/* Message text content */}
-            {item.text ? (
-              <Text
-                style={[
-                  styles.messageText,
-                  isMe ? styles.myMessageText : styles.theirMessageText,
-                ]}
-              >
-                {item.text}
+      <View key={item.id}>
+        {showDatePill && (
+          <View style={styles.dateSeparatorWrap}>
+            <View style={styles.dateSeparatorPill}>
+              <Text style={styles.dateSeparatorText}>
+                {getDisplayDateLabel(item.createdAt)}
               </Text>
-            ) : null}
-
-            {/* Timestamp & Status ticks */}
-            <View style={[styles.metaRow, isMe ? styles.myMetaRow : styles.theirMetaRow]}>
-              <Text style={[styles.timeText, isMe ? styles.myTimeText : styles.theirTimeText]}>
-                {formatMessageTime(item.createdAt)}
-              </Text>
-
-              {isMe && (
-                <View style={styles.statusTickContainer}>
-                  {isPending ? (
-                    <ActivityIndicator size={10} color="#A0BEC0" />
-                  ) : isFailed ? (
-                    <TouchableOpacity
-                      onPress={() => retrySendMessage(item)}
-                      style={styles.retryBtn}
-                    >
-                      <Icon source="alert-circle" size={12} color="#EF4444" />
-                      <Text style={styles.retryText}>{translateDynamic('Retry')}</Text>
-                    </TouchableOpacity>
-                  ) : item.status === 'read' ? (
-                    <Icon source="check-all" size={14} color="#38BDF8" />
-                  ) : item.status === 'delivered' ? (
-                    <Icon source="check-all" size={14} color="#A0BEC0" />
-                  ) : (
-                    <Icon source="check" size={14} color="#A0BEC0" />
-                  )}
-                </View>
-              )}
             </View>
-          </TouchableOpacity>
+          </View>
+        )}
+
+        <View
+          style={[
+            styles.messageRow,
+            isMe ? styles.myMessageRow : styles.theirMessageRow,
+          ]}
+        >
+          <View style={[styles.bubbleWrapper, isMe ? styles.myBubbleWrapper : styles.theirBubbleWrapper]}>
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onLongPress={() => isMe && handleDeleteMessage(item)}
+              style={[
+                styles.bubbleBox,
+                isMe
+                  ? isFailed
+                    ? styles.failedBubble
+                    : styles.myBubble
+                  : styles.theirBubble,
+              ]}
+            >
+              {/* Image attachment */}
+              {item.imageUrl ? (
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => setSelectedPreviewImage(item.imageUrl || null)}
+                  onLongPress={() => isMe && handleDeleteMessage(item)}
+                  style={styles.imageAttachmentContainer}
+                >
+                  <Image
+                    source={{ uri: item.imageUrl }}
+                    style={styles.messageImage}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.zoomOverlayIcon}>
+                    <Icon source="magnify-plus-outline" size={18} color="#FFFFFF" />
+                  </View>
+                </TouchableOpacity>
+              ) : null}
+
+              {/* Message text content */}
+              {item.text ? (
+                <Text
+                  style={[
+                    styles.messageText,
+                    isMe ? styles.myMessageText : styles.theirMessageText,
+                  ]}
+                >
+                  {item.text}
+                </Text>
+              ) : null}
+
+              {/* Timestamp & Status ticks */}
+              <View style={[styles.metaRow, isMe ? styles.myMetaRow : styles.theirMetaRow]}>
+                <Text style={[styles.timeText, isMe ? styles.myTimeText : styles.theirTimeText]}>
+                  {formatMessageTime(item.createdAt)}
+                </Text>
+
+                {isMe && (
+                  <View style={styles.statusTickContainer}>
+                    {isPending ? (
+                      <ActivityIndicator size={10} color="#BAE6FD" />
+                    ) : isFailed ? (
+                      <TouchableOpacity
+                        onPress={() => retrySendMessage(item)}
+                        style={styles.retryBtn}
+                      >
+                        <Icon source="alert-circle" size={12} color="#EF4444" />
+                        <Text style={styles.retryText}>{translateDynamic('Retry')}</Text>
+                      </TouchableOpacity>
+                    ) : item.status === 'read' ? (
+                      <Icon source="check-all" size={14} color="#FFFFFF" />
+                    ) : item.status === 'delivered' ? (
+                      <Icon source="check-all" size={14} color="rgba(255,255,255,0.7)" />
+                    ) : (
+                      <Icon source="check" size={14} color="rgba(255,255,255,0.7)" />
+                    )}
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -676,12 +737,18 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
 
   return (
     <View style={styles.outerContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
+      <StatusBar barStyle="light-content" backgroundColor="#083B84" />
 
-      {/* 1. NATIVE HEADER (Single, Clean Bar) */}
+      {/* 1. ROYAL NAVY BLUE HEADER */}
       <View style={[styles.headerBar, { paddingTop: Math.max(insets.top, 10) }]}>
         {/* Back Button */}
-        <Appbar.BackAction color="#FFFFFF" onPress={handleBackNavigation} />
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={handleBackNavigation}
+          activeOpacity={0.7}
+        >
+          <Icon source="arrow-left" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
 
         {/* Partner Info and Presence Status */}
         <TouchableOpacity
@@ -703,27 +770,17 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
                 </Text>
               </View>
             )}
-            <View
-              style={[
-                styles.presenceDot,
-                partnerPresence.online ? styles.presenceOnline : styles.presenceOffline,
-              ]}
-            />
           </View>
 
           <View style={styles.partnerTextCol}>
-            <View style={styles.partnerTitleRow}>
-              <Text numberOfLines={1} style={styles.partnerHeaderName}>
-                {partnerName}
-              </Text>
-              <View style={styles.partnerRoleBadge}>
-                <Text style={styles.partnerRoleBadgeText}>{partnerRole}</Text>
-              </View>
-            </View>
+            <Text numberOfLines={1} style={styles.partnerHeaderName}>
+              {partnerName}
+            </Text>
 
             <View style={styles.statusIndicatorRow}>
+              <View style={styles.onlineDot} />
               {partnerIsTyping ? (
-                <Text style={styles.typingStatusText}>
+                <Text style={styles.onlineStatusText}>
                   {translateDynamic('Typing...')}
                 </Text>
               ) : partnerPresence.online ? (
@@ -739,29 +796,27 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
           </View>
         </TouchableOpacity>
 
-        {/* Header Right Action Buttons */}
+        {/* Header Right Action Buttons: Phone & 3-Dots */}
         <View style={styles.headerRightActions}>
-          {part?.contactPhone ? (
-            <TouchableOpacity
-              style={styles.phoneCallBtn}
-              activeOpacity={0.8}
-              onPress={handleCallPartner}
-            >
-              <Icon source="phone" size={17} color="#FFFFFF" />
-            </TouchableOpacity>
-          ) : null}
+          <TouchableOpacity
+            style={styles.headerRightBtn}
+            activeOpacity={0.7}
+            onPress={handleCallPartner}
+          >
+            <Icon source="phone" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.langBtn}
-            activeOpacity={0.8}
-            onPress={() => setShowLanguageModal(true)}
+            style={styles.headerRightBtn}
+            activeOpacity={0.7}
+            onPress={() => setShowOptionsMenu(true)}
           >
-            <Icon source="translate" size={17} color="#CBD5E1" />
+            <Icon source="dots-vertical" size={22} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* 2. OLX STYLE FLUSH PRODUCT AD BANNER */}
+      {/* 2. PRODUCT INQUIRY CARD BANNER */}
       {part ? (
         <TouchableOpacity
           style={styles.productBannerCard}
@@ -778,9 +833,6 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
             style={styles.productBannerImage}
           />
           <View style={styles.productBannerInfo}>
-            <Text style={styles.inquiryLabel}>
-              {translateDynamic('INQUIRY ITEM')}
-            </Text>
             <Text numberOfLines={1} style={styles.productBannerTitle}>
               {part.title || part.partTitle || 'Auto Spare Part'}
             </Text>
@@ -788,10 +840,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
               {formatPrice(Number(part.price || part.partPrice) || 0)}
             </Text>
           </View>
-          <View style={styles.viewPartBtn}>
-            <Text style={styles.viewPartBtnText}>{translateDynamic('VIEW')}</Text>
-            <Icon source="chevron-right" size={14} color="#002F34" />
-          </View>
+          <Icon source="chevron-right" size={24} color="#64748B" />
         </TouchableOpacity>
       ) : null}
 
@@ -812,7 +861,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
           ListEmptyComponent={
             <View style={styles.emptyFeedContainer}>
               <View style={styles.emptyFeedIconCircle}>
-                <Icon source="chat-processing-outline" size={32} color="#0066FF" />
+                <Icon source="chat-processing-outline" size={32} color="#0072F5" />
               </View>
               <Text style={styles.emptyFeedTitle}>
                 {translateDynamic('Chat with')} {partnerName}
@@ -829,12 +878,12 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
                   <Text style={styles.typingBubbleText}>
                     {partnerName} {translateDynamic('is typing...')}
                   </Text>
-                  <ActivityIndicator size={10} color="#0066FF" />
+                  <ActivityIndicator size={10} color="#0072F5" />
                 </View>
               )}
               {isUploadingImage && (
                 <View style={styles.uploadingImageBubble}>
-                  <ActivityIndicator size={14} color="#0066FF" />
+                  <ActivityIndicator size={14} color="#0072F5" />
                   <Text style={styles.uploadingImageText}>
                     {translateDynamic('Uploading image...')}
                   </Text>
@@ -868,42 +917,57 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
           </ScrollView>
         </View>
 
+        {/* Quick Emoji Picker Drawer if opened */}
+        {showEmojiPicker && (
+          <View style={styles.emojiPickerBar}>
+            {['👍', '👌', '🤝', '🚗', '🔧', '✅', '🙏', '😊', '💰', '📦'].map((emoji) => (
+              <TouchableOpacity
+                key={emoji}
+                style={styles.emojiItem}
+                onPress={() => {
+                  setInputText((prev) => prev + emoji);
+                  setShowEmojiPicker(false);
+                }}
+              >
+                <Text style={styles.emojiText}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         {/* 5. NATIVE MESSAGE COMPOSER */}
         <View style={[styles.composerContainer, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-          {/* Direct Camera Button */}
+          {/* Paperclip Attachment Button */}
           <TouchableOpacity
-            style={styles.mediaIconButton}
+            style={styles.attachBtn}
             onPress={handlePickImage}
             disabled={isUploadingImage || isSending}
             activeOpacity={0.7}
           >
-            <Icon source="camera-outline" size={22} color="#002F34" />
+            <Icon source="paperclip" size={24} color="#64748B" />
           </TouchableOpacity>
 
-          {/* Direct Gallery Button */}
-          <TouchableOpacity
-            style={styles.mediaIconButton}
-            onPress={handlePickImage}
-            disabled={isUploadingImage || isSending}
-            activeOpacity={0.7}
-          >
-            <Icon source="image-outline" size={22} color="#002F34" />
-          </TouchableOpacity>
-
-          {/* Native Text Input */}
+          {/* Capsule Text Input */}
           <View style={styles.inputBubbleWrap}>
             <TextInput
               placeholder={translateDynamic('Type a message...')}
               value={inputText}
               onChangeText={handleInputChange}
               style={styles.nativeInput}
-              placeholderTextColor="#7C8B96"
+              placeholderTextColor="#94A3B8"
               multiline
               maxLength={1000}
             />
+            <TouchableOpacity
+              style={styles.emojiBtn}
+              onPress={() => setShowEmojiPicker(!showEmojiPicker)}
+              activeOpacity={0.7}
+            >
+              <Icon source="emoticon-happy-outline" size={22} color="#64748B" />
+            </TouchableOpacity>
           </View>
 
-          {/* Circular Send Button */}
+          {/* Circular Blue Send Button */}
           <TouchableOpacity
             style={[
               styles.sendButton,
@@ -921,6 +985,88 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Options Menu Modal */}
+      <Modal
+        visible={showOptionsMenu}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowOptionsMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowOptionsMenu(false)}
+        >
+          <View style={styles.optionsCard}>
+            <View style={styles.optionsHeader}>
+              <Text style={styles.optionsTitle}>{partnerName}</Text>
+              <TouchableOpacity onPress={() => setShowOptionsMenu(false)}>
+                <Icon source="close" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => {
+                setShowOptionsMenu(false);
+                handleCallPartner();
+              }}
+            >
+              <Icon source="phone-outline" size={20} color="#0072F5" />
+              <Text style={styles.optionItemText}>{translateDynamic('Call Partner')}</Text>
+            </TouchableOpacity>
+
+            {partnerId && partnerId !== 'seller' && (
+              <TouchableOpacity
+                style={styles.optionItem}
+                onPress={() => {
+                  setShowOptionsMenu(false);
+                  navigation.navigate('SellerProfile', { sellerId: partnerId, sellerName: partnerName });
+                }}
+              >
+                <Icon source="account-circle-outline" size={20} color="#0072F5" />
+                <Text style={styles.optionItemText}>{translateDynamic('View Profile')}</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => {
+                setShowOptionsMenu(false);
+                setShowLanguageModal(true);
+              }}
+            >
+              <Icon source="translate" size={20} color="#0072F5" />
+              <Text style={styles.optionItemText}>{translateDynamic('Change Chat Language')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => {
+                setShowOptionsMenu(false);
+                Alert.alert(
+                  'Report or Block',
+                  `Do you want to report or block ${partnerName}?`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Block User',
+                      style: 'destructive',
+                      onPress: () => Alert.alert('User Blocked', 'You will no longer receive messages from this user.'),
+                    },
+                  ]
+                );
+              }}
+            >
+              <Icon source="alert-octagon-outline" size={20} color="#EF4444" />
+              <Text style={[styles.optionItemText, { color: '#EF4444' }]}>
+                {translateDynamic('Block / Report User')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Fullscreen Image Preview Modal */}
       <Modal
@@ -959,19 +1105,19 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
 const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
-    backgroundColor: '#F2F4F5',
+    backgroundColor: '#F4F6F9',
   },
   contentFlex: {
     flex: 1,
   },
   headerBar: {
-    backgroundColor: '#002F34',
+    backgroundColor: '#083B84',
     paddingBottom: 12,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#002226',
+    borderBottomColor: '#073373',
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -980,7 +1126,7 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     padding: 6,
-    marginRight: 4,
+    marginRight: 6,
     borderRadius: 20,
   },
   partnerHeaderInfo: {
@@ -989,118 +1135,69 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   partnerHeaderAvatarWrapper: {
-    position: 'relative',
     marginRight: 10,
   },
   partnerHeaderAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     borderWidth: 1.5,
-    borderColor: '#00A599',
+    borderColor: '#FFFFFF',
   },
   partnerHeaderAvatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#00A599',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#0072F5',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#002F34',
+    borderColor: '#FFFFFF',
   },
   partnerHeaderAvatarInitial: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
-  presenceDot: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#002F34',
-  },
-  presenceOnline: {
-    backgroundColor: '#10B981',
-  },
-  presenceOffline: {
-    backgroundColor: '#64748B',
-  },
   partnerTextCol: {
     flex: 1,
-  },
-  partnerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
   },
   partnerHeaderName: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 15,
-    maxWidth: '75%',
-  },
-  partnerRoleBadge: {
-    backgroundColor: 'rgba(0, 165, 153, 0.25)',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-    borderWidth: 0.5,
-    borderColor: 'rgba(0, 165, 153, 0.5)',
-  },
-  partnerRoleBadgeText: {
-    color: '#2DD4BF',
-    fontSize: 9,
-    fontWeight: '800',
-    textTransform: 'uppercase',
+    fontSize: 16,
   },
   statusIndicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 2,
   },
-  typingStatusText: {
-    color: '#2DD4BF',
-    fontSize: 11,
-    fontWeight: '700',
+  onlineDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#22C55E',
+    marginRight: 5,
   },
   onlineStatusText: {
-    color: '#34D399',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  offlineStatusText: {
-    color: '#94A3B8',
+    color: '#E0F2FE',
     fontSize: 11,
     fontWeight: '500',
+  },
+  offlineStatusText: {
+    color: '#CBD5E1',
+    fontSize: 11,
+    fontWeight: '400',
   },
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
   },
-  phoneCallBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#10B981',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  langBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+  headerRightBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1111,67 +1208,57 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#E2E8F0',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.05,
     shadowRadius: 2,
   },
   productBannerImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 6,
-    backgroundColor: '#F2F4F5',
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
     marginRight: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
   },
   productBannerInfo: {
     flex: 1,
     justifyContent: 'center',
   },
-  inquiryLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#002F34',
-    opacity: 0.6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
   productBannerTitle: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#002F34',
-    marginTop: 2,
+    color: '#0F172A',
   },
   productBannerPrice: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
-    color: '#002F34',
+    color: '#0066FF',
     marginTop: 2,
   },
-  viewPartBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F2F4F5',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#D8DFE2',
-    gap: 3,
-  },
-  viewPartBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#002F34',
-  },
   messageListContainer: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 12,
     flexGrow: 1,
-    backgroundColor: '#F2F4F5',
+    backgroundColor: '#F4F6F9',
+  },
+  dateSeparatorWrap: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  dateSeparatorPill: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  dateSeparatorText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
   },
   messageRow: {
     marginVertical: 4,
@@ -1197,26 +1284,26 @@ const styles = StyleSheet.create({
   bubbleBox: {
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 14,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
+    borderRadius: 18,
   },
   myBubble: {
-    backgroundColor: '#002F34',
-    borderTopRightRadius: 2,
+    backgroundColor: '#0072F5',
+    borderTopRightRadius: 4,
   },
   failedBubble: {
     backgroundColor: '#EF4444',
-    borderTopRightRadius: 2,
+    borderTopRightRadius: 4,
   },
   theirBubble: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 2,
+    borderTopLeftRadius: 4,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 1,
   },
   imageAttachmentContainer: {
     borderRadius: 10,
@@ -1238,7 +1325,7 @@ const styles = StyleSheet.create({
     padding: 3,
   },
   messageText: {
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 20,
   },
   myMessageText: {
@@ -1246,7 +1333,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   theirMessageText: {
-    color: '#002F34',
+    color: '#1E293B',
     fontWeight: '400',
   },
   metaRow: {
@@ -1267,10 +1354,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   myTimeText: {
-    color: '#A0BEC0',
+    color: 'rgba(255,255,255,0.85)',
   },
   theirTimeText: {
-    color: '#7C8B96',
+    color: '#94A3B8',
   },
   statusTickContainer: {
     marginLeft: 2,
@@ -1293,7 +1380,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderTopLeftRadius: 2,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -1301,18 +1388,18 @@ const styles = StyleSheet.create({
   },
   typingBubbleText: {
     fontSize: 11,
-    color: '#7C8B96',
+    color: '#64748B',
     fontWeight: '600',
   },
   uploadingImageBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: '#E6F4F1',
+    backgroundColor: '#E0F2FE',
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 14,
     borderTopRightRadius: 2,
     borderWidth: 1,
-    borderColor: '#00A599',
+    borderColor: '#BAE6FD',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -1320,7 +1407,7 @@ const styles = StyleSheet.create({
   },
   uploadingImageText: {
     fontSize: 11,
-    color: '#002F34',
+    color: '#083B84',
     fontWeight: '700',
   },
   emptyFeedContainer: {
@@ -1334,7 +1421,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#E6F4F1',
+    backgroundColor: '#E0F2FE',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
@@ -1342,12 +1429,12 @@ const styles = StyleSheet.create({
   emptyFeedTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#002F34',
+    color: '#0F172A',
     textAlign: 'center',
   },
   emptyFeedSub: {
     fontSize: 13,
-    color: '#7C8B96',
+    color: '#64748B',
     textAlign: 'center',
     marginTop: 6,
     lineHeight: 18,
@@ -1355,7 +1442,7 @@ const styles = StyleSheet.create({
   quickRepliesBar: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: '#E2E8F0',
     paddingVertical: 8,
   },
   quickRepliesScroll: {
@@ -1369,7 +1456,7 @@ const styles = StyleSheet.create({
   quickReplyChip: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#D8DFE2',
+    borderColor: '#E2E8F0',
     borderRadius: 20,
     paddingVertical: 6,
     paddingHorizontal: 14,
@@ -1380,62 +1467,121 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   quickReplyChipText: {
-    color: '#002F34',
+    color: '#0F172A',
     fontSize: 12,
     fontWeight: '600',
+  },
+  emojiPickerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+  },
+  emojiItem: {
+    padding: 6,
+  },
+  emojiText: {
+    fontSize: 22,
   },
   composerContainer: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: '#E2E8F0',
     paddingHorizontal: 10,
     paddingTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  mediaIconButton: {
+  attachBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#F2F4F5',
     justifyContent: 'center',
     alignItems: 'center',
   },
   inputBubbleWrap: {
     flex: 1,
-    backgroundColor: '#F2F4F5',
+    backgroundColor: '#F1F4F8',
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 14,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 12,
     paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+    flexDirection: 'row',
+    alignItems: 'center',
     maxHeight: 100,
-    justifyContent: 'center',
   },
   nativeInput: {
-    fontSize: 14,
-    color: '#002F34',
+    flex: 1,
+    fontSize: 15,
+    color: '#0F172A',
     padding: 0,
     margin: 0,
   },
+  emojiBtn: {
+    padding: 4,
+    marginLeft: 4,
+  },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendButtonActive: {
-    backgroundColor: '#002F34',
-    shadowColor: '#002F34',
+    backgroundColor: '#0072F5',
+    shadowColor: '#0072F5',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.25,
     shadowRadius: 3,
-    elevation: 3,
+    elevation: 2,
   },
   sendButtonDisabled: {
-    backgroundColor: '#D8DFE2',
+    backgroundColor: '#CBD5E1',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  optionsCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 28,
+  },
+  optionsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    marginBottom: 8,
+  },
+  optionsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 13,
+    gap: 12,
+  },
+  optionItemText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0F172A',
   },
   imageModalContainer: {
     flex: 1,
