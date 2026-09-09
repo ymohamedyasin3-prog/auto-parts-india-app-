@@ -96,7 +96,7 @@ export default function SplashScreen({ navigation }: any) {
           ]}
         >
           {/* Crisp High-Res Brand Mark that exactly matches reference image with no collapse */}
-          <AppLogo width={Math.min(SCREEN_WIDTH * 0.72, 260)} height={Math.min(SCREEN_WIDTH * 0.72, 260)} />
+          <AppLogo width={Math.min(SCREEN_WIDTH * 0.72, 260)} height={Math.round(Math.min(SCREEN_WIDTH * 0.72, 260) * 0.62)} />
         </Animated.View>
 
         <View style={{ flex: 1 }} />

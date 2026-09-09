@@ -45,6 +45,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { MapLocationModal } from '../components/MapLocationModal';
 import { BrandLogo } from '../components/BrandLogo';
 import { INDIAN_STATES_AND_DISTRICTS, StateWithDistricts } from '../data/indianLocations';
+import { callGeminiDirectlyFromDevice } from '../services/directGeminiService';
 
 const { width } = Dimensions.get('window');
 
@@ -862,58 +863,80 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
         }
       }
 
-      // Backend API Endpoints (prioritize direct origin in web, fallback to live Cloud Run endpoints in Android/iOS APK)
-      const endpoints: string[] = [];
-      endpoints.push('https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing');
-      endpoints.push('https://ais-pre-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing');
-      if (typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')) {
-        endpoints.unshift(`${window.location.origin}/api/ai/autofill-listing`);
-      }
-
       let data: any = null;
       let lastFetchErr: any = null;
 
-      for (const endpoint of endpoints) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 25000);
+      // 1. Direct Client-Side Gemini Engine (Zero Broker / Direct Device AI)
+      try {
+        console.log('[AI AutoFill] Attempting direct Google Gemini AI call from device...');
+        const directResult = await callGeminiDirectlyFromDevice({
+          imageUriOrBase64: imageToSend,
+          currentBrand: finalBrand,
+          currentModel: finalModel,
+          currentCategory: finalCategory,
+          currentPartName: finalPartName,
+          taxonomyBrands,
+          taxonomyCategories,
+        });
+        if (directResult) {
+          data = directResult;
+        }
+      } catch (directErr: any) {
+        console.warn('[AI AutoFill] Direct device Gemini call failed or key absent, falling back to server endpoints:', directErr?.message);
+        lastFetchErr = directErr;
+      }
 
-          const candidateRes = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            signal: controller.signal,
-            body: JSON.stringify({
-              image: imageToSend,
-              currentBrand: finalBrand,
-              currentModel: finalModel,
-              currentCategory: finalCategory,
-              currentPartName: finalPartName,
-            }),
-          });
-          clearTimeout(timeoutId);
+      // 2. Fallback to server endpoints if direct device call did not yield data
+      if (!data) {
+        const endpoints: string[] = [];
+        if (typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')) {
+          endpoints.push(`${window.location.origin}/api/ai/autofill-listing`);
+        }
+        endpoints.push('https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing');
+        endpoints.push('https://ais-pre-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing');
 
-          let resJson: any = null;
+        for (const endpoint of endpoints) {
           try {
-            resJson = await candidateRes.json();
-          } catch (_) {}
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 25000);
 
-          if (candidateRes.ok && resJson) {
-            data = resJson;
-            break;
-          } else if (resJson && resJson.isAutomotive === false) {
-            // Non-automotive image rejection response from server
-            data = resJson;
-            break;
-          } else if (resJson && (resJson.error || resJson.message)) {
-            lastFetchErr = new Error(resJson.error || resJson.message);
-          } else {
-            lastFetchErr = new Error(`Server returned HTTP ${candidateRes.status}`);
+            const candidateRes = await fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              signal: controller.signal,
+              body: JSON.stringify({
+                image: imageToSend,
+                currentBrand: finalBrand,
+                currentModel: finalModel,
+                currentCategory: finalCategory,
+                currentPartName: finalPartName,
+              }),
+            });
+            clearTimeout(timeoutId);
+
+            let resJson: any = null;
+            try {
+              resJson = await candidateRes.json();
+            } catch (_) {}
+
+            if (candidateRes.ok && resJson) {
+              data = resJson;
+              break;
+            } else if (resJson && resJson.isAutomotive === false) {
+              // Non-automotive image rejection response from server
+              data = resJson;
+              break;
+            } else if (resJson && (resJson.error || resJson.message)) {
+              lastFetchErr = new Error(resJson.error || resJson.message);
+            } else {
+              lastFetchErr = new Error(`Server returned HTTP ${candidateRes.status}`);
+            }
+          } catch (err) {
+            lastFetchErr = err;
           }
-        } catch (err) {
-          lastFetchErr = err;
         }
       }
 

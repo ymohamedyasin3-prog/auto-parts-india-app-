@@ -259,9 +259,10 @@ Respond strictly in valid JSON format matching this schema:
 
       // Candidate Gemini models with automatic fallback cascade in case of temporary high demand or quota
       const candidateModels = [
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-        "gemini-flash-latest"
+        "gemini-3.8-flash",
+        "gemini-flash-latest",
+        "gemini-3.1-flash-lite",
+        "gemini-2.5-flash"
       ];
       let responseText: string | null = null;
       let lastModelError: any = null;

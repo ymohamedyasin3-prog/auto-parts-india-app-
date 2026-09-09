@@ -98,7 +98,7 @@ if (isFirebaseConfigured) {
     storage = getStorage(app);
     
     const dbOptions = {
-      experimentalForceLongPolling: true,
+      experimentalAutoDetectLongPolling: true,
     };
 
     if (firebaseConfig.databaseId && firebaseConfig.databaseId !== "(default)") {
@@ -117,6 +117,18 @@ if (isFirebaseConfigured) {
 
     useFirebase = true;
     console.log("Firebase initialized successfully with configuration:", firebaseConfig.projectId, "Database:", firebaseConfig.databaseId);
+
+    // Validate connection to Firestore as required by Firebase skill
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if (error instanceof Error && (error.message.includes('the client is offline') || error.message.includes('unavailable'))) {
+          console.warn("[Firebase] Client operating in offline mode. Local cache active.");
+        }
+      }
+    };
+    testConnection();
   } catch (error) {
     console.error("Failed to initialize Firebase, falling back to LocalStorage:", error);
     useFirebase = false;
@@ -905,19 +917,21 @@ export function subscribeToSpareParts(
         
         processAndDeliverParts(firestoreParts);
       }, (err) => {
-        console.error(`[Firestore Listener Error] subscribeToSpareParts failed:`, err);
+        console.warn(`[Firestore Listener Notice] subscribeToSpareParts connectivity notice:`, err);
         if (err?.code === "permission-denied" || err?.message?.includes("permission") || err?.message?.includes("Missing or insufficient permissions")) {
           handleFirestoreError(err, OperationType.LIST, "spareParts");
         }
         processAndDeliverParts([]);
-        if (onError) onError(err);
+        const isOfflineOrUnavailable = err?.code === "unavailable" || err?.message?.includes("unavailable") || err?.message?.includes("offline");
+        if (onError && !isOfflineOrUnavailable) onError(err);
       });
 
       return unsub;
     } catch (err: any) {
-      console.error(`[Firestore Query Exception] Error starting parts listener:`, err);
+      console.warn(`[Firestore Query Exception] Error starting parts listener:`, err);
       processAndDeliverParts([]);
-      if (onError) onError(err);
+      const isOfflineOrUnavailable = err?.code === "unavailable" || err?.message?.includes("unavailable") || err?.message?.includes("offline");
+      if (onError && !isOfflineOrUnavailable) onError(err);
       return () => {};
     }
   }

@@ -99,10 +99,17 @@ jobs:
           " || true
 
       - name: Pre-bundle JS for Release
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           cd react-native-app
           mkdir -p android/app/src/main/assets
           mkdir -p android/app/src/main/res
+          # Inject GEMINI_API_KEY directly into directGeminiService if secret is present in GitHub
+          if [ -n "$GEMINI_API_KEY" ]; then
+            echo "Embedding GEMINI_API_KEY into direct device AI engine..."
+            sed -i "s|const GEMINI_DIRECT_API_KEY = .*|const GEMINI_DIRECT_API_KEY = '$GEMINI_API_KEY';|g" src/services/directGeminiService.ts || true
+          fi
           npx @react-native-community/cli bundle \
             --platform android \
             --dev false \

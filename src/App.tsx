@@ -671,8 +671,11 @@ export default function App() {
         setPartsError(null);
       },
       (err) => {
-        console.error("Failed to listen to spare parts updates", err);
-        setPartsError(err?.message || "Failed to load spare parts. Please check your connection.");
+        console.warn("Notice while listening to spare parts updates:", err);
+        const isOffline = err?.message?.includes("unavailable") || err?.message?.includes("offline");
+        if (!isOffline) {
+          setPartsError(err?.message || "Failed to load spare parts.");
+        }
         setPartsLoading(false);
       }
     );
