@@ -32,20 +32,12 @@ import {
   MODEL_SPECIFIC_VARIANTS,
   DEFAULT_CATEGORY_PARTS,
 } from './SellPartScreen';
+import { MASTER_CATEGORIES } from '../constants/categories';
 
 const { width, height } = Dimensions.get('window');
 
 // Canonical automotive categories matching SellPartScreen & reference UI
-const REAL_CATEGORIES = [
-  'Engine & Mechanical',
-  'Body & Exterior',
-  'Lights & Electricals',
-  'Suspension & Brakes',
-  'Interior & Wheels',
-  'Cooling & AC',
-  'Transmission & Clutch',
-  'Exhaust & Fuel',
-];
+const REAL_CATEGORIES = MASTER_CATEGORIES.map((c) => c.name);
 
 const FUEL_TYPES = ['Petrol', 'Diesel', 'CNG', 'Electric', 'Hybrid', 'All / Any'];
 

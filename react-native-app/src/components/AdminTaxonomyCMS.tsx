@@ -54,11 +54,14 @@ const DEFAULT_BRANDS: BrandItem[] = [
 ];
 
 const DEFAULT_CATEGORIES: CategoryItem[] = [
-  { id: 'engine', name: 'Engine & Mechanical', subcategories: ['Cylinder Head', 'Pistons', 'Turbocharger', 'Alternator', 'Starter Motor', 'Fuel Injectors'] },
-  { id: 'body', name: 'Body & Exterior', subcategories: ['Front Bumper', 'Rear Bumper', 'Headlight Set', 'Tail Lights', 'Doors', 'Bonnet', 'Side Mirrors'] },
-  { id: 'electrical', name: 'Lights & Electricals', subcategories: ['ECU / ECM', 'Wiring Harness', 'Battery', 'Sensors', 'Instrument Cluster', 'Fuse Box'] },
+  { id: 'engine', name: 'Engine & Mechanical', subcategories: ['Complete Engine Assembly', 'Cylinder Head', 'Pistons', 'Turbocharger', 'Alternator', 'Starter Motor', 'Fuel Injectors'] },
+  { id: 'body', name: 'Body & Exterior', subcategories: ['Front Bumper', 'Rear Bumper', 'Bonnet / Hood', 'Front Grille', 'Headlight Set', 'Tail Lights', 'Doors', 'Side Mirrors'] },
+  { id: 'electrical', name: 'Lights & Electricals', subcategories: ['Headlights', 'Tail Lights', 'Fog Lamps', 'ECU / ECM', 'Wiring Harness', 'Battery', 'Sensors', 'Instrument Cluster', 'Fuse Box'] },
   { id: 'suspension', name: 'Suspension & Brakes', subcategories: ['Shock Absorbers', 'Brake Calipers', 'Disc Rotors', 'Control Arms', 'Steering Rack', 'ABS Module'] },
-  { id: 'interior', name: 'Interior & Wheels', subcategories: ['Dashboard', 'Steering Wheel', 'Seats', 'Infotainment Screen', 'AC Compressor', 'Alloy Wheels'] },
+  { id: 'interior', name: 'Interior & Wheels', subcategories: ['Dashboard', 'Steering Wheel', 'Seats', 'Infotainment Screen', 'Alloy Wheels', 'Spare Tyre'] },
+  { id: 'cooling', name: 'Cooling & AC', subcategories: ['AC Compressor', 'AC Condenser', 'Cooling Radiator', 'Radiator Cooling Fan Assembly', 'Intercooler', 'Blower Motor'] },
+  { id: 'transmission', name: 'Transmission & Clutch', subcategories: ['Manual Gearbox Assembly', 'Automatic Transmission', 'Clutch Plate', 'Flywheel', 'Drive Shaft', 'Differential'] },
+  { id: 'exhaust', name: 'Exhaust & Fuel', subcategories: ['Catalytic Converter', 'Exhaust Manifold & Muffler', 'Fuel Tank Assembly', 'EGR Valve', 'Fuel Pump'] },
 ];
 
 export const AdminTaxonomyCMS: React.FC = () => {

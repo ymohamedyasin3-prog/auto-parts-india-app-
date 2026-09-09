@@ -20,6 +20,7 @@ import { useFavorites } from '../services/favorites';
 import { matchesCategoryFilter } from '../utils/categoryMatcher';
 import { matchPartSearch, parseCreatedAt } from '../utils/searchHelper';
 import { getOptimizedImageUrl } from '../services/cloudinary';
+import { MASTER_CATEGORIES } from '../constants/categories';
 
 export default function SearchScreen({ navigation, route, user }: any) {
   const insets = useSafeAreaInsets();
@@ -40,12 +41,7 @@ export default function SearchScreen({ navigation, route, user }: any) {
 
   const defaultCategories = [
     'All Categories',
-    'Engine & Mechanical',
-    'Body & Exterior',
-    'Lights & Electricals',
-    'Suspension & Brakes',
-    'Interior & Wheels',
-    'Wiring & Harnesses'
+    ...MASTER_CATEGORIES.map((c) => c.name)
   ];
 
   // Fetch top categories dynamically from Firestore

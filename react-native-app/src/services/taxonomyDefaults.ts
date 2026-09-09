@@ -25,83 +25,156 @@ export interface DefaultBrandItem {
 export const INITIAL_DEFAULT_CATEGORIES: DefaultCategoryItem[] = [
   { 
     id: 'cat_engine', 
-    name: 'Engine', 
+    name: 'Engine & Mechanical', 
     icon: 'engine', 
     bg: '#FEF2F2', 
     color: '#DC2626', 
     order: 0, 
     active: true,
-    subcategories: ['Cylinder Head', 'Pistons', 'Turbocharger', 'Alternator', 'Starter Motor', 'Fuel Injectors']
+    subcategories: [
+      'Complete Engine Assembly',
+      'Cylinder Head',
+      'Piston & Connecting Rods',
+      'Crankshaft & Camshaft',
+      'Turbocharger / Intercooler',
+      'Alternator',
+      'Starter Motor',
+      'Fuel Injectors / Rail',
+      'Timing Belt / Chain Kit',
+      'Engine Mountings',
+    ]
   },
   { 
     id: 'cat_body', 
-    name: 'Body & Frame', 
+    name: 'Body & Exterior', 
     icon: 'car-door', 
     bg: '#F0F9FF', 
     color: '#0284C7', 
     order: 1, 
     active: true,
-    subcategories: ['Front Bumper', 'Rear Bumper', 'Headlight Set', 'Tail Lights', 'Doors', 'Bonnet', 'Side Mirrors']
+    subcategories: [
+      'Front Bumper Assembly',
+      'Rear Bumper Assembly',
+      'Bonnet / Hood',
+      'Front Grille',
+      'Headlight Assembly (Pair/Single)',
+      'Tail Light Assembly',
+      'Fog Lamps / DRLs',
+      'Side Mirror Assembly (ORVM)',
+      'Front / Rear Doors',
+      'Fenders / Quarter Panels',
+    ]
   },
   { 
     id: 'cat_electrical', 
-    name: 'Electricals', 
-    icon: 'flash', 
+    name: 'Lights & Electricals', 
+    icon: 'lightning-bolt', 
     bg: '#FEFCE8', 
     color: '#D97706', 
     order: 2, 
     active: true,
-    subcategories: ['ECU / ECM', 'Wiring Harness', 'Battery', 'Sensors', 'Instrument Cluster', 'Fuse Box']
+    subcategories: [
+      'Engine Control Unit (ECU / ECM)',
+      'Body Control Module (BCM)',
+      'Complete Wiring Harness',
+      'Instrument Cluster / Speedometer',
+      'Fuse Box & Relays',
+      'Key Fob / Immobilizer System',
+      'Sensors (Oxygen, MAP, ABS, Cam)',
+      'Car Battery',
+    ]
   },
   { 
-    id: 'cat_brakes', 
-    name: 'Brakes & Discs', 
+    id: 'cat_suspension', 
+    name: 'Suspension & Brakes', 
     icon: 'car-brake-alert', 
     bg: '#FFF1F2', 
     color: '#E11D48', 
     order: 3, 
     active: true,
-    subcategories: ['Brake Calipers', 'Disc Rotors', 'Brake Pads', 'ABS Module', 'Master Cylinder']
+    subcategories: [
+      'Front Shock Absorbers (Struts)',
+      'Rear Shock Absorbers',
+      'Brake Calipers (Front/Rear)',
+      'Brake Disc Rotors / Drums',
+      'Brake Booster & Master Cylinder',
+      'ABS Pump / Module',
+      'Lower Control Arms',
+      'Steering Rack & Pinion Assembly',
+    ]
   },
   { 
-    id: 'cat_suspension', 
-    name: 'Suspension', 
-    icon: 'tune-vertical', 
+    id: 'cat_interior', 
+    name: 'Interior & Wheels', 
+    icon: 'car-seat', 
     bg: '#FAF5FF', 
-    color: '#9333EA', 
+    color: '#7C3AED', 
     order: 4, 
     active: true,
-    subcategories: ['Shock Absorbers', 'Struts', 'Control Arms', 'Coil Springs', 'Steering Rack']
-  },
-  { 
-    id: 'cat_exhaust', 
-    name: 'Exhaust', 
-    icon: 'weather-windy', 
-    bg: '#ECFDF5', 
-    color: '#059669', 
-    order: 5, 
-    active: true,
-    subcategories: ['Mufflers', 'Exhaust Pipes', 'Catalytic Converter', 'Headers', 'Silencers']
-  },
-  { 
-    id: 'cat_filters', 
-    name: 'Filters & Fluids', 
-    icon: 'air-filter', 
-    bg: '#FFF7ED', 
-    color: '#EA580C', 
-    order: 6, 
-    active: true,
-    subcategories: ['Oil Filter', 'Engine Air Filter', 'Cabin Filter', 'Fuel Filter', 'Brake Fluid']
+    subcategories: [
+      'Complete Dashboard Assembly',
+      'Steering Wheel with Airbag',
+      'Airbag Module (Driver/Passenger)',
+      'Seat Assembly (Front/Rear)',
+      'Touchscreen Infotainment Screen',
+      'AC Vents & Controls Panel',
+      'Power Window Motor / Switches',
+      'Alloy Wheels (Set / Single)',
+      'Spare Tyre / Rim',
+    ]
   },
   { 
     id: 'cat_ac', 
-    name: 'AC & Cooling', 
+    name: 'Cooling & AC', 
     icon: 'fan', 
     bg: '#F0FDFA', 
     color: '#0D9488', 
+    order: 5, 
+    active: true,
+    subcategories: [
+      'AC Compressor',
+      'AC Condenser',
+      'Cooling Radiator',
+      'Radiator Cooling Fan Assembly',
+      'Intercooler',
+      'Heating Core / Blower Motor',
+      'Thermostat & Housing',
+      'Coolant Reservoir Tank',
+    ]
+  },
+  { 
+    id: 'cat_transmission', 
+    name: 'Transmission & Clutch', 
+    icon: 'car-shift-pattern', 
+    bg: '#EFF6FF', 
+    color: '#2563EB', 
+    order: 6, 
+    active: true,
+    subcategories: [
+      'Manual Gearbox Assembly',
+      'Automatic Transmission (AT/CVT/DCT)',
+      'Clutch Plate & Pressure Plate',
+      'Flywheel (Dual Mass / Single)',
+      'Drive Shaft / Axle',
+      'Differential Assembly',
+    ]
+  },
+  { 
+    id: 'cat_exhaust', 
+    name: 'Exhaust & Fuel', 
+    icon: 'pipe', 
+    bg: '#ECFDF5', 
+    color: '#059669', 
     order: 7, 
     active: true,
-    subcategories: ['AC Compressor', 'Radiator', 'Condenser', 'Cooling Fan', 'Intercooler']
+    subcategories: [
+      'Catalytic Converter / DPF',
+      'Exhaust Manifold & Muffler',
+      'Fuel Tank Assembly',
+      'EGR Valve',
+      'Exhaust Pipe & Resonator',
+      'Fuel Pump (High/Low Pressure)',
+    ]
   },
 ];
 

@@ -46,6 +46,7 @@ import { MapLocationModal } from '../components/MapLocationModal';
 import { BrandLogo } from '../components/BrandLogo';
 import { INDIAN_STATES_AND_DISTRICTS, StateWithDistricts } from '../data/indianLocations';
 import { callGeminiDirectlyFromDevice } from '../services/directGeminiService';
+import { MASTER_CATEGORY_PARTS } from '../constants/categories';
 
 const { width } = Dimensions.get('window');
 
@@ -355,99 +356,7 @@ export const MODEL_SPECIFIC_VARIANTS: Record<string, string[]> = {
   'Skoda Rapid': ['All Variants (Fits All)', 'Active', 'Ambition', 'Style', 'Onyx', 'Monte Carlo', 'Rider'],
 };
 
-export const DEFAULT_CATEGORY_PARTS: Record<string, string[]> = {
-  'Engine & Mechanical': [
-    'Complete Engine Assembly',
-    'Cylinder Head',
-    'Piston & Connecting Rods',
-    'Crankshaft & Camshaft',
-    'Turbocharger / Intercooler',
-    'Alternator',
-    'Starter Motor',
-    'Fuel Injectors / Rail',
-    'Fuel Pump (High/Low Pressure)',
-    'Oil Pump & Sump',
-    'Timing Belt / Chain Kit',
-    'Engine Mountings',
-    'Throttle Body / Air Intake',
-  ],
-  'Body & Exterior': [
-    'Front Bumper Assembly',
-    'Rear Bumper Assembly',
-    'Bonnet / Hood',
-    'Front Grille',
-    'Headlight Assembly (Pair/Single)',
-    'Tail Light Assembly',
-    'Fog Lamps / DRLs',
-    'Side Mirror Assembly (ORVM)',
-    'Front / Rear Doors',
-    'Fenders / Quarter Panels',
-    'Boot Lid / Tailgate',
-    'Windshield Glass (Front/Rear)',
-    'Door Handles & Locks',
-  ],
-  'Lights & Electricals': [
-    'Engine Control Unit (ECU / ECM)',
-    'Body Control Module (BCM)',
-    'Complete Wiring Harness',
-    'Instrument Cluster / Speedometer',
-    'Fuse Box & Relays',
-    'Key Fob / Immobilizer System',
-    'Sensors (Oxygen, MAP, ABS, Cam)',
-    'Car Battery',
-    'Headlight Switch / Stalk',
-  ],
-  'Suspension & Brakes': [
-    'Front Shock Absorbers (Struts)',
-    'Rear Shock Absorbers',
-    'Brake Calipers (Front/Rear)',
-    'Brake Disc Rotors / Drums',
-    'Brake Booster & Master Cylinder',
-    'ABS Pump / Module',
-    'Lower Control Arms',
-    'Steering Rack & Pinion Assembly',
-    'Power Steering Pump',
-    'Anti-Roll / Sway Bar',
-    'Wheel Hub & Bearings',
-  ],
-  'Interior & Wheels': [
-    'Complete Dashboard Assembly',
-    'Steering Wheel with Airbag',
-    'Airbag Module (Driver/Passenger)',
-    'Seat Assembly (Front/Rear)',
-    'Touchscreen Infotainment Screen',
-    'AC Vents & Controls Panel',
-    'Power Window Motor / Switches',
-    'Alloy Wheels (Set / Single)',
-    'Spare Tyre / Rim',
-  ],
-  'Cooling & AC': [
-    'AC Compressor',
-    'AC Condenser',
-    'Cooling Radiator',
-    'Radiator Cooling Fan Assembly',
-    'Intercooler',
-    'Heating Core / Blower Motor',
-    'Thermostat & Housing',
-    'Coolant Reservoir Tank',
-  ],
-  'Transmission & Clutch': [
-    'Manual Gearbox Assembly',
-    'Automatic Transmission (AT/CVT/DCT)',
-    'Clutch Plate & Pressure Plate',
-    'Flywheel (Dual Mass / Single)',
-    'Drive Shaft / Axle',
-    'Clutch Master & Slave Cylinder',
-    'Differential Assembly',
-  ],
-  'Exhaust & Fuel': [
-    'Catalytic Converter / DPF',
-    'Exhaust Manifold & Muffler',
-    'Fuel Tank Assembly',
-    'EGR Valve',
-    'Exhaust Pipe & Resonator',
-  ],
-};
+export const DEFAULT_CATEGORY_PARTS: Record<string, string[]> = MASTER_CATEGORY_PARTS;
 
 const CONDITION_OPTIONS = [
   { id: 'New', label: '✨ Brand New', color: '#10B981' },
@@ -889,7 +798,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
       // 2. Fallback to server endpoints if direct device call did not yield data
       if (!data) {
         const endpoints: string[] = [];
-        if (typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')) {
+        if (typeof window !== 'undefined' && window.location?.origin) {
           endpoints.push(`${window.location.origin}/api/ai/autofill-listing`);
         }
         endpoints.push('https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing');

@@ -14,7 +14,7 @@ import {
   RotateCcw,
   Check
 } from "lucide-react";
-import { SparePart, User } from "../types";
+import { SparePart, User, CAR_PART_CATEGORIES } from "../types";
 import { subscribeToTaxonomyConfig, FullTaxonomyConfig } from "../lib/firebase";
 import UserAvatar from "./UserAvatar";
 import PullToRefresh from "./PullToRefresh";
@@ -22,6 +22,7 @@ import { useLanguage } from "../lib/LanguageContext";
 import { translateDynamic } from "../lib/translations";
 import { formatLocationBadgeWithDistance, LatLng } from "../utils/locationHelper";
 import { matchPartSearch, parseCreatedAt } from "../utils/searchHelper";
+import { matchesCategoryFilter } from "../utils/categoryMatcher";
 
 interface SearchScreenProps {
   parts: SparePart[];
@@ -117,16 +118,7 @@ export default function SearchScreen({
 
       // Category filter
       if (selectedCategory !== "All Categories" && selectedCategory !== "All") {
-        const sCat = selectedCategory.toLowerCase().trim();
-        const pCat = (part.category || "").toLowerCase().trim();
-        const pSubCat = ((part as any).subCategory || (part as any).subcategory || part.partName || "").toLowerCase().trim();
-        const pTitle = (part.title || "").toLowerCase().trim();
-        const catMatch =
-          pCat === sCat ||
-          (pCat && (pCat.includes(sCat) || sCat.includes(pCat))) ||
-          pSubCat.includes(sCat) ||
-          pTitle.includes(sCat);
-        if (!catMatch) continue;
+        if (!matchesCategoryFilter(part, selectedCategory)) continue;
       }
 
       // Brand filter
@@ -205,13 +197,7 @@ export default function SearchScreen({
 
   const quickCategories = [
     "All Categories",
-    "Engine & Drivetrain",
-    "Body & Chassis",
-    "Brakes & Wheels",
-    "Suspension & Steering",
-    "Electrical & Lighting",
-    "AC & Heating",
-    "Interior Accessories"
+    ...CAR_PART_CATEGORIES
   ];
 
   return (
@@ -498,7 +484,7 @@ export default function SearchScreen({
                   className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-slate-800 dark:text-slate-200 focus:outline-none"
                 >
                   <option value="All Categories">All Categories</option>
-                  {taxonomy.categories.map((c) => (
+                  {(taxonomy.categories && taxonomy.categories.length > 0 ? taxonomy.categories : CAR_PART_CATEGORIES).map((c) => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>

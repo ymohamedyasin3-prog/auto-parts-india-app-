@@ -176,38 +176,102 @@ export const CAR_PART_CATEGORIES = [
   "Lights & Electricals",
   "Suspension & Brakes",
   "Interior & Wheels",
-  "Wiring & Harnesses"
+  "Cooling & AC",
+  "Transmission & Clutch",
+  "Exhaust & Fuel"
 ];
 
 export const CAR_SPARE_PARTS_BY_CATEGORY: Record<string, string[]> = {
   "Engine & Mechanical": [
-    "Engine Assembly", "Gearbox/Transmission", "Alternator", "Starter Motor", "Radiator", 
-    "AC Compressor", "Fuel Pump", "Turbocharger", "Cylinder Head", "Clutch Plate & Flywheel", 
-    "Oil Pump", "Intercooler", "Timing Belt/Chain Kit", "Pistons & Connecting Rods"
+    "Complete Engine Assembly",
+    "Cylinder Head",
+    "Piston & Connecting Rods",
+    "Crankshaft & Camshaft",
+    "Turbocharger / Intercooler",
+    "Alternator",
+    "Starter Motor",
+    "Fuel Injectors / Rail",
+    "Fuel Pump (High/Low Pressure)",
+    "Oil Pump & Sump",
+    "Timing Belt / Chain Kit",
+    "Engine Mountings",
+    "Throttle Body / Air Intake"
   ],
   "Body & Exterior": [
-    "Doors", "Windshield Glass", "Bonnet", "Boot Lid", "Front Bumper", 
-    "Rear Bumper", "Grille", "Side Mirrors (ORVM)", "Fender", "Quarter Panel", 
-    "Headlight Bracket", "Running Board", "Roof Rails", "Rear Spoiler"
+    "Front Bumper Assembly",
+    "Rear Bumper Assembly",
+    "Bonnet / Hood",
+    "Front Grille",
+    "Headlight Assembly (Pair/Single)",
+    "Tail Light Assembly",
+    "Fog Lamps / DRLs",
+    "Side Mirror Assembly (ORVM)",
+    "Front / Rear Doors",
+    "Fenders / Quarter Panels",
+    "Boot Lid / Tailgate",
+    "Windshield Glass (Front/Rear)",
+    "Door Handles & Locks"
   ],
   "Lights & Electricals": [
-    "Headlights", "Taillights", "Fog Lights", "Indicators", "Horn", 
-    "Battery", "ECU (Engine Control Unit)", "Fuse Box", "Relay Modules", 
-    "Key Fob/Sensors", "Parking Sensors", "Reverse Camera", "Wiring Loom"
+    "Engine Control Unit (ECU / ECM)",
+    "Body Control Module (BCM)",
+    "Complete Wiring Harness",
+    "Instrument Cluster / Speedometer",
+    "Fuse Box & Relays",
+    "Key Fob / Immobilizer System",
+    "Sensors (Oxygen, MAP, ABS, Cam)",
+    "Car Battery",
+    "Headlight Switch / Stalk"
   ],
   "Suspension & Brakes": [
-    "Shock Absorbers", "Steering Rack", "Brake Calipers", "Brake Discs & Pads", "Axle", 
-    "Driveshaft", "Control Arms", "Ball Joints", "Stabilizer Link", "ABS Sensor", 
-    "Master Cylinder", "Steering Column"
+    "Front Shock Absorbers (Struts)",
+    "Rear Shock Absorbers",
+    "Brake Calipers (Front/Rear)",
+    "Brake Disc Rotors / Drums",
+    "Brake Booster & Master Cylinder",
+    "ABS Pump / Module",
+    "Lower Control Arms",
+    "Steering Rack & Pinion Assembly",
+    "Power Steering Pump",
+    "Anti-Roll / Sway Bar",
+    "Wheel Hub & Bearings"
   ],
   "Interior & Wheels": [
-    "Seats", "Dashboard Panel", "Steering Wheel", "Music System/Stereo", "Alloy Wheels", 
-    "Steel Rims", "Tyres", "Floor Mats", "Power Window Switch", "Instrument Cluster", 
-    "Airbag Module", "Gear Knob", "AC Vents"
+    "Complete Dashboard Assembly",
+    "Steering Wheel with Airbag",
+    "Airbag Module (Driver/Passenger)",
+    "Seat Assembly (Front/Rear)",
+    "Touchscreen Infotainment Screen",
+    "AC Vents & Controls Panel",
+    "Power Window Motor / Switches",
+    "Alloy Wheels (Set / Single)",
+    "Spare Tyre / Rim"
   ],
-  "Wiring & Harnesses": [
-    "Main Wiring Harness", "Engine Harness", "Dashboard Wiring Loom", "Door Wiring Harness", 
-    "Battery Cables", "Sensor Harness", "Ignition Coil Harness", "ECU Wiring Connector"
+  "Cooling & AC": [
+    "AC Compressor",
+    "AC Condenser",
+    "Cooling Radiator",
+    "Radiator Cooling Fan Assembly",
+    "Intercooler",
+    "Heating Core / Blower Motor",
+    "Thermostat & Housing",
+    "Coolant Reservoir Tank"
+  ],
+  "Transmission & Clutch": [
+    "Manual Gearbox Assembly",
+    "Automatic Transmission (AT/CVT/DCT)",
+    "Clutch Plate & Pressure Plate",
+    "Flywheel (Dual Mass / Single)",
+    "Drive Shaft / Axle",
+    "Clutch Master & Slave Cylinder",
+    "Differential Assembly"
+  ],
+  "Exhaust & Fuel": [
+    "Catalytic Converter / DPF",
+    "Exhaust Manifold & Muffler",
+    "Fuel Tank Assembly",
+    "EGR Valve",
+    "Exhaust Pipe & Resonator"
   ]
 };
 

@@ -123,13 +123,13 @@ export const DEFAULT_BANNERS = [
 ];
 
 export const HOME_DEFAULT_CATEGORIES = [
-  { id: 'Engine & Parts', name: 'Engine & Parts', icon: 'engine', is3DGraphic: 'engine' },
-  { id: 'Body Parts', name: 'Body Parts', icon: 'car-door', is3DGraphic: 'body' },
-  { id: 'Electricals', name: 'Electricals', icon: 'lightning-bolt', is3DGraphic: 'electrical' },
-  { id: 'Suspension', name: 'Suspension', icon: 'car-brake-alert', is3DGraphic: 'suspension' },
-  { id: 'Exhaust', name: 'Exhaust', icon: 'pipe', is3DGraphic: 'exhaust' },
-  { id: 'Brakes', name: 'Brakes', icon: 'disc', is3DGraphic: 'brakes' },
-  { id: 'Filters', name: 'Filters', icon: 'air-filter', is3DGraphic: 'filters' },
+  { id: 'Engine & Mechanical', name: 'Engine & Mechanical', icon: 'engine', is3DGraphic: 'engine' },
+  { id: 'Body & Exterior', name: 'Body & Exterior', icon: 'car-door', is3DGraphic: 'body' },
+  { id: 'Lights & Electricals', name: 'Lights & Electricals', icon: 'lightning-bolt', is3DGraphic: 'electrical' },
+  { id: 'Suspension & Brakes', name: 'Suspension & Brakes', icon: 'car-brake-alert', is3DGraphic: 'suspension' },
+  { id: 'Interior & Wheels', name: 'Interior & Wheels', icon: 'car-seat', is3DGraphic: 'interior' },
+  { id: 'Cooling & AC', name: 'Cooling & AC', icon: 'fan', is3DGraphic: 'cooling' },
+  { id: 'Transmission & Clutch', name: 'Transmission & Clutch', icon: 'car-shift-pattern', is3DGraphic: 'transmission' },
   { id: 'More', name: 'More', icon: 'apps', is3DGraphic: 'more' },
 ];
 
