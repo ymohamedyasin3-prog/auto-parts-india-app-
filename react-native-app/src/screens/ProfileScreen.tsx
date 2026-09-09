@@ -249,8 +249,47 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
     }
   };
 
-  const handlePickProfilePhoto = async () => {
-    await pickAndUploadPhoto('prompt');
+  const handleRemoveProfilePhoto = async () => {
+    const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300';
+    // Instant Optimistic UI Update
+    setDisplayPhotoUrl(DEFAULT_AVATAR);
+    setEditPhoto('');
+
+    const currentUid = activeUid || getCurrentUser()?.uid;
+    if (currentUid) {
+      try {
+        const db = getFirebaseFirestore();
+        if (db && typeof db.collection === 'function') {
+          db.collection('users').doc(currentUid).set({
+            photoURL: '',
+            profilePhoto: '',
+            profileImageUrl: '',
+            customPhoto: '',
+            photoDeleted: true,
+            updatedAt: Date.now(),
+          }, { merge: true }).catch((err) => console.log('[Async Profile Delete DB Notice]', err));
+        }
+
+        const authUser = getCurrentUser();
+        if (authUser) {
+          if (typeof authUser.updateProfile === 'function') {
+            authUser.updateProfile({ photoURL: '' }).catch(() => {});
+          }
+          setCurrentAuthUser({
+            ...authUser,
+            photoURL: '',
+            profilePhoto: '',
+            profileImageUrl: '',
+            customPhoto: '',
+            photoDeleted: true,
+          });
+        }
+
+        syncUserPhotoAcrossListingsAndChats(currentUid, '').catch(() => {});
+      } catch (e) {
+        console.warn('Remove profile photo error:', e);
+      }
+    }
   };
 
   const handleSaveProfileDetails = async () => {
@@ -523,33 +562,57 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
             />
 
             <Text style={styles.inputLabel}>Profile Photo</Text>
-            <TouchableOpacity 
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                backgroundColor: '#EFF6FF',
-                borderWidth: 1,
-                borderColor: '#BFDBFE',
-                borderRadius: 10,
-                paddingVertical: 12,
-                marginBottom: 16,
-              }}
-              onPress={handlePickProfilePhoto}
-              disabled={uploadingPhoto}
-            >
-              {uploadingPhoto ? (
-                <ActivityIndicator size="small" color="#1565FF" />
-              ) : (
-                <>
-                  <Icon source="camera-outline" size={18} color="#1565FF" />
-                  <Text style={{ color: '#1565FF', fontWeight: '700', fontSize: 14 }}>
-                    {editPhoto ? 'Change Photo (Camera / Gallery)' : 'Add Photo (Camera / Gallery)'}
-                  </Text>
-                </>
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+              <TouchableOpacity 
+                style={{
+                  flex: 1,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  backgroundColor: '#EFF6FF',
+                  borderWidth: 1,
+                  borderColor: '#BFDBFE',
+                  borderRadius: 10,
+                  paddingVertical: 12,
+                }}
+                onPress={() => pickAndUploadPhoto('prompt')}
+                disabled={uploadingPhoto}
+              >
+                {uploadingPhoto ? (
+                  <ActivityIndicator size="small" color="#1565FF" />
+                ) : (
+                  <>
+                    <Icon source="camera-outline" size={18} color="#1565FF" />
+                    <Text style={{ color: '#1565FF', fontWeight: '700', fontSize: 13 }}>
+                      {editPhoto ? 'Change' : 'Add Photo'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {!!editPhoto && (
+                <TouchableOpacity 
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    backgroundColor: '#FEF2F2',
+                    borderWidth: 1,
+                    borderColor: '#FECACA',
+                    borderRadius: 10,
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                  }}
+                  onPress={handleRemoveProfilePhoto}
+                  disabled={uploadingPhoto}
+                >
+                  <Icon source="delete-outline" size={18} color="#DC2626" />
+                  <Text style={{ color: '#DC2626', fontWeight: '700', fontSize: 13 }}>Remove</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
+            </View>
 
             <TouchableOpacity
               style={[styles.saveModalBtn, savingProfile && styles.saveModalBtnDisabled]}

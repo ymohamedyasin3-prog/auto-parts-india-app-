@@ -106,6 +106,7 @@ export default function AuthScreen({ navigation }: any) {
               style={{ width: logoWidth, height: logoHeight }}
               resizeMode="contain"
             />
+            <Text style={styles.taglineText}>India's leading marketplace</Text>
           </View>
 
           {errorMessage && (
@@ -190,9 +191,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoWrapper: {
-    marginBottom: 32,
+    marginBottom: 28,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  taglineText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+    marginTop: 12,
+    textAlign: 'center',
+    opacity: 0.95,
   },
   googlePillButton: {
     width: '100%',

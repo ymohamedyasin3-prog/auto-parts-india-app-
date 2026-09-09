@@ -299,8 +299,8 @@ export default function HomeScreen({ navigation, route, user }: any) {
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [parts, setParts] = useState<any[]>([]);
-  const [topCategories, setTopCategories] = useState<any[]>([]);
-  const [carBrands, setCarBrands] = useState<any[]>([]);
+  const [topCategories, setTopCategories] = useState<any[]>(HOME_DEFAULT_CATEGORIES);
+  const [carBrands, setCarBrands] = useState<any[]>(HOME_DEFAULT_BRANDS);
   const [banners, setBanners] = useState<any[]>([]);
   const [activeBannerIndex, setActiveBannerIndex] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);

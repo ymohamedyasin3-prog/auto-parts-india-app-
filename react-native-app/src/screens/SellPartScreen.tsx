@@ -31,7 +31,7 @@ import {
   openNativeGalleryMultiple,
   promptImageSourceDialog,
 } from '../services/imagePickerService';
-import { uploadImageToCloudinary, uploadMultipleImagesToCloudinary } from '../services/cloudinary';
+import { uploadImageToCloudinary, uploadMultipleImagesToCloudinary, deleteImageFromCloudinary } from '../services/cloudinary';
 import {
   getCurrentLocation,
   reverseGeocodeLatLng,
@@ -715,7 +715,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
     setPickerSearchQuery('');
   };
 
-  // Image actions
+  // Image actions - Instant Optimistic UI
   const handlePickCamera = async () => {
     if (finalImagesToUse.length >= 6) {
       Alert.alert('Limit Reached', 'You can upload a maximum of 6 images.');
@@ -747,21 +747,18 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
     }
   };
 
+  // Instant deletion without extra blocking confirmation delays
   const handleRemoveImage = (index: number) => {
-    Alert.alert(
-      'Remove Photo',
-      'Are you sure you want to remove this photo?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            setUploadedImages((prev) => prev.filter((_, i) => i !== index));
-          },
-        },
-      ]
-    );
+    const targetUri = finalImagesToUse[index];
+    // Immediate optimistic state update
+    setUploadedImages((prev) => prev.filter((_, i) => i !== index));
+
+    // Async background Cloudinary cleanup if it was already uploaded
+    if (targetUri && (targetUri.startsWith('http://') || targetUri.startsWith('https://'))) {
+      deleteImageFromCloudinary(targetUri).catch((err) =>
+        console.log('[Async Image Delete Notice]', err)
+      );
+    }
   };
 
   const handleSetCoverPhoto = (index: number) => {
@@ -867,12 +864,11 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
 
       // Backend API Endpoints (prioritize direct origin in web, fallback to live Cloud Run endpoints in Android/iOS APK)
       const endpoints: string[] = [];
-      if (typeof window !== 'undefined' && window.location?.origin) {
-        endpoints.push(`${window.location.origin}/api/ai/autofill-listing`);
-      }
       endpoints.push('https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing');
       endpoints.push('https://ais-pre-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing');
-      endpoints.push('http://10.0.2.2:3000/api/ai/autofill-listing');
+      if (typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')) {
+        endpoints.unshift(`${window.location.origin}/api/ai/autofill-listing`);
+      }
 
       let data: any = null;
       let lastFetchErr: any = null;
@@ -880,12 +876,13 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
       for (const endpoint of endpoints) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 20000);
+          const timeoutId = setTimeout(() => controller.abort(), 25000);
 
           const candidateRes = await fetch(endpoint, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'Accept': 'application/json',
             },
             signal: controller.signal,
             body: JSON.stringify({
@@ -1385,9 +1382,8 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
                     )}
                     <TouchableOpacity
                       style={styles.photoDelete}
-                      onPress={() =>
-                        setUploadedImages((prev) => prev.filter((_, i) => i !== index))
-                      }
+                      onPress={() => handleRemoveImage(index)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
                       <IconButton icon="close" size={15} iconColor="#FFFFFF" style={{ margin: 0 }} />
                     </TouchableOpacity>
