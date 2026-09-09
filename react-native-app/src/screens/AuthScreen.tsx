@@ -16,6 +16,8 @@ import { Text, Icon } from 'react-native-paper';
 import { signInWithGoogleNative } from '../services/googleAuth';
 import Svg, { Path } from 'react-native-svg';
 
+import { AppLogo } from '../components/AppLogo';
+
 export default function AuthScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -101,12 +103,7 @@ export default function AuthScreen({ navigation }: any) {
         >
           {/* Brand Logo perfectly fitted and compact */}
           <View style={styles.logoWrapper}>
-            <Image
-              source={require('../assets/logo.png')}
-              style={{ width: logoWidth, height: logoHeight }}
-              resizeMode="contain"
-            />
-            <Text style={styles.taglineText}>India's leading marketplace</Text>
+            <AppLogo width={logoWidth} height={logoHeight} />
           </View>
 
           {errorMessage && (
@@ -157,6 +154,11 @@ export default function AuthScreen({ navigation }: any) {
 
         {/* LOWER SPACER */}
         <View style={{ flex: 1.2 }} />
+
+        {/* BOTTOM TAGLINE */}
+        <View style={styles.footerWrapper}>
+          <Text style={styles.taglineText}>India's leading marketplace</Text>
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -248,5 +250,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '500',
+  },
+  footerWrapper: {
+    paddingBottom: Platform.OS === 'ios' ? 20 : 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

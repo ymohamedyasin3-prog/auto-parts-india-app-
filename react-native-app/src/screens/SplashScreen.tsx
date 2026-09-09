@@ -11,6 +11,7 @@ import {
 import { Text } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCurrentUser } from '../services/firebase';
+import { AppLogo } from '../components/AppLogo';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -95,11 +96,7 @@ export default function SplashScreen({ navigation }: any) {
           ]}
         >
           {/* Crisp High-Res Brand Mark that exactly matches reference image with no collapse */}
-          <Image 
-            source={require('../assets/logo.png')}
-            style={styles.brandLogoImage}
-            resizeMode="contain"
-          />
+          <AppLogo width={Math.min(SCREEN_WIDTH * 0.72, 260)} height={Math.min(SCREEN_WIDTH * 0.72, 260)} />
         </Animated.View>
 
         <View style={{ flex: 1 }} />

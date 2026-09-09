@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, StyleProp, ViewStyle, Image } from 'react-native';
 import { getFirebaseFirestore } from '../services/firebase';
+import { AppLogo } from './AppLogo';
 import Svg, { 
   Path, 
   Circle, 
@@ -168,14 +169,7 @@ export function AutoPartsRoundLogo({
         style,
       ]}
     >
-      <Image
-        source={require('../assets/logo.png')}
-        style={{
-          width: s * 0.88,
-          height: s * 0.88,
-          resizeMode: 'contain',
-        }}
-      />
+      <AppLogo width={s * 0.88} height={s * 0.88} />
     </View>
   );
 }
