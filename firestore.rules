@@ -144,7 +144,12 @@ service cloud.firestore {
       allow write: if true;
     }
 
-    // 14. App Settings
+    // 14. App Settings & Taxonomy
+    match /taxonomy/{docName} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     match /app_settings/{docId} {
       allow read: if true;
       allow write: if true;

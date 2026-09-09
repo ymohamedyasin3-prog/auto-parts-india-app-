@@ -42,6 +42,7 @@ export default function AllCategoriesScreen({ navigation, route }: any) {
           snapshot.forEach((doc: any) => {
             list.push({ id: doc.id, ...doc.data() });
           });
+          list.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
           setFirestoreCategories(list);
         }, (err: any) => {
           console.warn('AllCategoriesScreen topCategories listener error:', err);

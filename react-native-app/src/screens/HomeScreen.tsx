@@ -123,14 +123,53 @@ export const DEFAULT_BANNERS = [
 ];
 
 export const HOME_DEFAULT_CATEGORIES = [
-  { id: 'Engine & Mechanical', name: 'Engine & Mechanical', icon: 'engine', is3DGraphic: 'engine' },
-  { id: 'Body & Exterior', name: 'Body & Exterior', icon: 'car-door', is3DGraphic: 'body' },
-  { id: 'Lights & Electricals', name: 'Lights & Electricals', icon: 'lightning-bolt', is3DGraphic: 'electrical' },
-  { id: 'Suspension & Brakes', name: 'Suspension & Brakes', icon: 'car-brake-alert', is3DGraphic: 'suspension' },
-  { id: 'Interior & Wheels', name: 'Interior & Wheels', icon: 'car-seat', is3DGraphic: 'interior' },
-  { id: 'Cooling & AC', name: 'Cooling & AC', icon: 'fan', is3DGraphic: 'cooling' },
-  { id: 'Transmission & Clutch', name: 'Transmission & Clutch', icon: 'car-shift-pattern', is3DGraphic: 'transmission' },
-  { id: 'More', name: 'More', icon: 'apps', is3DGraphic: 'more' },
+  {
+    id: 'Engine & Mechanical',
+    name: 'Engine & Mechanical',
+    icon: 'engine',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788828857/categories/v40ctc1xzsul1nmquwno.png',
+  },
+  {
+    id: 'Body & Exterior',
+    name: 'Body & Exterior',
+    icon: 'car-door',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788915211/categories/ssxl1agf8ydkau5aqv4h.png',
+  },
+  {
+    id: 'Lights & Electricals',
+    name: 'Lights & Electricals',
+    icon: 'lightning-bolt',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788746594/categories/w1tym7epvnhv0f9aapuf.png',
+  },
+  {
+    id: 'Suspension & Brakes',
+    name: 'Suspension & Brakes',
+    icon: 'car-brake-alert',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788808169/categories/ebbks7ce3jejqgtxlndo.png',
+  },
+  {
+    id: 'Interior & Wheels',
+    name: 'Interior & Wheels',
+    icon: 'car-seat',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973203/categories/cat_interior_wheels.jpg',
+  },
+  {
+    id: 'Cooling & AC',
+    name: 'Cooling & AC',
+    icon: 'fan',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973204/categories/cat_cooling_ac.jpg',
+  },
+  {
+    id: 'Transmission & Clutch',
+    name: 'Transmission & Clutch',
+    icon: 'car-shift-pattern',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973205/categories/cat_transmission.jpg',
+  },
+  {
+    id: 'More',
+    name: 'More',
+    icon: 'apps',
+  },
 ];
 
 export const HOME_DEFAULT_BRANDS = [
@@ -379,7 +418,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
       if (val) {
         try {
           const parsed = JSON.parse(val);
-          const list = Object.values(parsed);
+          const list = Array.isArray(parsed) ? parsed : Object.values(parsed);
           if (list.length > 0) {
             list.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
             setTopCategories(list);
@@ -392,7 +431,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
       if (val) {
         try {
           const parsed = JSON.parse(val);
-          const list = Object.values(parsed);
+          const list = Array.isArray(parsed) ? parsed : Object.values(parsed);
           if (list.length > 0) {
             list.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
             setCarBrands(list);
@@ -579,6 +618,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
         }
         catList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         setTopCategories(catList);
+        AsyncStorage.setItem('@autoparts_firestore_topCategories', JSON.stringify(catList)).catch(() => {});
       }, (err: any) => console.warn('Categories sync error:', err));
 
       const unsubBrands = db.collection('carBrands').onSnapshot((snap: any) => {
@@ -591,6 +631,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
         }
         brandList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         setCarBrands(brandList);
+        AsyncStorage.setItem('@autoparts_firestore_carBrands', JSON.stringify(brandList)).catch(() => {});
       }, (err: any) => console.warn('Car brands sync error:', err));
 
       const unsubBanners = db.collection('banners').onSnapshot((snap: any) => {
@@ -603,6 +644,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
         }
         bannerList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         setBanners(bannerList);
+        AsyncStorage.setItem('@autoparts_firestore_banners', JSON.stringify(bannerList)).catch(() => {});
       }, (err: any) => console.warn('Banners sync error:', err));
 
       return () => {
@@ -627,6 +669,41 @@ export default function HomeScreen({ navigation, route, user }: any) {
   const onRefresh = () => {
     setRefreshing(true);
     fetchParts();
+
+    try {
+      const db = getFirebaseFirestore();
+      if (db && typeof db.collection === 'function') {
+        db.collection('topCategories').get().then((snap: any) => {
+          const catList: any[] = [];
+          if (snap && typeof snap.forEach === 'function') {
+            snap.forEach((doc: any) => {
+              const data = doc.data ? doc.data() : doc;
+              catList.push({ id: doc.id, ...data });
+            });
+          }
+          if (catList.length > 0) {
+            catList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+            setTopCategories(catList);
+            AsyncStorage.setItem('@autoparts_firestore_topCategories', JSON.stringify(catList)).catch(() => {});
+          }
+        }).catch(() => {});
+
+        db.collection('carBrands').get().then((snap: any) => {
+          const brandList: any[] = [];
+          if (snap && typeof snap.forEach === 'function') {
+            snap.forEach((doc: any) => {
+              const data = doc.data ? doc.data() : doc;
+              brandList.push({ id: doc.id, ...data });
+            });
+          }
+          if (brandList.length > 0) {
+            brandList.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+            setCarBrands(brandList);
+            AsyncStorage.setItem('@autoparts_firestore_carBrands', JSON.stringify(brandList)).catch(() => {});
+          }
+        }).catch(() => {});
+      }
+    } catch (_) {}
   };
 
   const handleShare = async () => {

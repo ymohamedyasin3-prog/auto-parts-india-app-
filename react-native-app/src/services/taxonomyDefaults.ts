@@ -31,6 +31,7 @@ export const INITIAL_DEFAULT_CATEGORIES: DefaultCategoryItem[] = [
     color: '#DC2626', 
     order: 0, 
     active: true,
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788828857/categories/v40ctc1xzsul1nmquwno.png',
     subcategories: [
       'Complete Engine Assembly',
       'Cylinder Head',
@@ -52,6 +53,7 @@ export const INITIAL_DEFAULT_CATEGORIES: DefaultCategoryItem[] = [
     color: '#0284C7', 
     order: 1, 
     active: true,
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788915211/categories/ssxl1agf8ydkau5aqv4h.png',
     subcategories: [
       'Front Bumper Assembly',
       'Rear Bumper Assembly',
@@ -73,6 +75,7 @@ export const INITIAL_DEFAULT_CATEGORIES: DefaultCategoryItem[] = [
     color: '#D97706', 
     order: 2, 
     active: true,
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788746594/categories/w1tym7epvnhv0f9aapuf.png',
     subcategories: [
       'Engine Control Unit (ECU / ECM)',
       'Body Control Module (BCM)',
@@ -92,6 +95,7 @@ export const INITIAL_DEFAULT_CATEGORIES: DefaultCategoryItem[] = [
     color: '#E11D48', 
     order: 3, 
     active: true,
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788808169/categories/ebbks7ce3jejqgtxlndo.png',
     subcategories: [
       'Front Shock Absorbers (Struts)',
       'Rear Shock Absorbers',
@@ -111,6 +115,7 @@ export const INITIAL_DEFAULT_CATEGORIES: DefaultCategoryItem[] = [
     color: '#7C3AED', 
     order: 4, 
     active: true,
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973203/categories/cat_interior_wheels.jpg',
     subcategories: [
       'Complete Dashboard Assembly',
       'Steering Wheel with Airbag',
@@ -131,6 +136,7 @@ export const INITIAL_DEFAULT_CATEGORIES: DefaultCategoryItem[] = [
     color: '#0D9488', 
     order: 5, 
     active: true,
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973204/categories/cat_cooling_ac.jpg',
     subcategories: [
       'AC Compressor',
       'AC Condenser',
@@ -150,6 +156,7 @@ export const INITIAL_DEFAULT_CATEGORIES: DefaultCategoryItem[] = [
     color: '#2563EB', 
     order: 6, 
     active: true,
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973205/categories/cat_transmission.jpg',
     subcategories: [
       'Manual Gearbox Assembly',
       'Automatic Transmission (AT/CVT/DCT)',
@@ -167,6 +174,7 @@ export const INITIAL_DEFAULT_CATEGORIES: DefaultCategoryItem[] = [
     color: '#059669', 
     order: 7, 
     active: true,
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973179/categories/psz2dwctxtnea9jovuk2.png',
     subcategories: [
       'Catalytic Converter / DPF',
       'Exhaust Manifold & Muffler',

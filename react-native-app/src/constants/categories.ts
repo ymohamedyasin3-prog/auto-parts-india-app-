@@ -13,6 +13,7 @@ export interface MasterCategory {
   description: string;
   popularParts: string[];
   is3DGraphic?: string;
+  imageUrl?: string;
 }
 
 export const MASTER_CATEGORIES: MasterCategory[] = [
@@ -32,6 +33,7 @@ export const MASTER_CATEGORIES: MasterCategory[] = [
       'Starter Motor',
     ],
     is3DGraphic: 'engine',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788828857/categories/v40ctc1xzsul1nmquwno.png',
   },
   {
     id: 'Body & Exterior',
@@ -49,6 +51,7 @@ export const MASTER_CATEGORIES: MasterCategory[] = [
       'Front / Rear Doors',
     ],
     is3DGraphic: 'body',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788915211/categories/ssxl1agf8ydkau5aqv4h.png',
   },
   {
     id: 'Lights & Electricals',
@@ -66,6 +69,7 @@ export const MASTER_CATEGORIES: MasterCategory[] = [
       'Car Battery',
     ],
     is3DGraphic: 'electrical',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788746594/categories/w1tym7epvnhv0f9aapuf.png',
   },
   {
     id: 'Suspension & Brakes',
@@ -83,6 +87,7 @@ export const MASTER_CATEGORIES: MasterCategory[] = [
       'ABS Pump / Module',
     ],
     is3DGraphic: 'suspension',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788808169/categories/ebbks7ce3jejqgtxlndo.png',
   },
   {
     id: 'Interior & Wheels',
@@ -100,6 +105,7 @@ export const MASTER_CATEGORIES: MasterCategory[] = [
       'Spare Tyre / Rim',
     ],
     is3DGraphic: 'interior',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973203/categories/cat_interior_wheels.jpg',
   },
   {
     id: 'Cooling & AC',
@@ -116,6 +122,7 @@ export const MASTER_CATEGORIES: MasterCategory[] = [
       'Heating Core / Blower Motor',
     ],
     is3DGraphic: 'cooling',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973204/categories/cat_cooling_ac.jpg',
   },
   {
     id: 'Transmission & Clutch',
@@ -132,6 +139,7 @@ export const MASTER_CATEGORIES: MasterCategory[] = [
       'Drive Shaft / Axle',
     ],
     is3DGraphic: 'transmission',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973205/categories/cat_transmission.jpg',
   },
   {
     id: 'Exhaust & Fuel',
@@ -148,6 +156,7 @@ export const MASTER_CATEGORIES: MasterCategory[] = [
       'Fuel Pump (High/Low Pressure)',
     ],
     is3DGraphic: 'exhaust',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973179/categories/psz2dwctxtnea9jovuk2.png',
   },
 ];
 
