@@ -1336,10 +1336,17 @@ export async function ensureFirestoreUserDoc(firebaseUser: FirebaseUser): Promis
     const isSuperAdmin = isSuperAdminEmail || role === "super_admin";
     const isAdmin = isSuperAdminEmail || role === "admin" || role === "super_admin";
 
-    const userPhotoDeleted = existingData.photoDeleted === true || existingData.profileImageUrl === null;
-    const finalPhotoURL = userPhotoDeleted 
-      ? "" 
-      : (existingData.profileImageUrl || existingData.photoURL || existingData.profilePhoto || photoURL || "");
+    // Prioritize existing saved valid avatar URL from Firestore, otherwise auth photoURL
+    const validExistingPhoto = (
+      existingData.photoURL || 
+      existingData.profilePhoto || 
+      existingData.profileImageUrl || 
+      existingData.customPhoto ||
+      ""
+    ).trim();
+
+    const isExplicitlyDeleted = existingData.photoDeleted === true && !validExistingPhoto;
+    const finalPhotoURL = isExplicitlyDeleted ? "" : (validExistingPhoto || photoURL || "");
 
     const payload = {
       uid: uid,
@@ -1348,9 +1355,10 @@ export async function ensureFirestoreUserDoc(firebaseUser: FirebaseUser): Promis
       displayName: displayName || existingData.displayName || existingData.name || "",
       name: displayName || existingData.name || existingData.displayName || "",
       photoURL: finalPhotoURL,
-      profileImageUrl: userPhotoDeleted ? null : (finalPhotoURL || null),
+      profileImageUrl: finalPhotoURL || null,
       profilePhoto: finalPhotoURL,
-      photoDeleted: userPhotoDeleted,
+      customPhoto: finalPhotoURL,
+      photoDeleted: isExplicitlyDeleted,
       phone: phone || existingData.phone || "",
       createdAt: createdAt,
       lastLoginAt: now,
@@ -1475,15 +1483,29 @@ export function subscribeToAuth(callback: (user: User | null) => void): () => vo
 }
 
 export async function updateUserProfile(userId: string, profile: Partial<User>): Promise<void> {
-  const isClearingPhoto = profile.photoURL === "" || profile.profilePhoto === "" || profile.profileImageUrl === null;
-  const photoPayload = isClearingPhoto
-    ? { profileImageUrl: null, photoURL: "", profilePhoto: "", photoDeleted: true }
-    : {
-        ...(profile.photoURL !== undefined ? { photoURL: profile.photoURL } : {}),
-        ...(profile.profilePhoto !== undefined ? { profilePhoto: profile.profilePhoto } : {}),
-        ...(profile.profileImageUrl !== undefined ? { profileImageUrl: profile.profileImageUrl } : (profile.photoURL ? { profileImageUrl: profile.photoURL } : {})),
-        photoDeleted: false
-      };
+  const hasIncomingPhoto = profile.photoURL !== undefined || profile.profilePhoto !== undefined || (profile as any).profileImageUrl !== undefined;
+  const isExplicitlyClearing = hasIncomingPhoto && (
+    profile.photoURL === "" && 
+    profile.profilePhoto === "" && 
+    ((profile as any).profileImageUrl === null || (profile as any).profileImageUrl === "")
+  );
+
+  let incomingPhotoValue = "";
+  if (hasIncomingPhoto && !isExplicitlyClearing) {
+    incomingPhotoValue = (profile.photoURL || profile.profilePhoto || (profile as any).profileImageUrl || (profile as any).customPhoto || "").trim();
+  }
+
+  const photoPayload = isExplicitlyClearing
+    ? { profileImageUrl: null, photoURL: "", profilePhoto: "", customPhoto: "", photoDeleted: true }
+    : hasIncomingPhoto && incomingPhotoValue
+      ? {
+          photoURL: incomingPhotoValue,
+          profilePhoto: incomingPhotoValue,
+          profileImageUrl: incomingPhotoValue,
+          customPhoto: incomingPhotoValue,
+          photoDeleted: false
+        }
+      : {};
 
   if (useFirebase && db) {
     try {
@@ -1508,10 +1530,10 @@ export async function updateUserProfile(userId: string, profile: Partial<User>):
     try {
       const updates: { displayName?: string; photoURL?: string } = {};
       if (profile.name) updates.displayName = profile.name;
-      if (isClearingPhoto) {
+      if (isExplicitlyClearing) {
         updates.photoURL = "";
-      } else if (profile.photoURL || profile.profilePhoto) {
-        updates.photoURL = profile.photoURL || profile.profilePhoto;
+      } else if (incomingPhotoValue) {
+        updates.photoURL = incomingPhotoValue;
       }
       if (Object.keys(updates).length > 0) {
         await updateProfile(auth.currentUser, updates);
@@ -4038,6 +4060,62 @@ export async function markAllAnnouncementsAsRead(userId: string | null, announce
       return true;
     } catch (err) {
       console.error("Firestore markAllAnnouncementsAsRead failed:", err);
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function deleteAnnouncementForUser(userId: string | null, announcementId: string): Promise<boolean> {
+  if (!announcementId) return false;
+  try {
+    const rawDel = localStorage.getItem("autoparts_deleted_announcements") || "[]";
+    const delList: string[] = JSON.parse(rawDel);
+    if (!delList.includes(announcementId)) {
+      delList.push(announcementId);
+      localStorage.setItem("autoparts_deleted_announcements", JSON.stringify(delList));
+      window.dispatchEvent(new Event("autoparts_announcements_updated"));
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  if (useFirebase && db && userId) {
+    try {
+      const delDocRef = doc(db, "users", userId, "deleted_announcements", announcementId);
+      await setDoc(delDocRef, { deletedAt: Date.now() }, { merge: true });
+      return true;
+    } catch (err) {
+      console.error("Firestore deleteAnnouncementForUser failed:", err);
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function deleteAllAnnouncementsForUser(userId: string | null, announcementIds: string[]): Promise<boolean> {
+  if (!announcementIds || announcementIds.length === 0) return true;
+  try {
+    const rawDel = localStorage.getItem("autoparts_deleted_announcements") || "[]";
+    const delList: string[] = JSON.parse(rawDel);
+    const updatedSet = new Set([...delList, ...announcementIds]);
+    localStorage.setItem("autoparts_deleted_announcements", JSON.stringify(Array.from(updatedSet)));
+    window.dispatchEvent(new Event("autoparts_announcements_updated"));
+  } catch (e) {
+    // ignore
+  }
+
+  if (useFirebase && db && userId) {
+    try {
+      const batch = writeBatch(db);
+      for (const annId of announcementIds) {
+        const delDocRef = doc(db, "users", userId, "deleted_announcements", annId);
+        batch.set(delDocRef, { deletedAt: Date.now() }, { merge: true });
+      }
+      await batch.commit();
+      return true;
+    } catch (err) {
+      console.error("Firestore deleteAllAnnouncementsForUser failed:", err);
       return false;
     }
   }

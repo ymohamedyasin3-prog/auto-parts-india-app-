@@ -7,6 +7,7 @@ export interface User {
   photoURL?: string;
   profileImageUrl?: string | null;
   profilePhoto?: string;
+  customPhoto?: string;
   photoDeleted?: boolean;
   phone?: string;
   state?: string;

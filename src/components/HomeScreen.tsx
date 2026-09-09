@@ -1270,7 +1270,7 @@ export default function HomeScreen({
                   id={`brand-chip-${b.replace(/\s+/g, '-').toLowerCase()}`}
                 >
                   <BrandLogo brand={b} size={22} />
-                  <span>{b}</span>
+                  <span className="font-bold tracking-tight text-slate-900">{b}</span>
                 </button>
               );
             })

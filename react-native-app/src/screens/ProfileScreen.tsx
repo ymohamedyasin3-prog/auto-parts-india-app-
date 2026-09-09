@@ -18,6 +18,8 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
 
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [isPopupModalVisible, setIsPopupModalVisible] = useState(false);
+  const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editLocation, setEditLocation] = useState('');
@@ -172,54 +174,75 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
       } else {
         selectedUri = await promptImageSourceDialog(
           'Profile Picture',
-          'Choose Camera or Gallery to set your profile photo'
+          'Choose Camera or Gallery to select your profile photo'
         );
       }
 
       if (selectedUri) {
-        setUploadingPhoto(true);
-        // Instant optimistic update
-        setDisplayPhotoUrl(selectedUri);
-        setEditPhoto(selectedUri);
-
-        const cloudinaryUrl = await uploadImageToCloudinary(selectedUri, 'profile_photos');
-        const finalUrl = cloudinaryUrl || selectedUri;
-
-        setDisplayPhotoUrl(finalUrl);
-        setEditPhoto(finalUrl);
-
-        const currentUid = activeUid || getCurrentUser()?.uid;
-        if (currentUid) {
-          const db = getFirebaseFirestore();
-          if (db && typeof db.collection === 'function') {
-            await db.collection('users').doc(currentUid).set({
-              photoURL: finalUrl,
-              profilePhoto: finalUrl,
-              customPhoto: finalUrl,
-              updatedAt: Date.now(),
-            }, { merge: true });
-          }
-
-          const authUser = getCurrentUser();
-          if (authUser) {
-            if (typeof authUser.updateProfile === 'function') {
-              await authUser.updateProfile({ photoURL: finalUrl });
-            }
-            await setCurrentAuthUser({
-              ...authUser,
-              photoURL: finalUrl,
-              profilePhoto: finalUrl,
-            });
-          }
-
-          // Cascade update all listings and chats for currentUid
-          await syncUserPhotoAcrossListingsAndChats(currentUid, finalUrl);
-        }
-
-        Alert.alert('Success', 'Profile picture updated successfully!');
+        // Open Preview Modal with Done Button
+        setPendingPhotoUri(selectedUri);
+        setIsPreviewModalOpen(true);
       }
     } catch (err: any) {
       console.warn('Profile photo pick error:', err);
+      Alert.alert('Error', err.message || 'Failed to select image.');
+    }
+  };
+
+  const handleConfirmUploadPhoto = async () => {
+    if (!pendingPhotoUri) return;
+    try {
+      setUploadingPhoto(true);
+      const selectedUri = pendingPhotoUri;
+
+      // Optimistic instant UI update
+      setDisplayPhotoUrl(selectedUri);
+      setEditPhoto(selectedUri);
+
+      const cloudinaryUrl = await uploadImageToCloudinary(selectedUri, 'profile_photos');
+      const finalUrl = cloudinaryUrl || selectedUri;
+
+      setDisplayPhotoUrl(finalUrl);
+      setEditPhoto(finalUrl);
+
+      const currentUid = activeUid || getCurrentUser()?.uid;
+      if (currentUid) {
+        const db = getFirebaseFirestore();
+        if (db && typeof db.collection === 'function') {
+          await db.collection('users').doc(currentUid).set({
+            photoURL: finalUrl,
+            profilePhoto: finalUrl,
+            profileImageUrl: finalUrl,
+            customPhoto: finalUrl,
+            photoDeleted: false,
+            updatedAt: Date.now(),
+          }, { merge: true });
+        }
+
+        const authUser = getCurrentUser();
+        if (authUser) {
+          if (typeof authUser.updateProfile === 'function') {
+            await authUser.updateProfile({ photoURL: finalUrl });
+          }
+          await setCurrentAuthUser({
+            ...authUser,
+            photoURL: finalUrl,
+            profilePhoto: finalUrl,
+            profileImageUrl: finalUrl,
+            customPhoto: finalUrl,
+            photoDeleted: false,
+          });
+        }
+
+        // Cascade update all listings and chats for currentUid
+        await syncUserPhotoAcrossListingsAndChats(currentUid, finalUrl);
+      }
+
+      setIsPreviewModalOpen(false);
+      setPendingPhotoUri(null);
+      Alert.alert('Success', 'Profile picture updated successfully!');
+    } catch (err: any) {
+      console.warn('Profile photo upload error:', err);
       Alert.alert('Error', err.message || 'Failed to update profile photo.');
     } finally {
       setUploadingPhoto(false);
@@ -245,6 +268,9 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
         if (editPhoto.trim()) {
           payload.photoURL = editPhoto.trim();
           payload.profilePhoto = editPhoto.trim();
+          payload.profileImageUrl = editPhoto.trim();
+          payload.customPhoto = editPhoto.trim();
+          payload.photoDeleted = false;
           setDisplayPhotoUrl(editPhoto.trim());
         }
 
@@ -261,7 +287,13 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
           await setCurrentAuthUser({
             ...authUser,
             displayName: editName.trim(),
-            ...(editPhoto.trim() ? { photoURL: editPhoto.trim(), profilePhoto: editPhoto.trim() } : {}),
+            ...(editPhoto.trim() ? { 
+              photoURL: editPhoto.trim(), 
+              profilePhoto: editPhoto.trim(),
+              profileImageUrl: editPhoto.trim(),
+              customPhoto: editPhoto.trim(),
+              photoDeleted: false
+            } : {}),
           });
           setDisplayName(editName.trim());
         }
@@ -534,6 +566,84 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
         </View>
       </Modal>
 
+      {/* Profile Photo Preview & Done Confirmation Modal */}
+      <Modal
+        visible={isPreviewModalOpen}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          if (!uploadingPhoto) {
+            setIsPreviewModalOpen(false);
+            setPendingPhotoUri(null);
+          }
+        }}
+      >
+        <View style={styles.previewModalBackdrop}>
+          <View style={styles.previewModalCard}>
+            <View style={styles.previewModalHeader}>
+              <Text style={styles.previewModalTitle}>Profile Picture</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  if (!uploadingPhoto) {
+                    setIsPreviewModalOpen(false);
+                    setPendingPhotoUri(null);
+                  }
+                }}
+                disabled={uploadingPhoto}
+                style={styles.previewCloseBtn}
+              >
+                <Icon source="close" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.previewModalSubtitle}>
+              Check preview below. Tap Done to save your profile picture.
+            </Text>
+
+            {/* Circular Preview Container */}
+            <View style={styles.previewCircleOuterRing}>
+              <View style={styles.previewCircleContainer}>
+                {pendingPhotoUri ? (
+                  <Image source={{ uri: pendingPhotoUri }} style={styles.previewCircleImage} resizeMode="cover" />
+                ) : (
+                  <Icon source="account" size={80} color="#94A3B8" />
+                )}
+              </View>
+            </View>
+
+            {/* Action Buttons Row */}
+            <View style={styles.previewActionsContainer}>
+              <TouchableOpacity
+                style={styles.previewChangeBtn}
+                onPress={() => handlePickProfilePhoto()}
+                disabled={uploadingPhoto}
+              >
+                <Icon source="image-edit-outline" size={18} color="#475569" />
+                <Text style={styles.previewChangeBtnText}>Change</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.previewDoneBtn, uploadingPhoto && styles.previewDoneBtnDisabled]}
+                onPress={handleConfirmUploadPhoto}
+                disabled={uploadingPhoto}
+              >
+                {uploadingPhoto ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <Text style={styles.previewDoneBtnText}>Saving...</Text>
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Icon source="check" size={18} color="#FFFFFF" />
+                    <Text style={styles.previewDoneBtnText}>Done</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -630,4 +740,20 @@ const styles = StyleSheet.create({
   saveModalBtn: { backgroundColor: '#0066FF', paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 24 },
   saveModalBtnDisabled: { backgroundColor: '#94A3B8' },
   saveModalBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+
+  previewModalBackdrop: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  previewModalCard: { width: '100%', maxWidth: 360, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 15 },
+  previewModalHeader: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  previewModalTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
+  previewCloseBtn: { padding: 4 },
+  previewModalSubtitle: { fontSize: 13, color: '#64748B', textAlign: 'center', marginBottom: 20, lineHeight: 18 },
+  previewCircleOuterRing: { width: 170, height: 170, borderRadius: 85, borderWidth: 3, borderColor: '#0066FF', padding: 4, justifyContent: 'center', alignItems: 'center', marginBottom: 24, backgroundColor: '#EFF6FF' },
+  previewCircleContainer: { width: '100%', height: '100%', borderRadius: 80, overflow: 'hidden', backgroundColor: '#F1F5F9' },
+  previewCircleImage: { width: '100%', height: '100%' },
+  previewActionsContainer: { width: '100%', flexDirection: 'row', gap: 10 },
+  previewChangeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#F1F5F9', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+  previewChangeBtnText: { fontSize: 13, fontWeight: '700', color: '#334155' },
+  previewDoneBtn: { flex: 1.2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#0066FF', paddingVertical: 12, borderRadius: 12 },
+  previewDoneBtnDisabled: { backgroundColor: '#94A3B8' },
+  previewDoneBtnText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
 });

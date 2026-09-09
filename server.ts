@@ -27,6 +27,17 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
+  // CORS middleware to allow requests from React Native mobile app and web clients
+  app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // JSON parsing middleware with custom limits for large payloads (e.g. base64 images if needed)
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -226,7 +237,7 @@ VERIFICATION & CLASSIFICATION RULES:
      ["Body & Exterior", "Engine & Mechanical", "Lights & Electricals", "Suspension & Brakes", "Interior & Wheels", "Cooling & AC", "Transmission & Clutch", "Exhaust & Fuel", "Accidental & Scrap Cars", "Full Vehicles / Cars"]
    - "partName": Precise part name or vehicle description (e.g., "Front Bumper Assembly", "LED Headlight Unit", "Alloy Wheel Set", "Clutch Plate", "Side View Mirror", "Radiator", "Brake Caliper", "Total-Loss Accidental Car For Parts").
    - "title": A clear, professional listing title for Indian buyers (e.g. "Maruti Suzuki Swift Front Bumper (OEM)", "Hyundai Creta Left Headlight Assembly", "Tata Nexon Front End Accidental - All Spares Available").
-   - "condition": One of ["Brand New", "Like New", "Used (Good)", "Refurbished", "For Scrap/Spares"].
+   - "condition": One of ["New", "Used"].
    - "description": A concise, 2-3 sentence realistic seller description highlighting genuine fitment, condition, and compatibility for Indian car owners.
 4. CRITICAL: DO NOT return, estimate, or fill any price. Price must be decided exclusively by the seller.
 

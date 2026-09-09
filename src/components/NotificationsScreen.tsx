@@ -10,10 +10,16 @@ import {
   Clock, 
   Check, 
   ShieldCheck, 
-  AlertCircle 
+  AlertCircle,
+  Trash2
 } from "lucide-react";
 import { Announcement, User } from "../types";
-import { markAnnouncementAsRead, markAllAnnouncementsAsRead } from "../lib/firebase";
+import { 
+  markAnnouncementAsRead, 
+  markAllAnnouncementsAsRead, 
+  deleteAnnouncementForUser, 
+  deleteAllAnnouncementsForUser 
+} from "../lib/firebase";
 
 interface NotificationsScreenProps {
   announcements: Announcement[];
@@ -29,8 +35,10 @@ export default function NotificationsScreen({
   onBack
 }: NotificationsScreenProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
 
-  const unreadList = announcements.filter((a) => !a.isRead);
+  const visibleAnnouncements = announcements.filter((a) => !deletedIds.has(a.id));
+  const unreadList = visibleAnnouncements.filter((a) => !a.isRead);
   const unreadCount = unreadList.length;
 
   const handleRefresh = () => {
@@ -48,6 +56,23 @@ export default function NotificationsScreen({
     const unreadIds = unreadList.map((a) => a.id);
     if (unreadIds.length > 0) {
       await markAllAnnouncementsAsRead(currentUser?.id || null, unreadIds);
+    }
+  };
+
+  const handleDeleteOne = async (e: React.MouseEvent, annId: string) => {
+    e.stopPropagation();
+    if (window.confirm("Are you sure you want to remove this notification?")) {
+      setDeletedIds((prev) => new Set([...prev, annId]));
+      await deleteAnnouncementForUser(currentUser?.id || null, annId);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (visibleAnnouncements.length === 0) return;
+    if (window.confirm(`Are you sure you want to clear all ${visibleAnnouncements.length} notifications?`)) {
+      const allIds = visibleAnnouncements.map((a) => a.id);
+      setDeletedIds((prev) => new Set([...prev, ...allIds]));
+      await deleteAllAnnouncementsForUser(currentUser?.id || null, allIds);
     }
   };
 
@@ -117,6 +142,18 @@ export default function NotificationsScreen({
               </button>
             )}
 
+            {visibleAnnouncements.length > 0 && (
+              <button
+                onClick={handleClearAll}
+                className="flex flex-row items-center gap-1.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+                id="clear-all-notifs-btn"
+                title="Clear all notifications"
+              >
+                <Trash2 size={13} className="text-rose-400" />
+                <span className="text-xs font-semibold text-rose-400">Clear all</span>
+              </button>
+            )}
+
             <button
               onClick={handleRefresh}
               disabled={isRefreshing}
@@ -160,7 +197,7 @@ export default function NotificationsScreen({
               </div>
             ))}
           </div>
-        ) : announcements.length === 0 ? (
+        ) : visibleAnnouncements.length === 0 ? (
           /* Empty State */
           <div
             className="bg-white rounded-2xl border border-slate-100 shadow-2xs p-8 text-center flex flex-col items-center justify-center my-8 space-y-3"
@@ -169,15 +206,15 @@ export default function NotificationsScreen({
             <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-1">
               <BellOff size={28} className="text-slate-400" />
             </div>
-            <h3 className="text-base font-bold text-slate-800">No Notifications Yet</h3>
+            <h3 className="text-base font-bold text-slate-800">No Notifications</h3>
             <p className="text-xs text-slate-500 text-center max-w-sm">
-              When Super Admin sends system broadcasts or news announcements, they will appear here automatically in real time.
+              All notifications have been cleared or you have no new updates right now.
             </p>
           </div>
         ) : (
           /* Notifications List */
           <div className="space-y-3">
-            {announcements.map((ann) => {
+            {visibleAnnouncements.map((ann) => {
               const isUnread = !ann.isRead;
               return (
                 <div
@@ -215,9 +252,19 @@ export default function NotificationsScreen({
                             </span>
                           )}
                         </div>
-                        <span className="text-[11px] font-medium text-slate-400 shrink-0">
-                          {formatRelativeTime(ann.createdAt)}
-                        </span>
+                        <div className="flex flex-row items-center gap-2 shrink-0">
+                          <span className="text-[11px] font-medium text-slate-400">
+                            {formatRelativeTime(ann.createdAt)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteOne(e, ann.id)}
+                            className="p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                            title="Delete this notification"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
 
                       <p className={`text-xs mt-1.5 leading-relaxed ${isUnread ? "text-slate-800 font-medium" : "text-slate-600"}`}>

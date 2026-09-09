@@ -422,11 +422,19 @@ export default function SearchScreen({ navigation, route, user }: any) {
         transparent={true}
         onRequestClose={() => setIsFilterModalOpen(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsFilterModalOpen(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}
+            onPress={(e) => e.stopPropagation()}
+          >
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Filter Spare Parts</Text>
-              <TouchableOpacity onPress={() => setIsFilterModalOpen(false)}>
+              <TouchableOpacity onPress={() => setIsFilterModalOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Icon source="close" size={24} color="#0F172A" />
               </TouchableOpacity>
             </View>
@@ -492,8 +500,8 @@ export default function SearchScreen({ navigation, route, user }: any) {
                 <Text style={styles.modalApplyText}>Apply Filters ({filteredParts.length})</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );

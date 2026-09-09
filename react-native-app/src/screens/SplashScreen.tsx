@@ -131,8 +131,8 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   brandLogoImage: {
-    width: Math.min(SCREEN_WIDTH * 0.88, 340),
-    height: 150,
+    width: Math.min(SCREEN_WIDTH * 0.72, 260),
+    height: Math.min(SCREEN_WIDTH * 0.72, 260),
   },
   footerBlock: {
     alignItems: 'center',

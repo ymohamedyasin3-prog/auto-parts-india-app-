@@ -1,49 +1,14 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Text, Icon, Switch, Divider } from 'react-native-paper';
 import { useLanguage } from '../context/LanguageContext';
 import { LanguageSelectorModal } from '../components/LanguageSelectorModal';
-import { signOutFromGoogle } from '../services/googleAuth';
-import { getFirebaseAuth } from '../services/firebase';
 
-export default function SettingsScreen({ navigation }: any) {
-  const { t, language } = useLanguage();
+export default function SettingsScreen() {
+  const { language } = useLanguage();
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [locationEnabled, setLocationEnabled] = useState(true);
-
-  const handleSignOut = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout of your account?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOutFromGoogle();
-              const authInst = getFirebaseAuth();
-              if (authInst && typeof authInst.signOut === 'function') {
-                await authInst.signOut();
-              }
-              if (navigation?.reset) {
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'Auth' }],
-                });
-              } else {
-                navigation.navigate('Auth');
-              }
-            } catch (err: any) {
-              Alert.alert('Error', 'Failed to logout.');
-            }
-          },
-        },
-      ]
-    );
-  };
 
   return (
     <View style={styles.container}>
@@ -96,17 +61,6 @@ export default function SettingsScreen({ navigation }: any) {
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>ACCOUNT</Text>
-        <View style={styles.card}>
-          <TouchableOpacity style={styles.listItem} onPress={handleSignOut}>
-            <View style={styles.listIconBox}>
-              <Icon source="logout" size={20} color="#DC2626" />
-            </View>
-            <View style={styles.listTexts}>
-              <Text style={[styles.listTitle, { color: '#DC2626' }]}>Logout</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
 
       {/* Language Modal */}

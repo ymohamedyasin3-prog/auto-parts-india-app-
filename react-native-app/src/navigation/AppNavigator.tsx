@@ -230,6 +230,17 @@ function InAppNotificationBanner() {
             unsub = subscribeToUserUnreadCounts(uid, (counts) => {
               if (counts.latestNotification && counts.latestNotification.id !== lastNotifIdRef.current) {
                 lastNotifIdRef.current = counts.latestNotification.id;
+                
+                // Do not pop banner if user is currently inside this specific chat room
+                try {
+                  if (navigationRef.isReady()) {
+                    const currentRoute = navigationRef.getCurrentRoute();
+                    if (currentRoute?.name === 'ChatRoom' && (currentRoute.params as any)?.chatId === counts.latestNotification.chatId) {
+                      return;
+                    }
+                  }
+                } catch (_) {}
+
                 // Only show if it's within 1 minute
                 const age = Date.now() - (counts.latestNotification.createdAt || 0);
                 if (age < 60000) {
@@ -455,32 +466,36 @@ const bannerStyles = StyleSheet.create({
   bannerCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F1E36',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 12,
-    borderWidth: 1.5,
-    borderColor: '#0066FF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
     shadowRadius: 10,
-    elevation: 12,
+    elevation: 8,
   },
   bannerThumb: {
     width: 44,
     height: 44,
     borderRadius: 10,
     marginRight: 10,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   bannerIconBox: {
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#0066FF',
+    backgroundColor: '#EFF6FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
   },
   bannerInfo: {
     flex: 1,
@@ -491,31 +506,34 @@ const bannerStyles = StyleSheet.create({
     alignItems: 'center',
   },
   bannerSender: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: '800',
     fontSize: 13,
     flex: 1,
   },
   bannerTag: {
-    backgroundColor: '#0066FF',
-    color: '#FFFFFF',
-    fontSize: 9,
+    backgroundColor: '#EFF6FF',
+    color: '#0066FF',
+    fontSize: 10,
     fontWeight: '800',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
     borderRadius: 6,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
   },
   bannerPartTitle: {
-    color: '#38BDF8',
+    color: '#0066FF',
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     marginTop: 1,
   },
   bannerText: {
-    color: '#E2E8F0',
+    color: '#475569',
     fontSize: 12,
     marginTop: 2,
+    fontWeight: '500',
   },
   swipeIndicatorBox: {
     paddingLeft: 6,

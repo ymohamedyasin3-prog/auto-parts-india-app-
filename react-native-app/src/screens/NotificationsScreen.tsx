@@ -17,6 +17,8 @@ import {
   markAllUserNotificationsAsRead,
   deleteNotification,
   deleteAnnouncementForUser,
+  deleteMultipleAnnouncementsForUser,
+  deleteAllPersonalNotifications,
   getLocalReadAnnouncementIds,
   getLocalDeletedAnnouncementIds 
 } from '../services/notifications';
@@ -154,6 +156,38 @@ export default function NotificationsScreen({ navigation }: any) {
         setAnnouncements((prev) => prev.map((a) => ({ ...a, read: true })));
       }
     }
+  };
+
+  const handleDeleteAllNotifications = () => {
+    const isChat = activeTab === 'chats';
+    const count = isChat ? personalNotifs.length : announcements.length;
+    if (count === 0) return;
+
+    Alert.alert(
+      'Clear All Notifications',
+      `Are you sure you want to delete all ${count} ${isChat ? 'chat notifications' : 'broadcasts'}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            if (isChat) {
+              setPersonalNotifs([]);
+              if (currentUid) {
+                await deleteAllPersonalNotifications(currentUid);
+              }
+            } else {
+              const allIds = announcements.map((a) => a.id).filter(Boolean);
+              setAnnouncements([]);
+              if (allIds.length > 0) {
+                await deleteMultipleAnnouncementsForUser(allIds);
+              }
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleDeleteNotification = (item: any) => {
@@ -328,7 +362,7 @@ export default function NotificationsScreen({ navigation }: any) {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0B1220" />
 
-      {/* Header Bar with Tabs and Mark All Read Action */}
+      {/* Header Bar with Tabs and Actions */}
       <View style={styles.topControlBar}>
         <View style={styles.tabPillContainer}>
           <TouchableOpacity
@@ -350,12 +384,25 @@ export default function NotificationsScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        {unreadCurrentTab > 0 && (
-          <TouchableOpacity style={styles.markReadBtn} onPress={handleMarkAllRead}>
-            <Icon source="check-all" size={16} color="#38BDF8" />
-            <Text style={styles.markReadText}>Mark Read</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.headerActionsRight}>
+          {unreadCurrentTab > 0 && (
+            <TouchableOpacity style={styles.markReadBtn} onPress={handleMarkAllRead}>
+              <Icon source="check-all" size={15} color="#38BDF8" />
+              <Text style={styles.markReadText}>Read</Text>
+            </TouchableOpacity>
+          )}
+
+          {currentList.length > 0 && (
+            <TouchableOpacity 
+              style={styles.deleteAllBtn} 
+              onPress={handleDeleteAllNotifications}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon source="trash-can-outline" size={15} color="#EF4444" />
+              <Text style={styles.deleteAllText}>Clear All</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {loading ? (
@@ -434,15 +481,36 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
   },
+  headerActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   markReadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
   },
   markReadText: {
     color: '#38BDF8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  deleteAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+  },
+  deleteAllText: {
+    color: '#EF4444',
     fontSize: 12,
     fontWeight: '700',
   },

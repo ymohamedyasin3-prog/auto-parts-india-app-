@@ -243,6 +243,68 @@ export async function deleteAnnouncementForUser(announcementId: string): Promise
 }
 
 /**
+ * Deletes or dismisses multiple announcements for current user locally and in user preferences
+ */
+export async function deleteMultipleAnnouncementsForUser(announcementIds: string[]): Promise<void> {
+  if (!announcementIds || announcementIds.length === 0) return;
+  try {
+    const existingSet = await getLocalDeletedAnnouncementIds();
+    announcementIds.forEach((id) => {
+      if (id) existingSet.add(id);
+    });
+    await AsyncStorage.setItem(
+      DELETED_ANNOUNCEMENTS_STORAGE_KEY,
+      JSON.stringify(Array.from(existingSet))
+    );
+
+    const user = getCurrentUser();
+    const uid = user?.uid || user?.id;
+    if (uid) {
+      const db = getFirebaseFirestore();
+      if (db && typeof db.collection === 'function') {
+        const promises = announcementIds.map((annId) =>
+          db
+            .collection('users')
+            .doc(uid)
+            .collection('deleted_announcements')
+            .doc(annId)
+            .set({ deletedAt: Date.now() }, { merge: true })
+            .catch(() => {})
+        );
+        await Promise.all(promises);
+      }
+    }
+  } catch (err) {
+    console.warn('[notifications] Error deleting multiple announcements for user:', err);
+  }
+}
+
+/**
+ * Deletes all personal notifications for a recipient from Firestore
+ */
+export async function deleteAllPersonalNotifications(userId: string): Promise<void> {
+  if (!userId) return;
+  try {
+    const db = getFirebaseFirestore();
+    if (db && typeof db.collection === 'function') {
+      const snap = await db
+        .collection('notifications')
+        .where('recipientId', '==', userId)
+        .get();
+
+      if (snap && snap.docs) {
+        const promises = snap.docs.map((docSnap: any) =>
+          docSnap.ref.delete().catch(() => {})
+        );
+        await Promise.all(promises);
+      }
+    }
+  } catch (e) {
+    console.warn('[notifications] Error deleting all personal notifications:', e);
+  }
+}
+
+/**
  * Deletes a personal chat notification from Firestore
  */
 export async function deleteNotification(notificationId: string): Promise<void> {

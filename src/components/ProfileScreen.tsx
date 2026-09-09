@@ -629,14 +629,16 @@ export default function ProfileScreen({
     setIsSavingProfile(true);
     setProfileError(null);
 
+    const effectivePhoto = editPhotoURL || currentUser.photoURL || currentUser.profilePhoto || (currentUser as any).profileImageUrl || "";
     const updatedUser: User = {
       ...currentUser,
       name: editName.trim(),
       displayName: editName.trim(),
-      photoURL: editPhotoURL || "",
-      profilePhoto: editPhotoURL || "",
-      profileImageUrl: editPhotoURL || null,
-      photoDeleted: !editPhotoURL
+      photoURL: effectivePhoto,
+      profilePhoto: effectivePhoto,
+      profileImageUrl: effectivePhoto || null,
+      customPhoto: effectivePhoto,
+      photoDeleted: !effectivePhoto && (currentUser as any).photoDeleted === true
     };
 
     try {

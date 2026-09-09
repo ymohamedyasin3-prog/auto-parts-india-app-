@@ -1166,12 +1166,20 @@ export default function HomeScreen({ navigation, route, user }: any) {
         animationType="slide"
         onRequestClose={() => setShowFilterModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.filterModalContainer}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowFilterModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.filterModalContainer}
+            onPress={(e) => e.stopPropagation()}
+          >
             <View style={styles.modalHeader}>
               <Text variant="titleMedium" style={styles.modalTitle}>Filter Spare Parts</Text>
-              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
-                <Icon source="close" size={24} color="#FFFFFF" />
+              <TouchableOpacity onPress={() => setShowFilterModal(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Icon source="close" size={24} color="#0F172A" />
               </TouchableOpacity>
             </View>
 
@@ -1234,8 +1242,8 @@ export default function HomeScreen({ navigation, route, user }: any) {
                 <Text style={styles.modalApplyText}>Apply Filters</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       {/* Language Selector Modal */}
@@ -1662,29 +1670,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    paddingHorizontal: 15,
+    paddingVertical: 9,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
   },
   brandPillActive: {
     backgroundColor: '#0066FF',
     borderColor: '#0066FF',
+    shadowColor: '#0066FF',
+    shadowOpacity: 0.25,
   },
   brandNameText: {
-    color: '#334155',
-    fontSize: 13,
-    fontWeight: '600',
+    color: '#0F172A',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   brandNameTextActive: {
     color: '#FFFFFF',
-    fontWeight: '800',
+    fontWeight: '900',
   },
   partsCountText: {
     color: '#64748B',

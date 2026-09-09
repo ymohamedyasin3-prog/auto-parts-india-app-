@@ -54,7 +54,6 @@ const YEARS = Array.from({ length: 27 }, (_, i) => String(2026 - i));
 const CONDITION_OPTIONS = [
   { id: 'Used', label: 'Used / OEM', desc: 'Pre-owned genuine or verified spare part' },
   { id: 'Brand New', label: 'Brand New', desc: 'Fresh in box / uninstalled original part' },
-  { id: 'Refurbished', label: 'Refurbished', desc: 'Tested, repaired and restored to working state' },
 ];
 
 export default function EditListingScreen({ navigation, route }: any) {

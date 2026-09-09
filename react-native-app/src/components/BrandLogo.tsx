@@ -220,13 +220,14 @@ export function AutoPartsLogo({
 
 /**
  * Authentic Official OEM Brand Logo Renderer
+ * Only renders Admin uploaded logos; fallback options are removed as requested.
  */
 function renderBrandVector(brandKey: string, size: number, directImage?: string) {
   const s = size;
   const rawKey = (brandKey || "").toLowerCase().trim();
   const cleanKey = rawKey.replace(/[^a-z0-9]/g, '');
 
-  // 1. Direct custom image URL passed via props (Highest priority)
+  // 1. Direct custom image URL passed via props (Admin uploaded)
   if (directImage && directImage.trim().length > 0) {
     return (
       <View style={{ width: s, height: s, alignItems: 'center', justifyContent: 'center' }}>
@@ -251,67 +252,28 @@ function renderBrandVector(brandKey: string, size: number, directImage?: string)
     );
   }
 
-  // 3. Fallback bundled local brand assets
-  let matchedImage = null;
-  for (const key of Object.keys(BRAND_IMAGES)) {
-    if (rawKey.includes(key) || cleanKey.includes(key.replace(/[^a-z0-9]/g, ''))) {
-      matchedImage = BRAND_IMAGES[key];
-      break;
-    }
-  }
-
-  if (matchedImage) {
-    return (
-      <View style={{ width: s, height: s, alignItems: 'center', justifyContent: 'center' }}>
-        <Image 
-          source={matchedImage} 
-          style={{ width: '100%', height: '100%', resizeMode: 'contain' }} 
-        />
-      </View>
-    );
-  }
-
-  // 4. Fallback remote brand URLs
-  let matchedUrl = null;
-  for (const key of Object.keys(BRAND_URLS)) {
-    if (rawKey.includes(key) || cleanKey.includes(key.replace(/[^a-z0-9]/g, ''))) {
-      matchedUrl = BRAND_URLS[key];
-      break;
-    }
-  }
-
-  if (matchedUrl) {
-    return (
-      <View style={{ width: s, height: s, alignItems: 'center', justifyContent: 'center' }}>
-        <Image 
-          source={{ uri: matchedUrl }} 
-          style={{ width: '100%', height: '100%', resizeMode: 'contain' }} 
-        />
-      </View>
-    );
-  }
-
-  let displayName = (brandKey || "CAR").toUpperCase();
-  let code = displayName.length > 4 ? displayName.substring(0, 3) : displayName;
+  let displayName = (brandKey || "CAR").toUpperCase().trim();
+  let code = displayName.length > 3 ? displayName.substring(0, 3) : displayName;
 
   return (
     <View style={{ 
       width: s, 
       height: s, 
-      borderRadius: s * 0.25, 
-      backgroundColor: '#0F172A', 
-      borderWidth: 1.5,
-      borderColor: '#0284C7',
+      borderRadius: Math.round(s * 0.28), 
+      backgroundColor: '#EFF6FF', 
+      borderWidth: 1,
+      borderColor: '#DBEAFE',
       alignItems: 'center', 
       justifyContent: 'center',
       paddingHorizontal: 2
     }}>
-      <Text numberOfLines={1} style={{ fontSize: Math.max(9, s * 0.32), fontWeight: '900', color: '#38BDF8', letterSpacing: 0.5 }}>
+      <Text numberOfLines={1} style={{ fontSize: Math.max(9, Math.round(s * 0.36)), fontWeight: '800', color: '#0066FF', letterSpacing: 0.5 }}>
         {code}
       </Text>
     </View>
   );
 }
+
 
 /**
  * Modern BrandLogo Component
