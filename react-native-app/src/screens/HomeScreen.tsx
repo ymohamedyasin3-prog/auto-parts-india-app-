@@ -54,6 +54,7 @@ import {
   INITIAL_DEFAULT_CATEGORIES, 
   INITIAL_DEFAULT_BRANDS 
 } from '../services/taxonomyDefaults';
+import { ScalePressable, FadeInSlide, FavoriteHeartButton } from '../components/animations';
 
 // City coordinates for real distance calculations
 const CITY_COORDINATES: Record<string, { lat: number; lng: number }> = {
@@ -242,9 +243,8 @@ const PartCard = React.memo(({ item, navigation, cardWidth, isFavorited, toggleF
         marginBottom: 14,
       }}
     >
-      <TouchableOpacity
-        activeOpacity={0.88}
-        delayPressIn={0}
+      <ScalePressable
+        scaleTo={0.96}
         onPress={() => navigation.navigate('ProductDetail', { part: item })}
         style={styles.card}
       >
@@ -276,24 +276,13 @@ const PartCard = React.memo(({ item, navigation, cardWidth, isFavorited, toggleF
             </View>
           )}
 
-          {/* Favorite Simple Heart Icon */}
-          <TouchableOpacity
-            style={styles.favoriteButton}
-            activeOpacity={0.7}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            onPress={(e) => {
-              e?.stopPropagation?.();
-              toggleFavorite(item.id);
-            }}
-          >
-            <View style={styles.favoriteCircle}>
-              <Icon
-                source={activeFavorited ? "heart" : "heart-outline"}
-                size={18}
-                color={activeFavorited ? "#EF4444" : "#334155"}
-              />
-            </View>
-          </TouchableOpacity>
+          {/* Animated Favorite Heart Button */}
+          <FavoriteHeartButton
+            isFavorited={activeFavorited}
+            onPress={() => toggleFavorite(item.id)}
+            containerStyle={styles.favoriteButton}
+            size={18}
+          />
         </View>
 
         {/* Content Box */}
@@ -317,7 +306,7 @@ const PartCard = React.memo(({ item, navigation, cardWidth, isFavorited, toggleF
             </Text>
           </View>
         </View>
-      </TouchableOpacity>
+      </ScalePressable>
     </View>
   );
 });
@@ -1063,63 +1052,69 @@ export default function HomeScreen({ navigation, route, user }: any) {
             </View>
 
             <View style={styles.categoriesGrid}>
-              {displayCategories.slice(0, 8).map((cat: any) => {
+              {displayCategories.slice(0, 8).map((cat: any, idx: number) => {
                 const isSelected = selectedCategory.toLowerCase() === cat.name.toLowerCase();
                 const isMore = cat.id === 'More' || cat.name?.toLowerCase() === 'more';
                 return (
-                  <TouchableOpacity
+                  <FadeInSlide
                     key={cat.id || cat.name}
-                    activeOpacity={0.8}
-                    style={[styles.categoryItem, { width: catCardWidth }]}
-                    onPress={() => {
-                      if (isMore) {
-                        navigation.navigate('AllCategories');
-                      } else {
-                        setSelectedCategory(isSelected ? 'All' : cat.name);
-                      }
-                    }}
+                    delay={idx * 30}
+                    slideDistance={10}
+                    style={{ width: catCardWidth }}
                   >
-                    {/* Top Rounded Card Box - 100% Image Filled */}
-                    <View
-                      style={[
-                        styles.categoryCardBox,
-                        { width: catCardWidth, height: catCardWidth },
-                        isSelected && styles.categoryCardBoxActive,
-                      ]}
+                    <ScalePressable
+                      scaleTo={0.93}
+                      style={[styles.categoryItem, { width: catCardWidth }]}
+                      onPress={() => {
+                        if (isMore) {
+                          navigation.navigate('AllCategories');
+                        } else {
+                          setSelectedCategory(isSelected ? 'All' : cat.name);
+                        }
+                      }}
                     >
-                      {isMore ? (
-                        <View style={[styles.categoryFallbackCenter, { backgroundColor: '#EFF6FF' }]}>
-                          <Icon source="dots-grid" size={Math.round(catCardWidth * 0.45)} color="#0066FF" />
-                        </View>
-                      ) : cat.imageUrl ? (
-                        <Image
-                          source={{ uri: cat.imageUrl }}
-                          style={styles.categoryFullImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.categoryFallbackCenter}>
-                          <Category3DIcon
-                            categoryName={cat.name}
-                            iconUrl={cat.iconUrl}
-                            size={Math.round(catCardWidth * 0.56)}
+                      {/* Top Rounded Card Box - 100% Image Filled */}
+                      <View
+                        style={[
+                          styles.categoryCardBox,
+                          { width: catCardWidth, height: catCardWidth },
+                          isSelected && styles.categoryCardBoxActive,
+                        ]}
+                      >
+                        {isMore ? (
+                          <View style={[styles.categoryFallbackCenter, { backgroundColor: '#EFF6FF' }]}>
+                            <Icon source="dots-grid" size={Math.round(catCardWidth * 0.45)} color="#0066FF" />
+                          </View>
+                        ) : cat.imageUrl ? (
+                          <Image
+                            source={{ uri: cat.imageUrl }}
+                            style={styles.categoryFullImage}
+                            resizeMode="cover"
                           />
-                        </View>
-                      )}
-                    </View>
+                        ) : (
+                          <View style={styles.categoryFallbackCenter}>
+                            <Category3DIcon
+                              categoryName={cat.name}
+                              iconUrl={cat.iconUrl}
+                              size={Math.round(catCardWidth * 0.56)}
+                            />
+                          </View>
+                        )}
+                      </View>
 
-                    {/* Outside Text Label Below Card */}
-                    <Text
-                      style={[
-                        styles.categoryLabel, 
-                        isSelected && styles.categoryLabelActive,
-                        isMore && { color: '#0066FF', fontWeight: '700' }
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {cat.name}
-                    </Text>
-                  </TouchableOpacity>
+                      {/* Outside Text Label Below Card */}
+                      <Text
+                        style={[
+                          styles.categoryLabel, 
+                          isSelected && styles.categoryLabelActive,
+                          isMore && { color: '#0066FF', fontWeight: '700' }
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {cat.name}
+                      </Text>
+                    </ScalePressable>
+                  </FadeInSlide>
                 );
               })}
             </View>
@@ -1143,9 +1138,9 @@ export default function HomeScreen({ navigation, route, user }: any) {
               {displayBrands.map((brand: any) => {
                 const isSelected = selectedBrand.toLowerCase() === brand.name.toLowerCase();
                 return (
-                  <TouchableOpacity
+                  <ScalePressable
                     key={brand.id || brand.name}
-                    activeOpacity={0.8}
+                    scaleTo={0.94}
                     style={[styles.brandPill, isSelected && styles.brandPillActive]}
                     onPress={() => {
                       setSelectedBrand(isSelected ? 'All' : brand.name);
@@ -1155,7 +1150,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
                     <Text style={[styles.brandNameText, isSelected && styles.brandNameTextActive]}>
                       {brand.name}
                     </Text>
-                  </TouchableOpacity>
+                  </ScalePressable>
                 );
               })}
             </ScrollView>

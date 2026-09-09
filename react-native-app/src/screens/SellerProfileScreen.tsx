@@ -1,10 +1,22 @@
-
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, Linking, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Platform, Dimensions, SafeAreaView } from 'react-native';
-import { Text, Surface, Button, Icon, ActivityIndicator as PaperActivityIndicator } from 'react-native-paper';
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  Dimensions,
+  SafeAreaView,
+  Share,
+} from 'react-native';
+import { Text, Icon } from 'react-native-paper';
 import { getFirebaseAuth, getFirebaseFirestore, getCurrentUser, setCurrentAuthUser } from '../services/firebase';
-import ImageView from 'react-native-image-viewing';
 import { UserProfilePopupModal } from '../components/UserProfilePopupModal';
+import { EditProfileModal } from '../components/EditProfileModal';
+import { EmptyListingsIllustration } from '../components/EmptyListingsIllustration';
 import { openNativeCamera, openNativeGallery } from '../services/imagePickerService';
 import { uploadImageToCloudinary } from '../services/cloudinary';
 
@@ -13,18 +25,23 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export default function SellerProfileScreen({ route, navigation }: any) {
   const { seller, sellerId: paramSellerId, sellerName: paramSellerName } = route.params || {};
   const sellerId = seller?.id || paramSellerId;
-  const initialSellerName = seller?.name || paramSellerName || 'Automotive Seller';
+  const initialSellerName = seller?.name || seller?.displayName || paramSellerName || 'Auto Parts India User';
   const initialSellerPhoto = seller?.photoURL || seller?.profilePhoto || null;
   const initialSellerLocation = seller?.location || seller?.district || 'India';
 
   const [sellerName, setSellerName] = useState(initialSellerName);
   const [sellerPhoto, setSellerPhoto] = useState<string | null>(initialSellerPhoto);
+  const [sellerHandle, setSellerHandle] = useState<string>('autouser1');
   const [sellerLocation, setSellerLocation] = useState(initialSellerLocation);
+  const [sellerBio, setSellerBio] = useState<string>('');
+  const [sellerPhone, setSellerPhone] = useState<string>('');
+  const [memberSinceDate, setMemberSinceDate] = useState<string>('Jan 2024');
+  const [loginProvider, setLoginProvider] = useState<'Google' | 'Email' | 'Phone'>('Google');
+
   const [isPhotoViewerOpen, setIsPhotoViewerOpen] = useState(false);
-  const [isProfilePopupOpen, setIsProfilePopupOpen] = useState(false);
+  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
 
   const [activeListings, setActiveListings] = useState<any[]>([]);
-  const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
@@ -32,15 +49,32 @@ export default function SellerProfileScreen({ route, navigation }: any) {
   const [followingCount, setFollowingCount] = useState(0);
 
   const currentUser = getCurrentUser();
-  const isOwnProfile = currentUser?.uid === sellerId;
+  const isOwnProfile = !sellerId || currentUser?.uid === sellerId;
+  const targetUid = sellerId || currentUser?.uid;
+
+  // Format creation timestamp into "Mon Year" (e.g., "Jan 2024")
+  const formatMemberSince = (timestampOrDateString?: any): string => {
+    try {
+      if (!timestampOrDateString) return 'Jan 2024';
+      const date = typeof timestampOrDateString === 'number' 
+        ? new Date(timestampOrDateString) 
+        : new Date(timestampOrDateString);
+      if (isNaN(date.getTime())) return 'Jan 2024';
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${months[date.getMonth()]} ${date.getFullYear()}`;
+    } catch (_) {
+      return 'Jan 2024';
+    }
+  };
 
   useEffect(() => {
-    if (!sellerId) return;
+    if (!targetUid) return;
 
     let isMounted = true;
     let unsubFollowers = () => {};
     let unsubFollowing = () => {};
     let unsubMyFollow = () => {};
+    let unsubUserDoc = () => {};
 
     const fetchSellerData = async () => {
       setLoading(true);
@@ -48,76 +82,97 @@ export default function SellerProfileScreen({ route, navigation }: any) {
         const db = getFirebaseFirestore();
         if (!db || typeof db.collection !== 'function') return;
 
-        // 1. Fetch user doc for up-to-date profile picture & details
+        // 1. Real-time User doc listener
         try {
-          const userDoc = await db.collection('users').doc(sellerId).get();
-          const exists = typeof (userDoc as any).exists === 'function' ? (userDoc as any).exists() : Boolean(userDoc.exists);
-          if (exists && isMounted) {
-            const userData = userDoc.data();
-            if (userData?.photoURL || userData?.profilePhoto) {
-              setSellerPhoto(userData.photoURL || userData.profilePhoto);
+          unsubUserDoc = db.collection('users').doc(targetUid).onSnapshot((userDoc: any) => {
+            const exists = typeof userDoc?.exists === 'function' ? userDoc.exists() : Boolean(userDoc?.exists);
+            if (exists && isMounted) {
+              const userData = typeof userDoc?.data === 'function' ? userDoc.data() : userDoc?.data;
+              if (userData) {
+                const photo = userData.profilePhoto || userData.photoURL || userData.profileImageUrl;
+                if (photo) setSellerPhoto(photo);
+                if (userData.displayName || userData.name) {
+                  setSellerName(userData.displayName || userData.name);
+                }
+                if (userData.location) setSellerLocation(userData.location);
+                if (userData.bio) setSellerBio(userData.bio);
+                if (userData.phone) setSellerPhone(userData.phone);
+
+                // Handle / Username
+                if (userData.username || userData.handle) {
+                  setSellerHandle(userData.username || userData.handle);
+                } else if (userData.email) {
+                  const prefix = userData.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
+                  setSellerHandle(prefix || 'autouser1');
+                } else if (userData.displayName) {
+                  const prefix = userData.displayName.toLowerCase().replace(/[^a-z0-9_]/g, '');
+                  setSellerHandle(prefix || 'autouser1');
+                }
+
+                // Member Since date
+                if (userData.createdAt || userData.memberSince) {
+                  setMemberSinceDate(formatMemberSince(userData.createdAt || userData.memberSince));
+                }
+
+                // Login provider detection
+                if (userData.provider === 'google' || userData.authProvider === 'google.com' || userData.email?.includes('@gmail.com')) {
+                  setLoginProvider('Google');
+                } else if (userData.phone && !userData.email) {
+                  setLoginProvider('Phone');
+                } else {
+                  setLoginProvider('Email');
+                }
+              }
             }
-            if (userData?.displayName || userData?.name) {
-              setSellerName(userData.displayName || userData.name);
-            }
-            if (userData?.location) {
-              setSellerLocation(userData.location);
-            }
-          }
+          }, (err: any) => console.warn('User doc listener error:', err));
         } catch (_) {}
 
         // 2. Fetch seller listings
-        const q = db.collection('spareParts').where('sellerId', '==', sellerId);
+        const q = db.collection('spareParts').where('sellerId', '==', targetUid);
         const listingsSnap = await q.get();
         const items: any[] = [];
-        listingsSnap.forEach((d: any) => {
-          items.push({ id: d.id, ...d.data() });
-        });
-
-        // 3. Fetch reviews
-        const reviewsQ = db.collection('sellerReviews').where('sellerId', '==', sellerId);
-        const reviewsSnap = await reviewsQ.get();
-
-        if (isMounted) {
-          setActiveListings(items.filter((it: any) => !it.sold));
-          const revs: any[] = [];
-          if (reviewsSnap) {
-            reviewsSnap.forEach((d: any) => revs.push({ id: d.id, ...d.data() }));
-          }
-          setReviews(revs);
+        if (listingsSnap) {
+          listingsSnap.forEach((d: any) => {
+            const data = typeof d.data === 'function' ? d.data() : d.data;
+            items.push({ id: d.id, ...data });
+          });
         }
 
-        // 4. Set up real-time listener for Followers count
+        if (isMounted) {
+          setActiveListings(items.filter((it: any) => !it.sold && it.status !== 'removed'));
+        }
+
+        // 3. Set up real-time listener for Followers count
         try {
-          unsubFollowers = db.collection('follows').where('followingId', '==', sellerId).onSnapshot((snap: any) => {
+          unsubFollowers = db.collection('follows').where('followingId', '==', targetUid).onSnapshot((snap: any) => {
             if (isMounted && snap) {
               setFollowersCount(snap.size || 0);
             }
           }, () => {});
         } catch (_) {}
 
-        // 5. Set up real-time listener for Following count
+        // 4. Set up real-time listener for Following count
         try {
-          unsubFollowing = db.collection('follows').where('followerId', '==', sellerId).onSnapshot((snap: any) => {
+          unsubFollowing = db.collection('follows').where('followerId', '==', targetUid).onSnapshot((snap: any) => {
             if (isMounted && snap) {
               setFollowingCount(snap.size || 0);
             }
           }, () => {});
         } catch (_) {}
 
-        // 6. Set up real-time listener for current user's follow status
-        if (currentUser?.uid && currentUser.uid !== sellerId) {
+        // 5. Follow status for visitor
+        if (currentUser?.uid && currentUser.uid !== targetUid) {
           try {
-            unsubMyFollow = db.collection('follows').doc(`${currentUser.uid}_${sellerId}`).onSnapshot((docSnap: any) => {
+            unsubMyFollow = db.collection('follows').doc(`${currentUser.uid}_${targetUid}`).onSnapshot((docSnap: any) => {
               if (isMounted) {
-                const exists = typeof (docSnap as any)?.exists === 'function' ? (docSnap as any).exists() : Boolean(docSnap?.exists);
+                const exists = typeof docSnap?.exists === 'function' ? docSnap.exists() : Boolean(docSnap?.exists);
                 setIsFollowing(Boolean(exists));
               }
             }, () => {});
           } catch (_) {}
         }
       } catch (err) {
-        console.warn('Error fetching seller profile in RN:', err);
+        console.warn('Error fetching seller profile data:', err);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -127,11 +182,23 @@ export default function SellerProfileScreen({ route, navigation }: any) {
 
     return () => {
       isMounted = false;
+      try { unsubUserDoc(); } catch (_) {}
       try { unsubFollowers(); } catch (_) {}
       try { unsubFollowing(); } catch (_) {}
       try { unsubMyFollow(); } catch (_) {}
     };
-  }, [sellerId, currentUser?.uid]);
+  }, [targetUid, currentUser?.uid]);
+
+  const handleShareProfile = async () => {
+    try {
+      await Share.share({
+        title: `${sellerName} - Auto Parts India`,
+        message: `Check out ${sellerName} (@${sellerHandle}) on Auto Parts India Marketplace!\nExplore available genuine spare parts and automotive accessories.`,
+      });
+    } catch (err) {
+      console.warn('Share error:', err);
+    }
+  };
 
   const handleToggleFollow = async () => {
     if (!currentUser) {
@@ -141,11 +208,11 @@ export default function SellerProfileScreen({ route, navigation }: any) {
     if (isOwnProfile) return;
 
     setFollowLoading(true);
-    const followId = `${currentUser.uid}_${sellerId}`;
+    const followId = `${currentUser.uid}_${targetUid}`;
     const previousState = isFollowing;
     const previousFollowersCount = followersCount;
 
-    // Optimistic UI update for snappy and instantaneous feedback
+    // Optimistic UI update
     setIsFollowing(!previousState);
     setFollowersCount(prev => previousState ? Math.max(0, prev - 1) : prev + 1);
 
@@ -158,17 +225,16 @@ export default function SellerProfileScreen({ route, navigation }: any) {
           await db.collection('follows').doc(followId).set({
             id: followId,
             followerId: currentUser.uid,
-            followingId: sellerId,
+            followingId: targetUid,
             followerName: currentUser.displayName || currentUser.email || 'Buyer',
             followerPhoto: currentUser.photoURL || currentUser.profilePhoto || '',
             createdAt: Date.now(),
           }, { merge: true });
 
-          // Notify the seller that someone followed them
           try {
             await db.collection('notifications').doc(`follow_${followId}`).set({
               id: `follow_${followId}`,
-              recipientId: sellerId,
+              recipientId: targetUid,
               senderId: currentUser.uid,
               senderName: currentUser.displayName || currentUser.email || 'A buyer',
               senderPhoto: currentUser.photoURL || currentUser.profilePhoto || '',
@@ -181,100 +247,12 @@ export default function SellerProfileScreen({ route, navigation }: any) {
         }
       }
     } catch (err: any) {
-      console.warn('Follow update sync warning:', err);
-      // Rollback to previous state on failure
+      console.warn('Follow error:', err);
       setIsFollowing(previousState);
       setFollowersCount(previousFollowersCount);
-      Alert.alert('Error', 'Unable to update follow status. Please check your connection.');
+      Alert.alert('Error', 'Unable to update follow status.');
     } finally {
       setFollowLoading(false);
-    }
-  };
-
-  const handleUpdateProfilePhoto = async () => {
-    if (!currentUser || !isOwnProfile) return;
-    Alert.alert(
-      'Update Profile Picture',
-      'Choose source for your new profile picture:',
-      [
-        {
-          text: 'Take Photo (Camera)',
-          onPress: async () => {
-            const uri = await openNativeCamera();
-            if (uri) {
-              await saveNewPhoto(uri);
-            }
-          }
-        },
-        {
-          text: 'Choose from Gallery',
-          onPress: async () => {
-            const uri = await openNativeGallery();
-            if (uri) {
-              await saveNewPhoto(uri);
-            }
-          }
-        },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
-  };
-
-  const saveNewPhoto = async (uri: string) => {
-    try {
-      setSellerPhoto(uri);
-      const cloudinaryUrl = await uploadImageToCloudinary(uri, 'profile_photos');
-      if (cloudinaryUrl) {
-        setSellerPhoto(cloudinaryUrl);
-        const db = getFirebaseFirestore();
-        if (db && currentUser?.uid) {
-          await db.collection('users').doc(currentUser.uid).set({
-            photoURL: cloudinaryUrl,
-            profilePhoto: cloudinaryUrl,
-            updatedAt: Date.now()
-          }, { merge: true });
-
-          // Cascade update all listings posted by this seller
-          try {
-            const partsSnap = await db.collection('spareParts').where('sellerId', '==', currentUser.uid).get();
-            if (partsSnap && !partsSnap.empty) {
-              partsSnap.forEach((docSnap: any) => {
-                docSnap.ref.update({
-                  sellerPhoto: cloudinaryUrl,
-                  sellerPhotoURL: cloudinaryUrl,
-                  sellerAvatar: cloudinaryUrl,
-                }).catch(() => {});
-              });
-            }
-            const sellerChatsSnap = await db.collection('chats').where('sellerId', '==', currentUser.uid).get();
-            if (sellerChatsSnap && !sellerChatsSnap.empty) {
-              sellerChatsSnap.forEach((docSnap: any) => {
-                docSnap.ref.update({ sellerPhoto: cloudinaryUrl }).catch(() => {});
-              });
-            }
-            const buyerChatsSnap = await db.collection('chats').where('buyerId', '==', currentUser.uid).get();
-            if (buyerChatsSnap && !buyerChatsSnap.empty) {
-              buyerChatsSnap.forEach((docSnap: any) => {
-                docSnap.ref.update({ buyerPhoto: cloudinaryUrl }).catch(() => {});
-              });
-            }
-          } catch (_) {}
-        }
-        if (currentUser) {
-          if (typeof currentUser.updateProfile === 'function') {
-            await currentUser.updateProfile({ photoURL: cloudinaryUrl });
-          }
-          await setCurrentAuthUser({
-            ...currentUser,
-            photoURL: cloudinaryUrl,
-            profilePhoto: cloudinaryUrl,
-          });
-        }
-        Alert.alert('Success', 'Profile picture updated successfully!');
-      }
-    } catch (err: any) {
-      console.warn('Failed to save profile photo to Firestore:', err);
-      Alert.alert('Error', 'Failed to upload profile photo.');
     }
   };
 
@@ -288,407 +266,571 @@ export default function SellerProfileScreen({ route, navigation }: any) {
       title: 'Direct Seller Inquiry',
       price: 0,
       imageUrl: '',
-      sellerId: sellerId,
+      sellerId: targetUid,
       sellerName: sellerName,
     };
     navigation.navigate('ChatRoom', { part: samplePart });
   };
 
+  const handleProfilePhotoPress = () => {
+    if (isOwnProfile) {
+      setIsEditProfileModalOpen(true);
+    } else {
+      setIsPhotoViewerOpen(true);
+    }
+  };
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      {/* 1. Compact Header Card */}
-      <Surface style={styles.headerCard} elevation={1}>
-        <View style={styles.profileRow}>
-          {/* Max 64px avatar with social media popup tap capability or native camera/gallery upload if own profile */}
-          <TouchableOpacity 
-            style={styles.avatarWrap} 
-            activeOpacity={0.8}
-            onPress={() => {
-              if (isOwnProfile) {
-                handleUpdateProfilePhoto();
-              } else {
-                setIsProfilePopupOpen(true);
-              }
-            }}
-          >
-            {sellerPhoto ? (
-              <Image source={{ uri: sellerPhoto }} style={styles.avatarImg} />
-            ) : (
-              <View style={styles.avatarFallback}>
-                <Text style={styles.avatarInitials}>
-                  {(sellerName || 'S').slice(0, 2).toUpperCase()}
-                </Text>
-              </View>
-            )}
-            <View style={styles.avatarZoomBadge}>
-              <Icon source={isOwnProfile ? "camera" : "magnify"} size={12} color="#FFFFFF" />
-            </View>
-          </TouchableOpacity>
+    <SafeAreaView style={styles.safeArea}>
+      {/* 1. Top Navigation Bar (Back Arrow on Left, Share Icon on Right) */}
+      <View style={styles.topNavBar}>
+        <TouchableOpacity
+          style={styles.navIconBtn}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+        >
+          <Icon source="arrow-left" size={26} color="#0F172A" />
+        </TouchableOpacity>
 
-          {/* Streamlined single column info */}
-          <View style={styles.infoCol}>
-            <View style={styles.nameRow}>
-              <Text variant="titleMedium" style={styles.sellerName} numberOfLines={1}>
-                {sellerName}
-              </Text>
-              <Icon source="check-circle" size={16} color="#1565FF" />
-            </View>
-            <View style={styles.metaRow}>
-              <Icon source="calendar-outline" size={14} color="#64748B" />
-              <Text style={styles.metaText}>Verified Auto Seller</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* 2. Social Metrics Row: Followers, Following, Active Listings */}
-        <View style={styles.metricsRow}>
-          <View style={styles.metricItem}>
-            <Text style={styles.metricNumber}>{followersCount}</Text>
-            <Text style={styles.metricLabel}>Followers</Text>
-          </View>
-          <View style={styles.metricDivider} />
-          <View style={styles.metricItem}>
-            <Text style={styles.metricNumber}>{followingCount}</Text>
-            <Text style={styles.metricLabel}>Following</Text>
-          </View>
-          <View style={styles.metricDivider} />
-          <View style={styles.metricItem}>
-            <Text style={[styles.metricNumber, { color: '#1565FF' }]}>{activeListings.length}</Text>
-            <Text style={styles.metricLabel}>Active Parts</Text>
-          </View>
-        </View>
-
-        {/* 3. Dynamic Action Buttons Row */}
-        {isOwnProfile ? (
-          <View style={styles.actionRow}>
-            <Button
-              mode="contained"
-              onPress={() => navigation.navigate('SellPart')}
-              buttonColor="#1565FF"
-              textColor="#FFFFFF"
-              style={styles.actionBtn}
-              icon="plus-box-outline"
-              compact
-            >
-              Post New Ad
-            </Button>
-            <Button
-              mode="outlined"
-              onPress={() => navigation.navigate('MyAdsTab')}
-              textColor="#0F172A"
-              style={[styles.actionBtn, { borderColor: '#CBD5E1' }]}
-              icon="format-list-bulleted-square"
-              compact
-            >
-              My Ads
-            </Button>
-          </View>
-        ) : (
-          <View style={styles.actionRow}>
-            <Button
-              mode={isFollowing ? 'outlined' : 'contained'}
-              onPress={handleToggleFollow}
-              loading={followLoading}
-              buttonColor={isFollowing ? undefined : '#1565FF'}
-              textColor={isFollowing ? '#0F172A' : '#FFFFFF'}
-              style={styles.actionBtn}
-              icon={isFollowing ? 'account-check' : 'account-plus'}
-              compact
-            >
-              {isFollowing ? 'Following' : 'Follow'}
-            </Button>
-            <Button
-              mode="contained"
-              onPress={handleStartChat}
-              buttonColor="#0B1220"
-              textColor="#FFFFFF"
-              style={styles.actionBtn}
-              icon="chat"
-              compact
-            >
-              Chat
-            </Button>
-          </View>
-        )}
-      </Surface>
-
-      {/* 4. Active Listings Feed directly under action bar */}
-      <View style={styles.listingsSection}>
-        <Text variant="titleSmall" style={styles.sectionHeading}>
-          ACTIVE LISTINGS ({activeListings.length})
-        </Text>
-
-        {loading ? (
-          <View style={{ padding: 24, alignItems: 'center' }}>
-            <ActivityIndicator size="small" color="#1565FF" />
-          </View>
-        ) : activeListings.length === 0 ? (
-          <Surface style={styles.emptyCard} elevation={0}>
-            <Icon source="package-variant-closed" size={32} color="#94A3B8" />
-            <Text style={styles.emptyTitle}>No active spare parts listed</Text>
-            <Text style={styles.emptySub}>Follow this seller to get notified about future parts.</Text>
-          </Surface>
-        ) : (
-          <View style={styles.grid}>
-            {activeListings.map((part) => (
-              <TouchableOpacity
-                key={part.id}
-                style={styles.partCard}
-                activeOpacity={0.8}
-                onPress={() => navigation.navigate('ProductDetail', { part })}
-              >
-                <Image
-                  source={{ uri: part.imageUrl || part.images?.[0] || part.imageUrls?.[0] || 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&q=80&w=300' }}
-                  style={styles.partImage}
-                  resizeMode="cover"
-                />
-                <View style={styles.partInfo}>
-                  <Text style={styles.partTitle} numberOfLines={2}>{part.title}</Text>
-                  <Text style={styles.partBrand} numberOfLines={1}>{part.carBrand} {part.carModel}</Text>
-                  <Text style={styles.partPrice}>₹{Number(part.price || 0).toLocaleString('en-IN')}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+        <TouchableOpacity
+          style={styles.navIconBtn}
+          onPress={handleShareProfile}
+          activeOpacity={0.7}
+        >
+          <Icon source="share-variant-outline" size={24} color="#0F172A" />
+        </TouchableOpacity>
       </View>
 
-      {/* User Profile Popup Modal showing only photo with tap outside / back button close */}
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* 2. Profile Details Header Block */}
+        <View style={styles.profileHeaderBlock}>
+          {/* Avatar and Name/Handle Row */}
+          <View style={styles.identityRow}>
+            {/* Avatar on Left with Pencil Badge */}
+            <TouchableOpacity
+              style={styles.avatarWrap}
+              onPress={handleProfilePhotoPress}
+              activeOpacity={0.85}
+            >
+              {sellerPhoto ? (
+                <Image source={{ uri: sellerPhoto }} style={styles.avatarImg} />
+              ) : (
+                <View style={styles.avatarBlueCircle}>
+                  <Icon source="account" size={46} color="#FFFFFF" />
+                </View>
+              )}
+
+              {/* Pencil Badge in Circle Overlay */}
+              {isOwnProfile && (
+                <View style={styles.pencilBadge}>
+                  <Icon source="pencil" size={13} color="#FFFFFF" />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Display Name & Handle */}
+            <View style={styles.nameContainer}>
+              <Text style={styles.sellerDisplayName} numberOfLines={2}>
+                {sellerName}
+              </Text>
+              <Text style={styles.sellerHandleText} numberOfLines={1}>
+                @{sellerHandle}
+              </Text>
+            </View>
+          </View>
+
+          {/* Metadata Rows matching screenshot */}
+          <View style={styles.metaListContainer}>
+            {/* Row 1: Member Since */}
+            <View style={styles.metaRow}>
+              <View style={styles.metaIconCol}>
+                <Icon source="calendar-outline" size={22} color="#0F172A" />
+              </View>
+              <View style={styles.metaTextCol}>
+                <Text style={styles.metaTitle}>Member Since</Text>
+                <Text style={styles.metaValue}>{memberSinceDate}</Text>
+              </View>
+            </View>
+
+            {/* Row 2: Followers / Following */}
+            <View style={styles.metaRow}>
+              <View style={styles.metaIconCol}>
+                <Icon source="account-group-outline" size={22} color="#0F172A" />
+              </View>
+              <View style={styles.followersRow}>
+                <Text style={styles.metaFollowText}>{followersCount} Followers</Text>
+                <View style={styles.followDivider} />
+                <Text style={styles.metaFollowText}>{followingCount} Following</Text>
+              </View>
+            </View>
+
+            {/* Row 3: Logged in with */}
+            <View style={styles.metaRow}>
+              <View style={styles.metaTextCol}>
+                <Text style={styles.metaSubLabel}>User logged in with</Text>
+                <View style={styles.providerRow}>
+                  {loginProvider === 'Google' ? (
+                    <View style={styles.googleIconBox}>
+                      <Text style={styles.googleG}>G</Text>
+                    </View>
+                  ) : (
+                    <Icon
+                      source={loginProvider === 'Phone' ? 'phone' : 'email-outline'}
+                      size={18}
+                      color="#1565FF"
+                    />
+                  )}
+                  <Text style={styles.providerText}>{loginProvider}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Action Button: Edit Profile (Own Profile) or Follow / Chat (Visitor) */}
+          {isOwnProfile ? (
+            <TouchableOpacity
+              style={styles.editProfileBtn}
+              onPress={() => setIsEditProfileModalOpen(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.editProfileBtnText}>Edit Profile</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.visitorActionsRow}>
+              <TouchableOpacity
+                style={[styles.visitorBtn, isFollowing ? styles.followingBtn : styles.followBtn]}
+                onPress={handleToggleFollow}
+                disabled={followLoading}
+                activeOpacity={0.85}
+              >
+                {followLoading ? (
+                  <ActivityIndicator size="small" color={isFollowing ? '#0F172A' : '#FFFFFF'} />
+                ) : (
+                  <>
+                    <Icon
+                      source={isFollowing ? 'account-check' : 'account-plus'}
+                      size={18}
+                      color={isFollowing ? '#0F172A' : '#FFFFFF'}
+                    />
+                    <Text style={[styles.visitorBtnText, isFollowing && styles.followingBtnText]}>
+                      {isFollowing ? 'Following' : 'Follow'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.visitorBtn, styles.chatBtn]}
+                onPress={handleStartChat}
+                activeOpacity={0.85}
+              >
+                <Icon source="chat" size={18} color="#FFFFFF" />
+                <Text style={styles.visitorBtnText}>Message</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* 3. Gray Horizontal Divider Bar */}
+        <View style={styles.sectionDividerBar} />
+
+        {/* 4. Active Listings or Empty State */}
+        <View style={styles.listingsSection}>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#1565FF" />
+            </View>
+          ) : activeListings.length === 0 ? (
+            /* Empty State matching Screenshot 1 */
+            <View style={styles.emptyStateCard}>
+              <EmptyListingsIllustration size={170} />
+
+              <Text style={styles.emptyHeadline}>
+                {isOwnProfile ? "You haven't listed anything yet" : 'No spare parts listed yet'}
+              </Text>
+
+              <Text style={styles.emptySubtitle}>
+                Let go of what you don't use anymore
+              </Text>
+
+              {isOwnProfile && (
+                <TouchableOpacity
+                  style={styles.startSellingBtn}
+                  onPress={() => navigation.navigate('SellPart')}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.startSellingBtnText}>Start Selling</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            /* Active Listings Grid */
+            <View style={styles.listingsGrid}>
+              <Text style={styles.listingsHeading}>
+                ACTIVE SPARE PARTS ({activeListings.length})
+              </Text>
+
+              <View style={styles.gridContainer}>
+                {activeListings.map((part) => (
+                  <TouchableOpacity
+                    key={part.id}
+                    style={styles.partCard}
+                    activeOpacity={0.8}
+                    onPress={() => navigation.navigate('ProductDetail', { part })}
+                  >
+                    <Image
+                      source={{
+                        uri:
+                          part.imageUrl ||
+                          part.images?.[0] ||
+                          part.imageUrls?.[0] ||
+                          'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&q=80&w=300',
+                      }}
+                      style={styles.partImage}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.partInfo}>
+                      <Text style={styles.partPrice}>
+                        ₹{Number(part.price || 0).toLocaleString('en-IN')}
+                      </Text>
+                      <Text style={styles.partTitle} numberOfLines={2}>
+                        {part.title}
+                      </Text>
+                      <Text style={styles.partSub} numberOfLines={1}>
+                        {part.carBrand} {part.carModel} • {part.location || 'India'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Profile Photo Viewer Popup */}
       <UserProfilePopupModal
-        visible={isProfilePopupOpen}
-        onDismiss={() => setIsProfilePopupOpen(false)}
+        visible={isPhotoViewerOpen}
+        onDismiss={() => setIsPhotoViewerOpen(false)}
         userPhoto={sellerPhoto}
+        userName={sellerName}
       />
-    </ScrollView>
+
+      {/* Edit Profile Full-Flow Modal */}
+      <EditProfileModal
+        visible={isEditProfileModalOpen}
+        onDismiss={() => setIsEditProfileModalOpen(false)}
+        initialName={sellerName}
+        initialPhoto={sellerPhoto}
+        initialBio={sellerBio}
+        initialPhone={sellerPhone}
+        initialLocation={sellerLocation}
+        onSaveSuccess={(data) => {
+          setSellerName(data.displayName);
+          if (data.photoURL !== undefined) setSellerPhoto(data.photoURL || null);
+          if (data.bio !== undefined) setSellerBio(data.bio);
+          if (data.phone !== undefined) setSellerPhone(data.phone);
+          if (data.location !== undefined) setSellerLocation(data.location);
+        }}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  headerCard: {
-    margin: 12,
-    padding: 14,
-    borderRadius: 14,
     backgroundColor: '#FFFFFF',
   },
-  profileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    position: 'relative',
-    borderWidth: 2,
-    borderColor: '#1565FF',
-    backgroundColor: '#0B1220',
-  },
-  avatarImg: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 30,
-  },
-  avatarFallback: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1E293B',
-  },
-  avatarZoomBadge: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    backgroundColor: '#1565FF',
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  viewerHeader: {
+  topNavBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? 24 : 10,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
   },
-  viewerCloseBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  navIconBtn: {
+    padding: 6,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  scrollContainer: {
+    paddingBottom: 40,
+  },
+  profileHeaderBlock: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 24,
+    backgroundColor: '#FFFFFF',
+  },
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  avatarWrap: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    position: 'relative',
+  },
+  avatarImg: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+  },
+  avatarBlueCircle: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    backgroundColor: '#1565FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  viewerTitleWrap: {
+  pencilBadge: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#004BD6',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  viewerTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  viewerSubTitle: {
-    color: '#94A3B8',
-    fontSize: 12,
-  },
-  avatarInitials: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 18,
-  },
-  infoCol: {
+  nameContainer: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 18,
   },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  sellerName: {
-    fontWeight: 'bold',
+  sellerDisplayName: {
+    fontSize: 20,
+    fontWeight: '700',
     color: '#0F172A',
+    lineHeight: 26,
+  },
+  sellerHandleText: {
+    fontSize: 14,
+    color: '#64748B',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  metaListContainer: {
+    marginTop: 4,
+    marginBottom: 20,
+    gap: 16,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 3,
-    flexWrap: 'wrap',
   },
-  metaText: {
-    fontSize: 11,
-    color: '#64748B',
-    marginLeft: 3,
+  metaIconCol: {
+    width: 32,
+    alignItems: 'flex-start',
   },
-  metaDot: {
-    color: '#CBD5E1',
-    marginHorizontal: 4,
-    fontSize: 10,
-  },
-  metricsRow: {
-    flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 10,
-    paddingVertical: 8,
-    marginTop: 12,
-    alignItems: 'center',
-  },
-  metricItem: {
+  metaTextCol: {
     flex: 1,
-    alignItems: 'center',
   },
-  metricNumber: {
+  metaTitle: {
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: '#0F172A',
   },
-  metricLabel: {
-    fontSize: 9,
-    fontWeight: '600',
+  metaValue: {
+    fontSize: 13,
     color: '#64748B',
-    textTransform: 'uppercase',
     marginTop: 1,
   },
-  metricDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: '#E2E8F0',
-  },
-  actionRow: {
+  followersRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-  },
-  actionBtn: {
-    flex: 1,
-    borderRadius: 8,
-  },
-  listingsSection: {
-    paddingHorizontal: 12,
-  },
-  sectionHeading: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#475569',
-    marginBottom: 8,
-    letterSpacing: 0.5,
-  },
-  emptyCard: {
-    padding: 24,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    flex: 1,
   },
-  emptyTitle: {
+  metaFollowText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#0F172A',
+  },
+  followDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: '#CBD5E1',
+    marginHorizontal: 14,
+  },
+  metaSubLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  providerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  googleIconBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#EA4335',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleG: {
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  providerText: {
+    fontSize: 14,
     color: '#334155',
+    fontWeight: '500',
+  },
+  editProfileBtn: {
+    backgroundColor: '#0055D4',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 8,
   },
-  emptySub: {
-    fontSize: 11,
-    color: '#64748B',
-    textAlign: 'center',
-    marginTop: 4,
+  editProfileBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
-  grid: {
+  visitorActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  visitorBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  followBtn: {
+    backgroundColor: '#0055D4',
+  },
+  followingBtn: {
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  chatBtn: {
+    backgroundColor: '#0F172A',
+  },
+  visitorBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  followingBtnText: {
+    color: '#0F172A',
+  },
+  sectionDividerBar: {
+    height: 8,
+    backgroundColor: '#F1F5F9',
+    width: '100%',
+  },
+  listingsSection: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+  },
+  loadingContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  emptyStateCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+  emptyHeadline: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginTop: 18,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  startSellingBtn: {
+    borderWidth: 1.5,
+    borderColor: '#0055D4',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    marginTop: 20,
+    backgroundColor: '#FFFFFF',
+  },
+  startSellingBtnText: {
+    color: '#0055D4',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  listingsGrid: {
+    width: '100%',
+  },
+  listingsHeading: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 0.5,
+    marginBottom: 16,
+  },
+  gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
   },
   partCard: {
-    width: '48%',
+    width: (SCREEN_WIDTH - 52) / 2,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    overflow: 'hidden',
   },
   partImage: {
     width: '100%',
-    aspectRatio: 1.15,
-    backgroundColor: '#F1F5F9',
+    height: 120,
+    backgroundColor: '#F8FAFC',
   },
   partInfo: {
-    padding: 8,
-  },
-  partTitle: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#0F172A',
-    lineHeight: 15,
-  },
-  partBrand: {
-    fontSize: 10,
-    color: '#64748B',
-    marginTop: 2,
+    padding: 10,
   },
   partPrice: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#1565FF',
-    marginTop: 4,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
   },
-  reviewCard: {
-    backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  partTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+    marginTop: 2,
+    lineHeight: 18,
+  },
+  partSub: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 4,
   },
 });

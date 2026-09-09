@@ -200,7 +200,8 @@ export default function NotificationsScreen({ navigation }: any) {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            if (item.type === 'chat_message' || item.chatId) {
+            // If item belongs to personal notifications tab or is in notifications collection
+            if (activeTab === 'chats' || item.type !== 'announcement') {
               setPersonalNotifs((prev) => prev.filter((n) => n.id !== item.id));
               await deleteNotification(item.id);
             } else {
@@ -243,6 +244,19 @@ export default function NotificationsScreen({ navigation }: any) {
           sellerName: item.sellerName,
         }
       });
+    } else if (item.type === 'new_follower' || item.followerId || (item.senderId && !item.chatId)) {
+      // Mark follow notification as read
+      markNotificationAsRead(item.id);
+      setPersonalNotifs((prev) =>
+        prev.map((n) => (n.id === item.id ? { ...n, read: true } : n))
+      );
+      const targetUserId = item.followerId || item.senderId;
+      if (targetUserId) {
+        navigation.navigate('SellerProfile', {
+          sellerId: targetUserId,
+          sellerName: item.followerName || item.senderName || 'User',
+        });
+      }
     } else {
       // Mark announcement as read on tap
       markAnnouncementsAsRead([item.id]);
@@ -289,6 +303,7 @@ export default function NotificationsScreen({ navigation }: any) {
   }, [activeTab, personalNotifs, announcements]);
 
   const renderItem = ({ item }: { item: any }) => {
+    const isFollow = item.type === 'new_follower' || item.type === 'follow';
     const isChat = item.type === 'chat_message' || Boolean(item.chatId);
     const isUnread = item.read === false;
 
@@ -299,15 +314,34 @@ export default function NotificationsScreen({ navigation }: any) {
       >
         <Surface style={[styles.card, isUnread && styles.cardUnread]} elevation={1}>
           <View style={styles.cardHeader}>
-            {/* Left Icon or Product Thumbnail */}
+            {/* Left Icon or Product Thumbnail or Follower Avatar */}
             {isChat && item.partImageUrl ? (
               <Image source={{ uri: item.partImageUrl }} style={styles.productThumb} />
+            ) : isFollow && (item.senderPhoto || item.followerPhoto) ? (
+              <Image source={{ uri: item.senderPhoto || item.followerPhoto }} style={styles.productThumb} />
             ) : (
-              <View style={[styles.iconBox, { backgroundColor: isChat ? 'rgba(0, 102, 255, 0.12)' : 'rgba(59, 130, 246, 0.12)' }]}>
-                <Icon 
-                  source={isChat ? "comment-text-outline" : "bullhorn-variant-outline"} 
-                  size={20} 
-                  color={isChat ? "#0066FF" : "#38BDF8"} 
+              <View
+                style={[
+                  styles.iconBox,
+                  {
+                    backgroundColor: isFollow
+                      ? 'rgba(16, 185, 129, 0.15)'
+                      : isChat
+                      ? 'rgba(0, 102, 255, 0.12)'
+                      : 'rgba(59, 130, 246, 0.12)',
+                  },
+                ]}
+              >
+                <Icon
+                  source={
+                    isFollow
+                      ? 'account-plus'
+                      : isChat
+                      ? 'comment-text-outline'
+                      : 'bullhorn-variant-outline'
+                  }
+                  size={22}
+                  color={isFollow ? '#10B981' : isChat ? '#0066FF' : '#38BDF8'}
                 />
               </View>
             )}
@@ -315,7 +349,11 @@ export default function NotificationsScreen({ navigation }: any) {
             <View style={styles.headerInfo}>
               <View style={styles.titleRow}>
                 <Text variant="titleSmall" style={[styles.annTitle, isUnread && styles.annTitleBold]} numberOfLines={1}>
-                  {isChat ? (item.senderName || 'New Inquiry') : (item.title || 'Platform Announcement')}
+                  {isFollow
+                    ? item.senderName || item.followerName || 'New Follower'
+                    : isChat
+                    ? item.senderName || 'New Inquiry'
+                    : item.title || 'Platform Announcement'}
                 </Text>
                 <View style={styles.timeBadgeContainer}>
                   {isUnread && <View style={styles.unreadDot} />}
@@ -332,7 +370,11 @@ export default function NotificationsScreen({ navigation }: any) {
                 </View>
               </View>
 
-              {isChat && item.partTitle ? (
+              {isFollow ? (
+                <Text style={styles.followerSubText} numberOfLines={1}>
+                  ✨ Started following you
+                </Text>
+              ) : isChat && item.partTitle ? (
                 <Text style={styles.partTitleSub} numberOfLines={1}>
                   🚗 {item.partTitle} {item.partPrice ? `(₹${Number(item.partPrice).toLocaleString('en-IN')})` : ''}
                 </Text>
@@ -348,11 +390,15 @@ export default function NotificationsScreen({ navigation }: any) {
             {item.text || item.message || ''}
           </Text>
 
-          {isChat && (
+          {isFollow ? (
+            <View style={styles.chatActionRow}>
+              <Text style={styles.tapToFollowProfileText}>Tap to view profile →</Text>
+            </View>
+          ) : isChat ? (
             <View style={styles.chatActionRow}>
               <Text style={styles.tapToReplyText}>Tap to open conversation →</Text>
             </View>
-          )}
+          ) : null}
         </Surface>
       </TouchableOpacity>
     );
@@ -597,6 +643,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 2,
   },
+  followerSubText: {
+    color: '#10B981',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
   authorText: {
     color: '#94A3B8',
     fontSize: 11,
@@ -619,6 +671,11 @@ const styles = StyleSheet.create({
   },
   tapToReplyText: {
     color: '#0066FF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  tapToFollowProfileText: {
+    color: '#10B981',
     fontSize: 12,
     fontWeight: '700',
   },

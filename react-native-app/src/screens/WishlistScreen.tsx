@@ -3,6 +3,7 @@ import { View, FlatList, StyleSheet, Image, TouchableOpacity, ActivityIndicator 
 import { Text, Icon } from 'react-native-paper';
 import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
 import useFavorites from '../services/favorites';
+import { ScalePressable } from '../components/animations';
 
 export default function WishlistScreen({ navigation }: any) {
   const { favorites, toggleFavorite } = useFavorites();
@@ -73,10 +74,10 @@ export default function WishlistScreen({ navigation }: any) {
           </View>
         }
         renderItem={({ item }) => (
-          <TouchableOpacity 
+          <ScalePressable 
             style={styles.adCard}
+            scaleTo={0.97}
             onPress={() => navigation.navigate('ProductDetail', { part: item, partId: item.id })}
-            activeOpacity={0.9}
           >
             <View style={styles.cardHeaderArea}>
               <View style={styles.imageWrapper}>
@@ -126,7 +127,7 @@ export default function WishlistScreen({ navigation }: any) {
                 <Text style={[styles.actionBtnOutlineText, { color: '#DC2626' }]}>Remove</Text>
               </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+          </ScalePressable>
         )}
       />
     </View>

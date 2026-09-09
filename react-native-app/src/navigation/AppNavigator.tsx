@@ -38,6 +38,7 @@ import HelpSupportScreen from '../screens/HelpSupportScreen';
 import LocationSelectScreen from '../screens/LocationSelectScreen';
 import EditListingScreen from '../screens/EditListingScreen';
 import { navigationRef, navigate } from './navigationRef';
+import { ScalePressable } from '../components/animations';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -45,8 +46,8 @@ const Tab = createBottomTabNavigator();
 function CustomSellTabBarButton({ onPress, accessibilityState }: any) {
   const focused = accessibilityState?.selected;
   return (
-    <TouchableOpacity
-      activeOpacity={0.85}
+    <ScalePressable
+      scaleTo={0.92}
       onPress={onPress}
       style={tabStyles.customSellButtonTouch}
     >
@@ -56,7 +57,7 @@ function CustomSellTabBarButton({ onPress, accessibilityState }: any) {
       <Text style={tabStyles.sellButtonLabel}>
         SELL
       </Text>
-    </TouchableOpacity>
+    </ScalePressable>
   );
 }
 

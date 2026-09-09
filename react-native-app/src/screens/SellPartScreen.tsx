@@ -798,16 +798,22 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
       // 2. Fallback to server endpoints if direct device call did not yield data
       if (!data) {
         const endpoints: string[] = [];
+        
+        // Relative API route (primary for web & browser previews)
+        endpoints.push('/api/ai/autofill-listing');
+
         if (typeof window !== 'undefined' && window.location?.origin) {
-          endpoints.push(`${window.location.origin}/api/ai/autofill-listing`);
+          const winOrigin = window.location.origin;
+          if (!endpoints.includes(`${winOrigin}/api/ai/autofill-listing`)) {
+            endpoints.push(`${winOrigin}/api/ai/autofill-listing`);
+          }
         }
         endpoints.push('https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing');
-        endpoints.push('https://ais-pre-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing');
 
         for (const endpoint of endpoints) {
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 25000);
+            const timeoutId = setTimeout(() => controller.abort(), 12000);
 
             const candidateRes = await fetch(endpoint, {
               method: 'POST',
@@ -831,7 +837,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
               resJson = await candidateRes.json();
             } catch (_) {}
 
-            if (candidateRes.ok && resJson) {
+            if (candidateRes.ok && resJson && resJson.success) {
               data = resJson;
               break;
             } else if (resJson && resJson.isAutomotive === false) {
@@ -843,14 +849,14 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
             } else {
               lastFetchErr = new Error(`Server returned HTTP ${candidateRes.status}`);
             }
-          } catch (err) {
+          } catch (err: any) {
             lastFetchErr = err;
           }
         }
       }
 
       if (!data) {
-        throw new Error(lastFetchErr?.message || 'Unable to connect to AI server');
+        throw new Error(lastFetchErr?.message || 'Unable to analyze image with AI. Please enter details manually.');
       }
 
       if (data && data.success && data.data) {
