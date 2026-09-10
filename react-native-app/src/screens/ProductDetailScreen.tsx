@@ -182,7 +182,7 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
         let partsList: any[] = [];
 
         if (db && typeof db.collection === 'function') {
-          const snap = await db.collection('spareParts').get();
+          const snap = await db.collection('spareParts').limit(25).get();
           if (snap && !snap.empty) {
             snap.forEach((doc: any) => {
               partsList.push({ id: doc.id, ...doc.data() });

@@ -3,36 +3,97 @@ import { getFirebaseFirestore, getCurrentUser } from './firebase';
 
 const READ_ANNOUNCEMENTS_STORAGE_KEY = '@autoparts_read_announcements';
 const HIDDEN_CHATS_STORAGE_KEY = '@autoparts_hidden_chats';
+const DELETED_ANNOUNCEMENTS_STORAGE_KEY = '@autoparts_deleted_announcements';
+const DELETED_NOTIFICATIONS_STORAGE_KEY = '@autoparts_deleted_notifications';
+
+// In-Memory fast synchronous caches
+let memoryHiddenChats: Set<string> | null = null;
+let memoryReadAnnouncements: Set<string> | null = null;
+let memoryDeletedNotifications: Set<string> | null = null;
+let memoryDeletedAnnouncements: Set<string> | null = null;
+
+/**
+ * Gets all hidden chat IDs with fast synchronous memory cache
+ */
+export function getSyncLocalHiddenChatIds(): Set<string> {
+  if (memoryHiddenChats) return memoryHiddenChats;
+  memoryHiddenChats = new Set<string>();
+  AsyncStorage.getItem(HIDDEN_CHATS_STORAGE_KEY).then((raw) => {
+    if (raw) {
+      try {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) memoryHiddenChats = new Set<string>(arr);
+      } catch (_) {}
+    }
+  }).catch(() => {});
+  return memoryHiddenChats;
+}
 
 export async function getLocalHiddenChatIds(): Promise<Set<string>> {
-  try {
-    const raw = await AsyncStorage.getItem(HIDDEN_CHATS_STORAGE_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        return new Set<string>(arr);
-      }
-    }
-  } catch (_) {}
-  return new Set<string>();
+  return getSyncLocalHiddenChatIds();
 }
 
 /**
  * Gets all announcement IDs that have been read by the current device/user
  */
-export async function getLocalReadAnnouncementIds(): Promise<Set<string>> {
-  try {
-    const raw = await AsyncStorage.getItem(READ_ANNOUNCEMENTS_STORAGE_KEY);
+export function getSyncLocalReadAnnouncementIds(): Set<string> {
+  if (memoryReadAnnouncements) return memoryReadAnnouncements;
+  memoryReadAnnouncements = new Set<string>();
+  AsyncStorage.getItem(READ_ANNOUNCEMENTS_STORAGE_KEY).then((raw) => {
     if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        return new Set<string>(arr);
-      }
+      try {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) memoryReadAnnouncements = new Set<string>(arr);
+      } catch (_) {}
     }
-  } catch (err) {
-    console.warn('[notifications] Error reading local read announcements:', err);
-  }
-  return new Set<string>();
+  }).catch(() => {});
+  return memoryReadAnnouncements;
+}
+
+export async function getLocalReadAnnouncementIds(): Promise<Set<string>> {
+  return getSyncLocalReadAnnouncementIds();
+}
+
+/**
+ * Gets all personal notification IDs that have been deleted
+ */
+export function getSyncLocalDeletedNotificationIds(): Set<string> {
+  if (memoryDeletedNotifications) return memoryDeletedNotifications;
+  memoryDeletedNotifications = new Set<string>();
+  AsyncStorage.getItem(DELETED_NOTIFICATIONS_STORAGE_KEY).then((raw) => {
+    if (raw) {
+      try {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) memoryDeletedNotifications = new Set<string>(arr);
+      } catch (_) {}
+    }
+  }).catch(() => {});
+  return memoryDeletedNotifications;
+}
+
+export async function getLocalDeletedNotificationIds(): Promise<Set<string>> {
+  return getSyncLocalDeletedNotificationIds();
+}
+
+/**
+ * Gets all announcement IDs that have been dismissed/deleted
+ */
+export function getSyncLocalDeletedAnnouncementIds(): Set<string> {
+  if (memoryDeletedAnnouncements) return memoryDeletedAnnouncements;
+  memoryDeletedAnnouncements = new Set<string>();
+  AsyncStorage.getItem(DELETED_ANNOUNCEMENTS_STORAGE_KEY).then((raw) => {
+    if (raw) {
+      try {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) memoryDeletedAnnouncements = new Set<string>(arr);
+      } catch (_) {}
+    }
+  }).catch(() => {});
+  return memoryDeletedAnnouncements;
+}
+
+export async function getLocalDeletedAnnouncementIds(): Promise<Set<string>> {
+  return getSyncLocalDeletedAnnouncementIds();
 }
 
 /**
@@ -41,14 +102,14 @@ export async function getLocalReadAnnouncementIds(): Promise<Set<string>> {
 export async function markAnnouncementsAsRead(announcementIds: string[]): Promise<void> {
   if (!announcementIds || announcementIds.length === 0) return;
   try {
-    const existingSet = await getLocalReadAnnouncementIds();
+    const existingSet = getSyncLocalReadAnnouncementIds();
     announcementIds.forEach((id) => {
       if (id) existingSet.add(id);
     });
-    await AsyncStorage.setItem(
+    AsyncStorage.setItem(
       READ_ANNOUNCEMENTS_STORAGE_KEY,
       JSON.stringify(Array.from(existingSet))
-    );
+    ).catch(() => {});
 
     // Sync to user document in Firestore if logged in
     const user = getCurrentUser();
@@ -189,9 +250,9 @@ export async function getLocalDeletedNotificationIds(): Promise<Set<string>> {
 export async function addLocalDeletedNotificationId(id: string): Promise<void> {
   if (!id) return;
   try {
-    const set = await getLocalDeletedNotificationIds();
+    const set = getSyncLocalDeletedNotificationIds();
     set.add(id);
-    await AsyncStorage.setItem(DELETED_NOTIFICATIONS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+    AsyncStorage.setItem(DELETED_NOTIFICATIONS_STORAGE_KEY, JSON.stringify(Array.from(set))).catch(() => {});
   } catch (err) {
     console.warn('[notifications] Error saving local deleted notification:', err);
   }
@@ -203,9 +264,9 @@ export async function addLocalDeletedNotificationId(id: string): Promise<void> {
 export async function addLocalDeletedNotificationIds(ids: string[]): Promise<void> {
   if (!ids || ids.length === 0) return;
   try {
-    const set = await getLocalDeletedNotificationIds();
+    const set = getSyncLocalDeletedNotificationIds();
     ids.forEach((id) => { if (id) set.add(id); });
-    await AsyncStorage.setItem(DELETED_NOTIFICATIONS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+    AsyncStorage.setItem(DELETED_NOTIFICATIONS_STORAGE_KEY, JSON.stringify(Array.from(set))).catch(() => {});
   } catch (err) {
     console.warn('[notifications] Error saving local deleted notifications:', err);
   }
@@ -589,11 +650,11 @@ export function subscribeToUserUnreadCounts(
       .where('recipientId', '==', userId)
       .where('read', '==', false)
       .onSnapshot(
-        async (snapshot: any) => {
+        (snapshot: any) => {
           let count = 0;
           let newest: any = null;
           try {
-            const deletedNotifSet = await getLocalDeletedNotificationIds();
+            const deletedNotifSet = getSyncLocalDeletedNotificationIds();
             if (snapshot && typeof snapshot.forEach === 'function') {
               snapshot.forEach((doc: any) => {
                 const docId = doc.id;
@@ -622,10 +683,10 @@ export function subscribeToUserUnreadCounts(
       .collection('announcements')
       .limit(20)
       .onSnapshot(
-        async (snapshot: any) => {
+        (snapshot: any) => {
           try {
-            const readSet = await getLocalReadAnnouncementIds();
-            const deletedSet = await getLocalDeletedAnnouncementIds();
+            const readSet = getSyncLocalReadAnnouncementIds();
+            const deletedSet = getSyncLocalDeletedAnnouncementIds();
             let count = 0;
             if (snapshot && typeof snapshot.forEach === 'function') {
               snapshot.forEach((doc: any) => {
