@@ -304,11 +304,13 @@ jobs:
         run: |
           cd react-native-app/android
           chmod +x ./gradlew || true
-          ./gradlew assembleRelease --no-daemon --no-parallel --build-cache \
+          ./gradlew assembleRelease bundleRelease --no-daemon --no-parallel --build-cache \
             -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+UseParallelGC"
 
-      - name: Upload APK Artifacts
+      - name: Upload APK & AAB Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: auto-parts-india-apks
-          path: react-native-app/android/app/build/outputs/apk/**/*.apk
+          name: auto-parts-india-release-bundles
+          path: |
+            react-native-app/android/app/build/outputs/apk/**/*.apk
+            react-native-app/android/app/build/outputs/bundle/**/*.aab

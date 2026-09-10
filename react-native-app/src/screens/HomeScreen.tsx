@@ -54,7 +54,9 @@ import {
   INITIAL_DEFAULT_CATEGORIES, 
   INITIAL_DEFAULT_BRANDS 
 } from '../services/taxonomyDefaults';
+import NetInfo from '@react-native-community/netinfo';
 import { ScalePressable, FadeInSlide, FavoriteHeartButton } from '../components/animations';
+import { ProductFeedSkeletonList } from '../components/ProductCardSkeleton';
 
 // City coordinates for real distance calculations
 const CITY_COORDINATES: Record<string, { lat: number; lng: number }> = {
@@ -655,6 +657,20 @@ export default function HomeScreen({ navigation, route, user }: any) {
     };
   }, [fetchParts]);
 
+  // Auto-reconnect & refresh data when network comes back online
+  useEffect(() => {
+    const unsubscribeNet = NetInfo.addEventListener((state) => {
+      if (state.isConnected && state.isInternetReachable !== false) {
+        console.log('[HomeScreen] Internet reconnected, refreshing parts & data...');
+        fetchParts();
+      }
+    });
+
+    return () => {
+      unsubscribeNet();
+    };
+  }, [fetchParts]);
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchParts();
@@ -1207,10 +1223,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
         )}
 
         {loading ? (
-          <View style={styles.loadingBox}>
-            <ActivityIndicator color="#0066FF" size="large" />
-            <Text style={styles.loadingText}>Loading spare parts...</Text>
-          </View>
+          <ProductFeedSkeletonList cardWidth={productCardWidth} count={4} />
         ) : filteredParts.length === 0 ? (
           <View style={styles.emptyBox}>
             <Icon source="car-off" size={48} color="#64748B" />
