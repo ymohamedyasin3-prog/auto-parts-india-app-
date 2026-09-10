@@ -45,8 +45,15 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
   const [isDetectingGPS, setIsDetectingGPS] = useState<boolean>(false);
   const [selectedStateForDrilldown, setSelectedStateForDrilldown] = useState<StateItem | null>(null);
 
-  const [adminLocations, setAdminLocations] = useState<string[]>([]);
-  const [adminTaxonomyLocations, setAdminTaxonomyLocations] = useState<{ state: string; districts: string[] }[]>([]);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const searchScrollViewRef = useRef<FlatList>(null);
+
+  // Whenever drilldown state changes, scroll to top
+  useEffect(() => {
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({ y: 0, animated: false });
+    }
+  }, [selectedStateForDrilldown, searchQuery]);
 
   // Load saved user location and sync admin locations
   React.useEffect(() => {
@@ -491,6 +498,7 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
       {/* 1. When Search is active: Filtered List */}
       {searchQuery.trim().length > 0 ? (
         <FlatList
+          ref={searchScrollViewRef}
           data={searchResults}
           keyExtractor={(item) => item.id || item.name}
           keyboardShouldPersistTaps="handled"
@@ -526,6 +534,7 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
       ) : activeDrilldownState ? (
         /* 2. When State is selected: Districts / Cities of that state */
         <ScrollView
+          ref={scrollViewRef}
           style={styles.flex1}
           contentContainerStyle={styles.listContainer}
           keyboardShouldPersistTaps="handled"
@@ -572,6 +581,7 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
       ) : (
         /* 3. Root View: All States matching demo image directly */
         <ScrollView
+          ref={scrollViewRef}
           style={styles.flex1}
           contentContainerStyle={styles.listContainer}
           keyboardShouldPersistTaps="handled"

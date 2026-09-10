@@ -315,8 +315,9 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
           (docSnap: any) => {
             const data = docSnap?.data ? docSnap.data() : docSnap;
             if (data) {
+              const active = data.online === true && (Date.now() - (data.lastSeen || 0) < 60000);
               setPartnerPresence({
-                online: data.online === true,
+                online: active,
                 lastSeen: data.lastSeen || Date.now(),
               });
             }
@@ -835,8 +836,11 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
                   : isMe
                     ? isFailed
                       ? styles.failedBubble
-                      : styles.myBubble
+                      : item.imageUrl && !item.text
+                        ? styles.imageOnlyBubble
+                        : styles.myBubble
                     : styles.theirBubble,
+                item.imageUrl && !item.text && { padding: 0, overflow: 'hidden' },
               ]}
             >
               {item.isDeleted ? (
@@ -1541,6 +1545,9 @@ const styles = StyleSheet.create({
   myBubble: {
     backgroundColor: '#0072F5',
     borderTopRightRadius: 4,
+  },
+  imageOnlyBubble: {
+    backgroundColor: 'transparent',
   },
   failedBubble: {
     backgroundColor: '#EF4444',

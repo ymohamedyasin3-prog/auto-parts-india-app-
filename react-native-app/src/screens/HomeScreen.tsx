@@ -1557,12 +1557,16 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.5,
     marginBottom: 0,
+    opacity: 1,
   },
   megaDealDiscount: {
-    color: '#FBBF24',
+    color: '#FEE140',
     fontSize: 26,
     fontWeight: '900',
     lineHeight: 30,
+    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   megaDealHeadline: {
     color: '#FFFFFF',
@@ -1571,6 +1575,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     marginTop: 1,
     marginBottom: 2,
+    opacity: 1,
   },
   bannerFeatureList: {
     marginVertical: 4,
@@ -1582,9 +1587,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   bannerFeatureText: {
-    color: '#E2E8F0',
-    fontSize: 9,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    opacity: 0.95,
   },
   shopNowBtn: {
     flexDirection: 'row',

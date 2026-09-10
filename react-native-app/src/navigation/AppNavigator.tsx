@@ -66,6 +66,37 @@ function TabNavigator() {
   const bottomPadding = Platform.OS === 'android' ? Math.max(insets.bottom, 6) : insets.bottom;
   const tabHeight = 62 + bottomPadding;
 
+  // Real Presence Heartbeat
+  useEffect(() => {
+    let interval: any = null;
+    const updatePresence = async (isOnline: boolean) => {
+      try {
+        const user = getCurrentUser();
+        const uid = user?.uid || user?.id;
+        if (!uid) return;
+        const db = getFirebaseFirestore();
+        if (db && typeof db.collection === 'function') {
+          await db.collection('presence').doc(uid).set({
+            online: isOnline,
+            lastSeen: Date.now(),
+          }, { merge: true });
+        }
+      } catch (err) {
+        console.warn('Presence update error:', err);
+      }
+    };
+
+    updatePresence(true);
+    interval = setInterval(() => {
+      updatePresence(true);
+    }, 20000);
+
+    return () => {
+      if (interval) clearInterval(interval);
+      updatePresence(false);
+    };
+  }, []);
+
   const [unreadCounts, setUnreadCounts] = useState<{
     unreadChats: number;
     unreadNotifications: number;
@@ -626,7 +657,7 @@ export default function AppNavigator({ user }: { user?: any } = {}) {
         <Stack.Screen 
           name="SellPart" 
           component={SellPartScreen}
-          options={{ title: 'Sell Spare Part' }}
+          options={{ headerShown: false }}
         />
 
         <Stack.Screen 
