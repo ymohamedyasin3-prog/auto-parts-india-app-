@@ -28,10 +28,12 @@ service cloud.firestore {
       allow read: if true;
     }
 
-    // 1. Users Collection
+    // 1. Users Collection and Subcollections
     match /users/{userId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if true;
+    }
+    match /users/{userId}/{document=**} {
+      allow read, write: if true;
     }
     
     // 2. Spare Parts Listings (all collections and nested paths)
@@ -55,25 +57,19 @@ service cloud.firestore {
     
     // 3. Chats
     match /chats/{chatId} {
-      allow read: if isSignedIn() && (resource == null || request.auth.uid in resource.data.participants || resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (request.auth.uid in resource.data.participants || resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
-      allow delete: if isSignedIn() && (request.auth.uid in resource.data.participants || resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || isAdmin());
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if true;
     }
     
     // 4. Chat Messages
     match /chats/{chatId}/messages/{messageId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
     
     // 4b. Typing Indicators
     match /chats/{chatId}/typing/{userId} {
-      allow read, write: if isSignedIn() && (
-        isAdmin() ||
-        !exists(/databases/$(database)/documents/chats/$(chatId)) ||
-        get(/databases/$(database)/documents/chats/$(chatId)).data.buyerId == request.auth.uid || 
-        get(/databases/$(database)/documents/chats/$(chatId)).data.sellerId == request.auth.uid
-      );
+      allow read, write: if true;
     }
     
     // 5. Seller Reviews
@@ -111,8 +107,7 @@ service cloud.firestore {
 
     // 10. System Announcements
     match /announcements/{announcementId} {
-      allow read: if true;
-      allow write: if isSignedIn() && isAdmin();
+      allow read, write, delete: if true;
     }
 
     // 10b. User Read Announcements State

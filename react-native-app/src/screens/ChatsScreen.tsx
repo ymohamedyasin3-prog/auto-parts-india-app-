@@ -42,7 +42,7 @@ import {
   Button,
   Icon,
 } from 'react-native-paper';
-import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
+import { getFirebaseFirestore, getCurrentUser, getFirebaseAuth } from '../services/firebase';
 import { markNotificationAsRead } from '../services/notifications';
 import { useLanguage } from '../context/LanguageContext';
 import BrandLogo from '../components/BrandLogo';
@@ -59,8 +59,20 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
   const [activeUser, setActiveUser] = useState<any>(initialUser || getCurrentUser());
   const { translateDynamic } = useLanguage();
 
-  // Listen to auth state changes reactively
+  // Listen to auth state changes and storage updates reactively
   useEffect(() => {
+    // 1. Initial check from AsyncStorage
+    AsyncStorage.getItem('@autoparts_current_user').then((val) => {
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          if (parsed && (parsed.uid || parsed.id || parsed.email)) {
+            setActiveUser((prev: any) => prev || parsed);
+          }
+        } catch (_) {}
+      }
+    }).catch(() => {});
+
     let unsubAuth = () => {};
     try {
       const auth = getFirebaseAuth();
@@ -74,6 +86,7 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
     } catch (_) {
       setActiveUser(getCurrentUser());
     }
+
     return () => {
       try { unsubAuth(); } catch (_) {}
     };
@@ -87,54 +100,81 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
   };
 
   // Helper to accurately determine if current user is the buyer in a chat
-  const isCurrentUserBuyer = (chat: any, activeUid: string): boolean => {
-    if (!chat || !activeUid) return true;
-    const buyerId = getCleanId(chat.buyerId);
-    const sellerId = getCleanId(chat.sellerId);
+  const isCurrentUserBuyer = (chat: any, activeUid: string, activeEmail?: string): boolean => {
+    if (!chat) return true;
+    const buyerId = getCleanId(chat.buyerId).toLowerCase();
+    const sellerId = getCleanId(chat.sellerId).toLowerCase();
+    const uidLower = (activeUid || '').toLowerCase();
+    const emailLower = (activeEmail || '').toLowerCase();
 
-    // 1. If sellerId equals activeUid, the current user is definitely the SELLER -> NOT the buyer
-    if (sellerId && sellerId === activeUid) {
+    // 1. If sellerId matches activeUid or activeEmail, the user is the SELLER -> NOT the buyer
+    if (sellerId && (sellerId === uidLower || (emailLower && sellerId === emailLower))) {
       return false;
     }
-    // 2. If buyerId equals activeUid, the current user is definitely the BUYER
-    if (buyerId && buyerId === activeUid) {
+    // 2. If buyerId matches activeUid or activeEmail, the user is the BUYER
+    if (buyerId && (buyerId === uidLower || (emailLower && buyerId === emailLower))) {
       return true;
     }
     // 3. Fallback: if sellerId is someone else, the user initiated the chat as buyer
-    if (sellerId && sellerId !== activeUid) {
+    if (sellerId && sellerId !== uidLower && (!emailLower || sellerId !== emailLower)) {
       return true;
     }
     // 4. Fallback: if buyerId is someone else, user is the seller
-    if (buyerId && buyerId !== activeUid) {
+    if (buyerId && buyerId !== uidLower && (!emailLower || buyerId !== emailLower)) {
       return false;
     }
     return true;
   };
 
   // Helper to get the other party's user ID
-  const getPartnerIdFromChat = (c: any, uid: string): string => {
+  const getPartnerIdFromChat = (c: any, uid: string, email?: string): string => {
     if (!c) return '';
     const bId = getCleanId(c.buyerId);
     const sId = getCleanId(c.sellerId);
-    if (sId && sId !== uid && sId !== 'seller') return sId;
-    if (bId && bId !== uid && bId !== 'buyer') return bId;
+    const uidLower = (uid || '').toLowerCase();
+    const emailLower = (email || '').toLowerCase();
+
+    const isMatch = (id: string) => {
+      const lower = (id || '').toLowerCase();
+      return lower === uidLower || (emailLower && lower === emailLower);
+    };
+
+    if (sId && !isMatch(sId) && sId !== 'seller') return sId;
+    if (bId && !isMatch(bId) && bId !== 'buyer') return bId;
     if (Array.isArray(c.participants)) {
       const other = c.participants.find((p: any) => {
         const pid = getCleanId(p);
-        return pid && pid !== uid && pid !== 'seller' && pid !== 'buyer';
+        return pid && !isMatch(pid) && pid !== 'seller' && pid !== 'buyer';
       });
       if (other) return getCleanId(other);
     }
-    return isCurrentUserBuyer(c, uid) ? sId : bId;
+    return isCurrentUserBuyer(c, uid, email) ? sId : bId;
   };
 
   const loadUserChats = useCallback(() => {
-    const activeUid = activeUser?.uid || activeUser?.id;
-    if (!activeUid) {
+    const user = activeUser || getCurrentUser();
+    const activeUid = user?.uid || user?.id || '';
+    const activeEmail = (user?.email || '').trim().toLowerCase();
+
+    if (!activeUid && !activeEmail) {
       setLoading(false);
       setRefreshing(false);
       return () => {};
     }
+
+    // Try reading cached chats from AsyncStorage immediately
+    const cacheKey = `@autoparts_cached_chats_${activeUid || activeEmail}`;
+    AsyncStorage.getItem(cacheKey).then((raw) => {
+      if (raw) {
+        try {
+          const list = JSON.parse(raw);
+          if (Array.isArray(list) && list.length > 0) {
+            setChats((prev) => (prev.length === 0 ? list : prev));
+            setLoading(false);
+          }
+        } catch (_) {}
+      }
+    }).catch(() => {});
 
     try {
       const db = getFirebaseFirestore();
@@ -147,18 +187,54 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
       let buyerChats: any[] = [];
       let sellerChats: any[] = [];
       let partChats: any[] = [];
-      let ownerChats: any[] = [];
+      let emailBuyerChats: any[] = [];
+      let emailSellerChats: any[] = [];
+      let emailPartChats: any[] = [];
+      let allChatsFallback: any[] = [];
 
       const mergeChats = async () => {
         try {
           const chatsMap = new Map<string, any>();
           const hiddenChatSet = await getLocalHiddenChatIds();
+          const targetIds = [activeUid, activeEmail, user?.phoneNumber].filter(Boolean);
 
-          [...buyerChats, ...sellerChats, ...partChats, ...ownerChats].forEach((c) => {
+          const matchesUser = (c: any): boolean => {
+            if (!c || !c.id) return false;
+            if (hiddenChatSet.has(c.id)) return false;
+            if (Array.isArray(c.hiddenFor)) {
+              if (c.hiddenFor.some((hid: any) => targetIds.includes(hid))) return false;
+            }
+
+            const cBuyer = getCleanId(c.buyerId).toLowerCase();
+            const cSeller = getCleanId(c.sellerId).toLowerCase();
+            const cLastSender = getCleanId(c.lastSenderId).toLowerCase();
+            const cParts = Array.isArray(c.participants) ? c.participants.map((p: any) => getCleanId(p).toLowerCase()) : [];
+
+            return targetIds.some((tId) => {
+              const tLower = String(tId).toLowerCase();
+              return (
+                cBuyer === tLower ||
+                cSeller === tLower ||
+                cLastSender === tLower ||
+                cParts.includes(tLower) ||
+                (typeof c.id === 'string' && c.id.toLowerCase().includes(tLower))
+              );
+            });
+          };
+
+          [
+            ...buyerChats,
+            ...sellerChats,
+            ...partChats,
+            ...emailBuyerChats,
+            ...emailSellerChats,
+            ...emailPartChats,
+            ...allChatsFallback,
+          ].forEach((c) => {
             if (!c || !c.id) return;
-            if (hiddenChatSet.has(c.id)) return;
-            if (Array.isArray(c.hiddenFor) && c.hiddenFor.includes(activeUid)) return;
-            chatsMap.set(c.id, c);
+            if (matchesUser(c)) {
+              chatsMap.set(c.id, c);
+            }
           });
           
           const list = Array.from(chatsMap.values());
@@ -174,11 +250,14 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
           setLoading(false);
           setRefreshing(false);
 
+          // Save list to AsyncStorage cache
+          AsyncStorage.setItem(cacheKey, JSON.stringify(list)).catch(() => {});
+
           // Enrich with live user profile photos from Firestore
           const partnerIds = Array.from(
             new Set(
               list
-                .map((c: any) => getPartnerIdFromChat(c, activeUid))
+                .map((c: any) => getPartnerIdFromChat(c, activeUid, activeEmail))
                 .filter((id: string) => id && id !== 'seller' && id !== 'buyer')
             )
           );
@@ -213,9 +292,9 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
               if (Object.keys(photoMap).length > 0) {
                 setChats((prev) =>
                   prev.map((c) => {
-                    const pId = getPartnerIdFromChat(c, activeUid);
+                    const pId = getPartnerIdFromChat(c, activeUid, activeEmail);
                     const livePhoto = pId ? photoMap[pId] : null;
-                    const isUserBuyer = isCurrentUserBuyer(c, activeUid);
+                    const isUserBuyer = isCurrentUserBuyer(c, activeUid, activeEmail);
                     if (livePhoto) {
                       return {
                         ...c,
@@ -237,49 +316,101 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
         }
       };
 
-      const unsubBuyer = db.collection('chats').where('buyerId', '==', activeUid).onSnapshot(
-        (snapshot: any) => {
-          buyerChats = [];
-          if (snapshot && typeof snapshot.forEach === 'function') {
-            snapshot.forEach((doc: any) => buyerChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
-          }
-          mergeChats();
-        },
-        () => {
-          mergeChats();
-        }
-      );
+      const unsubs: (() => void)[] = [];
 
-      const unsubSeller = db.collection('chats').where('sellerId', '==', activeUid).onSnapshot(
-        (snapshot: any) => {
-          sellerChats = [];
-          if (snapshot && typeof snapshot.forEach === 'function') {
-            snapshot.forEach((doc: any) => sellerChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
-          }
-          mergeChats();
-        },
-        () => {
-          mergeChats();
-        }
-      );
+      if (activeUid) {
+        const unsubBuyer = db.collection('chats').where('buyerId', '==', activeUid).onSnapshot(
+          (snapshot: any) => {
+            buyerChats = [];
+            if (snapshot && typeof snapshot.forEach === 'function') {
+              snapshot.forEach((doc: any) => buyerChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
+            }
+            mergeChats();
+          },
+          () => { mergeChats(); }
+        );
+        unsubs.push(unsubBuyer);
 
-      const unsubPart = db.collection('chats').where('participants', 'array-contains', activeUid).onSnapshot(
+        const unsubSeller = db.collection('chats').where('sellerId', '==', activeUid).onSnapshot(
+          (snapshot: any) => {
+            sellerChats = [];
+            if (snapshot && typeof snapshot.forEach === 'function') {
+              snapshot.forEach((doc: any) => sellerChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
+            }
+            mergeChats();
+          },
+          () => { mergeChats(); }
+        );
+        unsubs.push(unsubSeller);
+
+        const unsubPart = db.collection('chats').where('participants', 'array-contains', activeUid).onSnapshot(
+          (snapshot: any) => {
+            partChats = [];
+            if (snapshot && typeof snapshot.forEach === 'function') {
+              snapshot.forEach((doc: any) => partChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
+            }
+            mergeChats();
+          },
+          () => { mergeChats(); }
+        );
+        unsubs.push(unsubPart);
+      }
+
+      if (activeEmail && activeEmail !== activeUid) {
+        const unsubEmailBuyer = db.collection('chats').where('buyerId', '==', activeEmail).onSnapshot(
+          (snapshot: any) => {
+            emailBuyerChats = [];
+            if (snapshot && typeof snapshot.forEach === 'function') {
+              snapshot.forEach((doc: any) => emailBuyerChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
+            }
+            mergeChats();
+          },
+          () => { mergeChats(); }
+        );
+        unsubs.push(unsubEmailBuyer);
+
+        const unsubEmailSeller = db.collection('chats').where('sellerId', '==', activeEmail).onSnapshot(
+          (snapshot: any) => {
+            emailSellerChats = [];
+            if (snapshot && typeof snapshot.forEach === 'function') {
+              snapshot.forEach((doc: any) => emailSellerChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
+            }
+            mergeChats();
+          },
+          () => { mergeChats(); }
+        );
+        unsubs.push(unsubEmailSeller);
+
+        const unsubEmailPart = db.collection('chats').where('participants', 'array-contains', activeEmail).onSnapshot(
+          (snapshot: any) => {
+            emailPartChats = [];
+            if (snapshot && typeof snapshot.forEach === 'function') {
+              snapshot.forEach((doc: any) => emailPartChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
+            }
+            mergeChats();
+          },
+          () => { mergeChats(); }
+        );
+        unsubs.push(unsubEmailPart);
+      }
+
+      // Fallback: general query on chats collection
+      const unsubAll = db.collection('chats').onSnapshot(
         (snapshot: any) => {
-          partChats = [];
+          allChatsFallback = [];
           if (snapshot && typeof snapshot.forEach === 'function') {
-            snapshot.forEach((doc: any) => partChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
+            snapshot.forEach((doc: any) => allChatsFallback.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
           }
           mergeChats();
         },
-        () => {
-          mergeChats();
-        }
+        () => { mergeChats(); }
       );
+      unsubs.push(unsubAll);
 
       return () => {
-        try { unsubBuyer(); } catch (_) {}
-        try { unsubSeller(); } catch (_) {}
-        try { unsubPart(); } catch (_) {}
+        unsubs.forEach((fn) => {
+          try { fn(); } catch (_) {}
+        });
       };
     } catch (e) {
       console.warn('[ChatsScreen] Error in loadUserChats:', e);
@@ -287,17 +418,26 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
       setRefreshing(false);
       return () => {};
     }
-  }, [activeUser?.uid, activeUser?.id]);
+  }, [activeUser?.uid, activeUser?.id, activeUser?.email]);
 
   useEffect(() => {
     setLoading(true);
     const unsub = loadUserChats();
+
+    // Listen to navigation focus to refresh chats when tab is selected
+    const unsubFocus = navigation?.addListener ? navigation.addListener('focus', () => {
+      const u = getCurrentUser();
+      if (u) setActiveUser(u);
+      loadUserChats();
+    }) : () => {};
+
     return () => {
       try {
         if (typeof unsub === 'function') unsub();
+        if (typeof unsubFocus === 'function') unsubFocus();
       } catch (_) {}
     };
-  }, [loadUserChats]);
+  }, [loadUserChats, navigation]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -389,10 +529,11 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
 
   const filteredChats = chats.filter((chat) => {
     const activeUid = activeUser?.uid || activeUser?.id || '';
-    if (Array.isArray(chat.hiddenFor) && chat.hiddenFor.includes(activeUid)) {
+    const activeEmail = (activeUser?.email || '').trim().toLowerCase();
+    if (Array.isArray(chat.hiddenFor) && (chat.hiddenFor.includes(activeUid) || (activeEmail && chat.hiddenFor.includes(activeEmail)))) {
       return false;
     }
-    const isUserBuyer = isCurrentUserBuyer(chat, activeUid);
+    const isUserBuyer = isCurrentUserBuyer(chat, activeUid, activeEmail);
 
     // Filter by Tab:
     // 'buy' tab: ONLY show chats where current user is BUYING from a seller
@@ -418,11 +559,12 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
 
   const renderChatItem = ({ item }: { item: any }) => {
     const activeUid = activeUser?.uid || activeUser?.id || '';
-    const isUserBuyer = isCurrentUserBuyer(item, activeUid);
+    const activeEmail = (activeUser?.email || '').trim().toLowerCase();
+    const isUserBuyer = isCurrentUserBuyer(item, activeUid, activeEmail);
     const partnerName = isUserBuyer
       ? item.sellerName || translateDynamic('Verified Seller')
       : item.buyerName || translateDynamic('Buyer');
-    const partnerId = getPartnerIdFromChat(item, activeUid);
+    const partnerId = getPartnerIdFromChat(item, activeUid, activeEmail);
     const userProfilePicture = (
       item.partnerPhoto ||
       (isUserBuyer
@@ -433,7 +575,8 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
 
     const unreadCount =
       item.unreadCount?.[activeUid] ||
-      (item.lastSenderId && item.lastSenderId !== activeUid && item.unread ? 1 : 0);
+      (activeEmail && item.unreadCount?.[activeEmail]) ||
+      (item.lastSenderId && item.lastSenderId !== activeUid && item.lastSenderId !== activeEmail && item.unread ? 1 : 0);
 
     const handleDeleteChat = (chatItem: any) => {
       Alert.alert(

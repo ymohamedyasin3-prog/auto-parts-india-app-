@@ -325,8 +325,20 @@ async function fetchCloudCollection(collPath: string, whereClauses?: any[]): Pro
     await Promise.all(
       pathsToQuery.map(async (collectionId) => {
         try {
+          const isSubcollection = collectionId.includes('/');
+          const subCollName = isSubcollection
+            ? collectionId.substring(collectionId.lastIndexOf('/') + 1)
+            : collectionId;
+          const parentDocPath = isSubcollection
+            ? collectionId.substring(0, collectionId.lastIndexOf('/'))
+            : null;
+
+          const runQueryUrl = parentDocPath
+            ? `${firestoreBaseUrl}/${parentDocPath}:runQuery?key=${FIREBASE_API_KEY}`
+            : `${firestoreBaseUrl}:runQuery?key=${FIREBASE_API_KEY}`;
+
           const structuredQuery: any = {
-            from: [{ collectionId }],
+            from: [{ collectionId: subCollName }],
             limit: 100,
           };
 
@@ -370,26 +382,33 @@ async function fetchCloudCollection(collPath: string, whereClauses?: any[]): Pro
             }
           }
 
-          const res = await fetch(runQueryUrl, {
-            method: 'POST',
-            headers: authHeaders,
-            body: JSON.stringify({ structuredQuery }),
-          });
+          let querySuccess = false;
+          try {
+            const res = await fetch(runQueryUrl, {
+              method: 'POST',
+              headers: authHeaders,
+              body: JSON.stringify({ structuredQuery }),
+            });
 
-          if (res.ok) {
-            const jsonArray: any = await res.json();
-            if (Array.isArray(jsonArray)) {
-              jsonArray.forEach((entry: any) => {
-                if (entry.document) {
-                  const decoded = decodeFirestoreDoc(entry.document);
-                  if (decoded && decoded.id) {
-                    fetchedMap.set(decoded.id, decoded);
+            if (res.ok) {
+              const jsonArray: any = await res.json();
+              if (Array.isArray(jsonArray)) {
+                jsonArray.forEach((entry: any) => {
+                  if (entry.document) {
+                    const decoded = decodeFirestoreDoc(entry.document);
+                    if (decoded && decoded.id) {
+                      fetchedMap.set(decoded.id, decoded);
+                      querySuccess = true;
+                    }
                   }
-                }
-              });
+                });
+                querySuccess = true;
+              }
             }
-          } else {
-            // Fallback to GET listing if runQuery returns an unexpected status (e.g. 400 for subcollections)
+          } catch (_) {}
+
+          // If runQuery didn't populate (or returned empty / failed), try direct GET listing
+          if (!querySuccess || fetchedMap.size === 0) {
             try {
               const fallbackRes = await fetch(`${firestoreBaseUrl}/${collectionId}?key=${FIREBASE_API_KEY}&pageSize=100`, {
                 headers: authHeaders
@@ -404,10 +423,10 @@ async function fetchCloudCollection(collPath: string, whereClauses?: any[]): Pro
                   }
                 });
               } else {
-                hasFetchError = true;
+                if (!querySuccess) hasFetchError = true;
               }
             } catch (_) {
-              hasFetchError = true;
+              if (!querySuccess) hasFetchError = true;
             }
           }
         } catch (fetchErr) {
@@ -582,13 +601,23 @@ async function deleteCloudDoc(collPath: string, docId: string): Promise<void> {
       pathsToDelete.push(cleanPath);
     }
 
+    const authHeaders = await getAuthHeaders();
     await Promise.all(
       pathsToDelete.map(async (targetPath) => {
         try {
-          await fetch(`${firestoreBaseUrl}/${targetPath}/${docId}?key=${FIREBASE_API_KEY}`, {
+          const res = await fetch(`${firestoreBaseUrl}/${targetPath}/${docId}?key=${FIREBASE_API_KEY}`, {
             method: 'DELETE',
+            headers: authHeaders,
           });
-        } catch (_) {}
+          if (res.ok) {
+            console.log(`[Firestore Cloud Delete Success] Removed ${targetPath}/${docId}`);
+          } else {
+            const errText = await res.text();
+            console.warn(`[Firestore Cloud Delete Notice] HTTP ${res.status} for ${targetPath}/${docId}:`, errText);
+          }
+        } catch (delErr) {
+          console.warn(`[Firestore Cloud Delete Error] ${targetPath}/${docId}:`, delErr);
+        }
       })
     );
   } catch (err) {
@@ -731,16 +760,22 @@ function createRealFirestoreQuery(rawCollectionPath: string) {
       }
 
       // 2. Trigger cloud fetch
-      fetchCloudCollection(collectionPath, whereClauses).then((items) => {
-        subscriber({
-          docs: items.map((i) => ({ id: i.id, data: () => ({ ...i }), exists: true })),
-          empty: items.length === 0,
-          size: items.length,
-          forEach: (cb: (doc: any) => void) => items.forEach(cb),
-        });
-      });
+      const triggerCloudFetch = () => {
+        fetchCloudCollection(collectionPath, whereClauses).then((items) => {
+          subscriber({
+            docs: items.map((i) => ({ id: i.id, data: () => ({ ...i }), exists: true })),
+            empty: items.length === 0,
+            size: items.length,
+            forEach: (cb: (doc: any) => void) => items.forEach(cb),
+          });
+        }).catch(() => {});
+      };
+
+      triggerCloudFetch();
+      const pollTimer = setInterval(triggerCloudFetch, 3000);
 
       return () => {
+        clearInterval(pollTimer);
         activeListeners[collectionPath]?.delete(subscriber);
       };
     },
@@ -842,15 +877,19 @@ function createRealFirestoreQuery(rawCollectionPath: string) {
             }
           };
           fetchAndNotify();
+          const docPollTimer = setInterval(fetchAndNotify, 3000);
 
           return () => {
+            clearInterval(docPollTimer);
             activeDocListeners[fullPath]?.delete(onNext);
           };
         },
       };
     },
     add: async (data: any) => {
-      const docId = 'part_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+      const isMsg = collectionPath.includes('messages');
+      const prefix = isMsg ? 'msg_' : 'doc_';
+      const docId = prefix + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
       const fullDoc = { id: docId, ...data, createdAt: data.createdAt || Date.now() };
       await writeCloudDoc(collectionPath, docId, fullDoc, false);
       return {

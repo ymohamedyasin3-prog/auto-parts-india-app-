@@ -230,7 +230,7 @@ export async function getLocalDeletedAnnouncementIds(): Promise<Set<string>> {
 }
 
 /**
- * Deletes or dismisses an announcement for current user locally and in user preferences
+ * Deletes or dismisses an announcement for current user locally and in user preferences / backend
  */
 export async function deleteAnnouncementForUser(announcementId: string): Promise<void> {
   if (!announcementId) return;
@@ -244,15 +244,30 @@ export async function deleteAnnouncementForUser(announcementId: string): Promise
 
     const user = getCurrentUser();
     const uid = user?.uid || user?.id;
-    if (uid) {
-      const db = getFirebaseFirestore();
-      if (db && typeof db.collection === 'function') {
+    const db = getFirebaseFirestore();
+
+    if (db && typeof db.collection === 'function') {
+      const userEmail = (user?.email || '').toLowerCase();
+      const isAdminUser =
+        user?.isAdmin === true ||
+        user?.role === 'admin' ||
+        userEmail === 'www.allahforgiveness877@gmail.com' ||
+        userEmail === 'wwwautoparts2@gmail.com' ||
+        userEmail === 'ym1950394@gmail.com';
+
+      // If admin, delete the announcement directly from the backend announcements collection
+      if (isAdminUser) {
+        await db.collection('announcements').doc(announcementId).delete().catch(() => {});
+      }
+
+      // Record deletion in user's backend profile
+      if (uid) {
         await db
           .collection('users')
           .doc(uid)
           .collection('deleted_announcements')
           .doc(announcementId)
-          .set({ deletedAt: Date.now() }, { merge: true })
+          .set({ deletedAt: Date.now(), id: announcementId }, { merge: true })
           .catch(() => {});
       }
     }
@@ -262,7 +277,7 @@ export async function deleteAnnouncementForUser(announcementId: string): Promise
 }
 
 /**
- * Deletes or dismisses multiple announcements for current user locally and in user preferences
+ * Deletes or dismisses multiple announcements for current user locally and in backend
  */
 export async function deleteMultipleAnnouncementsForUser(announcementIds: string[]): Promise<void> {
   if (!announcementIds || announcementIds.length === 0) return;
@@ -278,20 +293,33 @@ export async function deleteMultipleAnnouncementsForUser(announcementIds: string
 
     const user = getCurrentUser();
     const uid = user?.uid || user?.id;
-    if (uid) {
-      const db = getFirebaseFirestore();
-      if (db && typeof db.collection === 'function') {
-        const promises = announcementIds.map((annId) =>
-          db
+    const db = getFirebaseFirestore();
+
+    if (db && typeof db.collection === 'function') {
+      const userEmail = (user?.email || '').toLowerCase();
+      const isAdminUser =
+        user?.isAdmin === true ||
+        user?.role === 'admin' ||
+        userEmail === 'www.allahforgiveness877@gmail.com' ||
+        userEmail === 'wwwautoparts2@gmail.com' ||
+        userEmail === 'ym1950394@gmail.com';
+
+      const promises = announcementIds.map(async (annId) => {
+        if (!annId) return;
+        if (isAdminUser) {
+          await db.collection('announcements').doc(annId).delete().catch(() => {});
+        }
+        if (uid) {
+          await db
             .collection('users')
             .doc(uid)
             .collection('deleted_announcements')
             .doc(annId)
-            .set({ deletedAt: Date.now() }, { merge: true })
-            .catch(() => {})
-        );
-        await Promise.all(promises);
-      }
+            .set({ deletedAt: Date.now(), id: annId }, { merge: true })
+            .catch(() => {});
+        }
+      });
+      await Promise.all(promises);
     }
   } catch (err) {
     console.warn('[notifications] Error deleting multiple announcements for user:', err);
@@ -299,27 +327,64 @@ export async function deleteMultipleAnnouncementsForUser(announcementIds: string
 }
 
 /**
- * Deletes all personal notifications for a recipient from Firestore and local storage
+ * Deletes all personal notifications for a recipient from Firestore backend and local storage
  */
 export async function deleteAllPersonalNotifications(userId: string): Promise<void> {
   if (!userId) return;
   try {
     const db = getFirebaseFirestore();
     if (db && typeof db.collection === 'function') {
-      const snap = await db
+      // 1. Query by recipientId
+      const snapRecipient = await db
         .collection('notifications')
         .where('recipientId', '==', userId)
         .get();
 
-      if (snap && snap.docs) {
-        const docIds = snap.docs.map((d: any) => d.id);
-        await addLocalDeletedNotificationIds(docIds);
+      // 2. Query by userId
+      const snapUser = await db
+        .collection('notifications')
+        .where('userId', '==', userId)
+        .get();
 
-        const promises = snap.docs.map((docSnap: any) =>
-          docSnap.ref.delete().catch(() => {})
-        );
-        await Promise.all(promises);
+      const docIds: string[] = [];
+      const docsToDelete: any[] = [];
+
+      if (snapRecipient && snapRecipient.docs) {
+        snapRecipient.docs.forEach((d: any) => {
+          docIds.push(d.id);
+          docsToDelete.push(d);
+        });
       }
+      if (snapUser && snapUser.docs) {
+        snapUser.docs.forEach((d: any) => {
+          if (!docIds.includes(d.id)) {
+            docIds.push(d.id);
+            docsToDelete.push(d);
+          }
+        });
+      }
+
+      await addLocalDeletedNotificationIds(docIds);
+
+      // Delete from backend Firestore collection
+      const deletePromises = docsToDelete.map((docSnap: any) =>
+        docSnap.ref
+          ? docSnap.ref.delete().catch(() => {})
+          : db.collection('notifications').doc(docSnap.id).delete().catch(() => {})
+      );
+
+      // Record in backend user collection
+      const userRecordPromises = docIds.map((id) =>
+        db
+          .collection('users')
+          .doc(userId)
+          .collection('deleted_notifications')
+          .doc(id)
+          .set({ deletedAt: Date.now(), id }, { merge: true })
+          .catch(() => {})
+      );
+
+      await Promise.all([...deletePromises, ...userRecordPromises]);
     }
   } catch (e) {
     console.warn('[notifications] Error deleting all personal notifications:', e);
@@ -327,18 +392,39 @@ export async function deleteAllPersonalNotifications(userId: string): Promise<vo
 }
 
 /**
- * Deletes a personal chat notification from Firestore and local storage
+ * Deletes a notification from Firestore backend and local storage
  */
 export async function deleteNotification(notificationId: string): Promise<void> {
   if (!notificationId) return;
   try {
     await addLocalDeletedNotificationId(notificationId);
     const db = getFirebaseFirestore();
+    const user = getCurrentUser();
+    const uid = user?.uid || user?.id;
+
     if (db && typeof db.collection === 'function') {
+      // 1. Delete directly from backend 'notifications' collection
       await db.collection('notifications').doc(notificationId).delete().catch(() => {});
+
+      // 2. If it's a chat inquiry id, also check if underlying document exists in notifications
+      if (notificationId.startsWith('chat_inq_')) {
+        const rawChatId = notificationId.replace('chat_inq_', '');
+        await db.collection('notifications').doc(rawChatId).delete().catch(() => {});
+      }
+
+      // 3. Persist in backend under user's deleted_notifications subcollection
+      if (uid) {
+        await db
+          .collection('users')
+          .doc(uid)
+          .collection('deleted_notifications')
+          .doc(notificationId)
+          .set({ deletedAt: Date.now(), id: notificationId }, { merge: true })
+          .catch(() => {});
+      }
     }
   } catch (e) {
-    console.warn('[notifications] Error deleting notification:', e);
+    console.warn('[notifications] Error deleting notification from backend:', e);
   }
 }
 
@@ -503,18 +589,24 @@ export function subscribeToUserUnreadCounts(
       .where('recipientId', '==', userId)
       .where('read', '==', false)
       .onSnapshot(
-        (snapshot: any) => {
+        async (snapshot: any) => {
           let count = 0;
           let newest: any = null;
-          if (snapshot && typeof snapshot.forEach === 'function') {
-            snapshot.forEach((doc: any) => {
-              const data = { id: doc.id, ...(doc.data ? doc.data() : doc) };
-              count += 1;
-              if (!newest || (data.createdAt && data.createdAt > (newest.createdAt || 0))) {
-                newest = data;
-              }
-            });
-          }
+          try {
+            const deletedNotifSet = await getLocalDeletedNotificationIds();
+            if (snapshot && typeof snapshot.forEach === 'function') {
+              snapshot.forEach((doc: any) => {
+                const docId = doc.id;
+                const data = { id: docId, ...(doc.data ? doc.data() : doc) };
+                if (docId && deletedNotifSet.has(docId)) return;
+                if (data?.deleted || (Array.isArray(data?.deletedFor) && data.deletedFor.includes(userId))) return;
+                count += 1;
+                if (!newest || (data.createdAt && data.createdAt > (newest.createdAt || 0))) {
+                  newest = data;
+                }
+              });
+            }
+          } catch (_) {}
           unreadNotifCount = count;
           latestNotifItem = newest;
           emit();
@@ -533,11 +625,12 @@ export function subscribeToUserUnreadCounts(
         async (snapshot: any) => {
           try {
             const readSet = await getLocalReadAnnouncementIds();
+            const deletedSet = await getLocalDeletedAnnouncementIds();
             let count = 0;
             if (snapshot && typeof snapshot.forEach === 'function') {
               snapshot.forEach((doc: any) => {
                 const docId = doc.id;
-                if (docId && !readSet.has(docId)) {
+                if (docId && !readSet.has(docId) && !deletedSet.has(docId)) {
                   count += 1;
                 }
               });

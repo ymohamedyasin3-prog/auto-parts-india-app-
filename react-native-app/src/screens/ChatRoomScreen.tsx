@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { Icon, ActivityIndicator, Appbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
+import { getFirebaseFirestore, getCurrentUser, getFirebaseAuth } from '../services/firebase';
 import { sendChatMessageNotification, markNotificationAsRead } from '../services/notifications';
 import { promptImageSourceDialog } from '../services/imagePickerService';
 import { uploadImageToCloudinary, deleteImageFromCloudinary } from '../services/cloudinary';
@@ -55,7 +55,36 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
     partnerPhoto: routePartnerPhoto,
     partnerName: routePartnerName,
   } = route.params || {};
-  const activeUser = initialUser || getCurrentUser();
+
+  const [activeUser, setActiveUser] = useState<any>(initialUser || getCurrentUser());
+
+  useEffect(() => {
+    AsyncStorage.getItem('@autoparts_current_user').then((val) => {
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          if (parsed && (parsed.uid || parsed.id || parsed.email)) {
+            setActiveUser((prev: any) => prev || parsed);
+          }
+        } catch (_) {}
+      }
+    }).catch(() => {});
+
+    let unsubAuth = () => {};
+    try {
+      const auth = getFirebaseAuth();
+      if (auth && typeof auth.onAuthStateChanged === 'function') {
+        unsubAuth = auth.onAuthStateChanged((u: any) => {
+          if (u) setActiveUser(u);
+        });
+      }
+    } catch (_) {}
+
+    return () => {
+      try { unsubAuth(); } catch (_) {}
+    };
+  }, []);
+
   const currentUid = activeUser?.uid || activeUser?.id || 'guest';
   const currentName = activeUser?.displayName || activeUser?.name || activeUser?.email?.split('@')[0] || 'User';
   const currentUserPhoto = activeUser?.photoURL || activeUser?.profilePhoto || '';
@@ -721,7 +750,12 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
   const handleMessageAction = (msgItem: ChatMessage) => {
     if (msgItem.isDeleted) return;
 
-    const isMe = msgItem.senderId === currentUid;
+    const myUid = activeUser?.uid || activeUser?.id || currentUid;
+    const myEmail = (activeUser?.email || '').toLowerCase();
+    const isMe =
+      msgItem.senderId === myUid ||
+      msgItem.senderId === currentUid ||
+      (myEmail && (msgItem.senderId || '').toLowerCase() === myEmail);
     const msgTime = parseTimestamp(msgItem.createdAt);
     const isWithin15Min = Date.now() - msgTime <= 15 * 60 * 1000;
 
@@ -832,7 +866,12 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
   };
 
   const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
-    const isMe = item.senderId === currentUid;
+    const myUid = activeUser?.uid || activeUser?.id || currentUid;
+    const myEmail = (activeUser?.email || '').toLowerCase();
+    const isMe =
+      item.senderId === myUid ||
+      item.senderId === currentUid ||
+      (myEmail && (item.senderId || '').toLowerCase() === myEmail);
     const isFailed = item.status === 'failed';
     const isPending = item.status === 'pending';
 
