@@ -45,6 +45,8 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isDetectingGPS, setIsDetectingGPS] = useState<boolean>(false);
   const [selectedStateForDrilldown, setSelectedStateForDrilldown] = useState<StateItem | null>(null);
+  const [adminTaxonomyLocations, setAdminTaxonomyLocations] = useState<Array<{ state: string; districts: string[] }>>([]);
+  const [adminLocations, setAdminLocations] = useState<string[]>([]);
 
   const scrollViewRef = useRef<ScrollView>(null);
   const searchScrollViewRef = useRef<FlatList>(null);
