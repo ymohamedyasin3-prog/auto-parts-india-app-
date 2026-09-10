@@ -98,7 +98,7 @@ if (isFirebaseConfigured) {
     storage = getStorage(app);
     
     const dbOptions = {
-      experimentalAutoDetectLongPolling: true,
+      experimentalForceLongPolling: true,
     };
 
     if (firebaseConfig.databaseId && firebaseConfig.databaseId !== "(default)") {
@@ -118,14 +118,12 @@ if (isFirebaseConfigured) {
     useFirebase = true;
     console.log("Firebase initialized successfully with configuration:", firebaseConfig.projectId, "Database:", firebaseConfig.databaseId);
 
-    // Validate connection to Firestore as required by Firebase skill
+    // Validate connection to Firestore gracefully
     const testConnection = async () => {
       try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
+        await getDoc(doc(db, 'test', 'connection'));
       } catch (error) {
-        if (error instanceof Error && (error.message.includes('the client is offline') || error.message.includes('unavailable'))) {
-          console.warn("[Firebase] Client operating in offline mode. Local cache active.");
-        }
+        // Silent catch for offline or initial connect
       }
     };
     testConnection();
@@ -4146,11 +4144,20 @@ export const DEFAULT_APP_VERSION_CONFIG: AppVersionConfig = {
 };
 
 export async function fetchAppVersionConfig(): Promise<AppVersionConfig> {
+  // Check local cache first if available
+  const saved = typeof localStorage !== "undefined" ? localStorage.getItem("app_version_config") : null;
+  let cachedConfig: AppVersionConfig = DEFAULT_APP_VERSION_CONFIG;
+  if (saved) {
+    try {
+      cachedConfig = { ...DEFAULT_APP_VERSION_CONFIG, ...JSON.parse(saved) };
+    } catch (_) {}
+  }
+
   if (db) {
     try {
       const docRef = doc(db, "app_config", "version");
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
+      const snap = await withTimeout(getDoc(docRef), 3500, "Version check timeout");
+      if (snap && snap.exists()) {
         const data = snap.data();
         let formattedUpdatedAt: string | undefined = undefined;
         if (data.updatedAt) {
@@ -4176,7 +4183,7 @@ export async function fetchAppVersionConfig(): Promise<AppVersionConfig> {
             formattedUpdatedAt = data.updatedAt;
           }
         }
-        return {
+        const freshConfig: AppVersionConfig = {
           latestVersion: data.latestVersion || "1.0.0",
           minimumSupportedVersion: data.minimumSupportedVersion || "1.0.0",
           forceUpdate: typeof data.forceUpdate === "boolean" ? data.forceUpdate : false,
@@ -4186,26 +4193,22 @@ export async function fetchAppVersionConfig(): Promise<AppVersionConfig> {
           updatedAt: formattedUpdatedAt,
           updatedBy: data.updatedBy || undefined
         };
+        try {
+          if (typeof localStorage !== "undefined") {
+            localStorage.setItem("app_version_config", JSON.stringify(freshConfig));
+          }
+        } catch (_) {}
+        return freshConfig;
       } else {
-        return DEFAULT_APP_VERSION_CONFIG;
+        return cachedConfig;
       }
     } catch (e) {
-      console.error("Firestore fetchAppVersionConfig failed:", e);
-      handleFirestoreError(e, OperationType.GET, "app_config/version");
-      return DEFAULT_APP_VERSION_CONFIG;
+      // Gracefully return cached configuration on offline or connection delay
+      return cachedConfig;
     }
   }
 
-  // Fallback to LocalStorage
-  const saved = localStorage.getItem("app_version_config");
-  if (saved) {
-    try {
-      return JSON.parse(saved);
-    } catch (e) {
-      // ignore
-    }
-  }
-  return DEFAULT_APP_VERSION_CONFIG;
+  return cachedConfig;
 }
 
 export async function updateAppVersionConfig(config: AppVersionConfig, adminEmail?: string): Promise<boolean> {

@@ -17,21 +17,16 @@ import { Icon } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { INITIAL_SPARE_PARTS } from '../data/mockData';
-import { getFirebaseFirestore } from '../services/firebase';
+import { getFirebaseFirestore, getFirebaseAuth, getCurrentUser } from '../services/firebase';
+import { subscribeToUserUnreadCounts } from '../services/notifications';
 import { useFavorites } from '../services/favorites';
 import { matchesCategoryFilter } from '../utils/categoryMatcher';
 import { matchPartSearch, parseCreatedAt } from '../utils/searchHelper';
 import { MASTER_CATEGORIES, MasterCategory } from '../constants/categories';
 import { ScalePressable, FadeInSlide, FavoriteHeartButton } from '../components/animations';
+import FilterAndSortModal, { FilterTabType, FilterValues } from '../components/FilterAndSortModal';
 
 const RECENT_SEARCHES_KEY = '@autoparts_recent_searches';
-const DEFAULT_RECENT_SEARCHES = [
-  'Headlight',
-  'Maruti Suzuki bumper',
-  'Engine',
-  'Hyundai Creta parts',
-  'Brake disc',
-];
 
 const DEFAULT_POPULAR_BRANDS = [
   'All Brands',
@@ -82,9 +77,12 @@ export default function SearchScreen({ navigation, route }: any) {
   const [selectedCondition, setSelectedCondition] = useState('All Conditions');
   const [selectedLocation, setSelectedLocation] = useState(route?.params?.initialState || 'All India');
   const [sortBy, setSortBy] = useState<'newest' | 'price_low' | 'price_high'>('newest');
+  const [minPrice, setMinPrice] = useState<string>('');
+  const [maxPrice, setMaxPrice] = useState<string>('');
 
   // Modals state
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [filterModalInitialTab, setFilterModalInitialTab] = useState<FilterTabType>('budget');
   const [isBrandModalOpen, setIsBrandModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
@@ -93,8 +91,8 @@ export default function SearchScreen({ navigation, route }: any) {
   // Brand modal search query
   const [brandSearchInput, setBrandSearchInput] = useState('');
 
-  // Recent Searches
-  const [recentSearches, setRecentSearches] = useState<string[]>(DEFAULT_RECENT_SEARCHES);
+  // Recent Searches (Real user search history only)
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
   // Firestore dynamic Categories and Brands
   const [firestoreCategories, setFirestoreCategories] = useState<any[]>([]);
@@ -104,25 +102,92 @@ export default function SearchScreen({ navigation, route }: any) {
   const [parts, setParts] = useState<any[]>(INITIAL_SPARE_PARTS);
   const { favorites, toggleFavorite } = useFavorites();
 
-  // Load Recent Searches from AsyncStorage
+  // Unread badge counts for bottom navigation bar
+  const [unreadCounts, setUnreadCounts] = useState({ unreadChats: 0, unreadNotifications: 0, totalUnread: 0 });
+
+  useEffect(() => {
+    let unsubAuth = () => {};
+    let unsubListener = () => {};
+
+    try {
+      const auth = getFirebaseAuth();
+      if (auth && typeof auth.onAuthStateChanged === 'function') {
+        unsubAuth = auth.onAuthStateChanged((user: any) => {
+          const uid = user?.uid || user?.id;
+          unsubListener();
+          if (uid) {
+            unsubListener = subscribeToUserUnreadCounts(uid, (counts) => {
+              setUnreadCounts(counts);
+            });
+          } else {
+            setUnreadCounts({ unreadChats: 0, unreadNotifications: 0, totalUnread: 0 });
+          }
+        });
+      } else {
+        const user = getCurrentUser();
+        const uid = user?.uid || user?.id;
+        if (uid) {
+          unsubListener = subscribeToUserUnreadCounts(uid, (counts) => {
+            setUnreadCounts(counts);
+          });
+        }
+      }
+    } catch (_) {}
+
+    return () => {
+      try { unsubAuth(); } catch (_) {}
+      try { unsubListener(); } catch (_) {}
+    };
+  }, []);
+
+  // Load Recent Searches from AsyncStorage (Real data only)
   useEffect(() => {
     AsyncStorage.getItem(RECENT_SEARCHES_KEY)
       .then((val) => {
         if (val) {
           try {
             const parsed = JSON.parse(val);
-            if (Array.isArray(parsed) && parsed.length > 0) {
+            if (Array.isArray(parsed)) {
               setRecentSearches(parsed);
               return;
             }
           } catch (_) {}
         }
-        setRecentSearches(DEFAULT_RECENT_SEARCHES);
+        setRecentSearches([]);
       })
       .catch(() => {
-        setRecentSearches(DEFAULT_RECENT_SEARCHES);
+        setRecentSearches([]);
       });
   }, []);
+
+  // Synchronize route params updates when navigating back from other screens
+  useEffect(() => {
+    const locParam = route?.params?.selectedLocation || route?.params?.selectedCity || route?.params?.initialState;
+    if (locParam && locParam !== selectedLocation) {
+      setSelectedLocation(locParam);
+    }
+    const catParam = route?.params?.initialCategory || route?.params?.selectedCategory;
+    if (catParam && catParam !== selectedCategory) {
+      setSelectedCategory(catParam);
+    }
+    const brandParam = route?.params?.initialBrand || route?.params?.selectedBrand;
+    if (brandParam && brandParam !== selectedBrand) {
+      setSelectedBrand(brandParam);
+    }
+    const queryParam = route?.params?.initialQuery;
+    if (typeof queryParam === 'string' && queryParam !== searchQuery) {
+      setSearchQuery(queryParam);
+    }
+  }, [
+    route?.params?.selectedLocation,
+    route?.params?.selectedCity,
+    route?.params?.initialState,
+    route?.params?.initialCategory,
+    route?.params?.selectedCategory,
+    route?.params?.initialBrand,
+    route?.params?.selectedBrand,
+    route?.params?.initialQuery,
+  ]);
 
   // Save query to Recent Searches
   const addRecentSearch = (query: string) => {
@@ -279,17 +344,36 @@ export default function SearchScreen({ navigation, route }: any) {
     selectedBrand !== 'All Brands' && selectedBrand !== 'All',
     selectedCondition !== 'All Conditions',
     selectedLocation !== 'All India' && selectedLocation !== 'All States',
+    !!minPrice.trim() || !!maxPrice.trim(),
+    sortBy !== 'newest',
   ].filter(Boolean).length;
 
   const isSearchActive = searchQuery.trim().length > 0 || activeFiltersCount > 0;
 
   const resetFilters = () => {
     setSearchQuery('');
+    setMinPrice('');
+    setMaxPrice('');
     setSelectedCategory('All Categories');
     setSelectedBrand('All Brands');
     setSelectedCondition('All Conditions');
     setSelectedLocation('All India');
     setSortBy('newest');
+  };
+
+  const openFilterModal = (tab: FilterTabType = 'budget') => {
+    setFilterModalInitialTab(tab);
+    setIsFilterModalOpen(true);
+  };
+
+  const handleApplyFilters = (filters: FilterValues) => {
+    setMinPrice(filters.minPrice);
+    setMaxPrice(filters.maxPrice);
+    setSelectedBrand(filters.selectedBrand);
+    setSelectedCategory(filters.selectedCategory);
+    setSelectedCondition(filters.selectedCondition);
+    setSelectedLocation(filters.selectedLocation);
+    setSortBy(filters.sortBy);
   };
 
   const handleSearchSubmit = () => {
@@ -384,6 +468,23 @@ export default function SearchScreen({ navigation, route }: any) {
         }
       }
 
+      // Filter by Price Range (minPrice & maxPrice)
+      if (minPrice.trim()) {
+        const minVal = Number(minPrice);
+        const itemPrice = Number(part.price || part.partPrice) || 0;
+        if (!isNaN(minVal) && itemPrice < minVal) {
+          continue;
+        }
+      }
+
+      if (maxPrice.trim()) {
+        const maxVal = Number(maxPrice);
+        const itemPrice = Number(part.price || part.partPrice) || 0;
+        if (!isNaN(maxVal) && itemPrice > maxVal) {
+          continue;
+        }
+      }
+
       scoredList.push({ part, score: searchScore });
     }
 
@@ -403,9 +504,26 @@ export default function SearchScreen({ navigation, route }: any) {
         return parseCreatedAt(b.part.createdAt) - parseCreatedAt(a.part.createdAt);
       })
       .map((item) => item.part);
-  }, [parts, searchQuery, selectedCategory, selectedBrand, selectedCondition, selectedLocation, sortBy]);
+  }, [parts, searchQuery, selectedCategory, selectedBrand, selectedCondition, selectedLocation, minPrice, maxPrice, sortBy]);
 
-  // Render Product Card in Search Results
+  // Helper to format created time into friendly string
+  const formatTimeAgo = (createdAtVal: any) => {
+    const millis = parseCreatedAt(createdAtVal);
+    if (!millis) return 'Recently';
+    const diffSec = Math.floor((Date.now() - millis) / 1000);
+    if (diffSec < 60) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 30) return `${diffDays}d ago`;
+    const diffMonths = Math.floor(diffDays / 30);
+    return `${diffMonths}mo ago`;
+  };
+
+  // Render Product Card in Search Results (Modern Reference Layout: Left Image, Right Info)
   const renderPartItem = ({ item }: { item: any }) => {
     const isFav = favorites.includes(item.id);
     const primaryUri =
@@ -414,45 +532,92 @@ export default function SearchScreen({ navigation, route }: any) {
       item.imageUrls?.[0] ||
       'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&q=80&w=400';
     const isNew = (item.condition || '').toLowerCase().includes('new');
+    const imageCount = (item.images?.length || item.imageUrls?.length || (item.imageUrl ? 1 : 0)) || 1;
+    const timeAgoStr = formatTimeAgo(item.createdAt);
+    const brandModelStr = `${item.carBrand || item.brand || 'Universal'}${item.carModel || item.model ? ' ' + (item.carModel || item.model) : ''}`;
+    const locationStr = item.location || item.district || item.state || 'All India';
 
     return (
       <ScalePressable
         style={styles.card}
-        scaleTo={0.96}
-        onPress={() => navigation.navigate('ProductDetail', { part: item })}
+        scaleTo={0.98}
+        onPress={() => {
+          if (searchQuery.trim()) {
+            addRecentSearch(searchQuery);
+          }
+          navigation.navigate('ProductDetail', { part: item });
+        }}
       >
+        {/* Left Side: Large Square Image with Badges */}
         <View style={styles.imageContainer}>
           <Image source={{ uri: primaryUri }} style={styles.cardImage} resizeMode="cover" />
+          
+          {/* Condition Badge (e.g. NEW / USED) */}
           <View style={[styles.badgeContainer, isNew ? styles.badgeNew : styles.badgeUsed]}>
-            <Text style={styles.badgeText}>{isNew ? '✨ NEW' : 'USED'}</Text>
+            <Text style={styles.badgeText}>{isNew ? 'NEW' : 'USED'}</Text>
           </View>
-          <FavoriteHeartButton
-            isFavorited={isFav}
-            onPress={() => toggleFavorite(item.id)}
-            containerStyle={styles.favBtn}
-            size={18}
-          />
+
+          {/* Image Count Pill at bottom */}
+          {imageCount > 1 && (
+            <View style={styles.imageCountBadge}>
+              <Icon source="camera" size={10} color="#FFFFFF" />
+              <Text style={styles.imageCountText}>{imageCount}</Text>
+            </View>
+          )}
         </View>
 
+        {/* Right Side: Price, Heart, Title, Brand Tag, Location & Time */}
         <View style={styles.cardContent}>
-          <Text style={styles.cardPrice}>₹{(item.price || 0).toLocaleString('en-IN')}</Text>
+          {/* Top Row: Price on Left, Heart Favorite on Right */}
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardPrice}>₹{(item.price || 0).toLocaleString('en-IN')}</Text>
+            <TouchableOpacity
+              style={styles.favCircleBtn}
+              activeOpacity={0.7}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                toggleFavorite(item.id);
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon
+                source={isFav ? "heart" : "heart-outline"}
+                size={18}
+                color={isFav ? "#EF4444" : "#94A3B8"}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {/* Part Title */}
           <Text style={styles.cardTitle} numberOfLines={2}>
             {item.title}
           </Text>
 
+          {/* Brand & Model Chip */}
           <View style={styles.tagRow}>
             <View style={styles.brandTag}>
+              <Icon source="car-side" size={11} color="#0066FF" />
               <Text style={styles.brandTagText} numberOfLines={1}>
-                {item.carBrand || item.brand || 'Universal'} {item.carModel || item.model || ''}
+                {brandModelStr}
               </Text>
             </View>
           </View>
 
-          <View style={styles.locationRow}>
-            <Icon source="map-marker-outline" size={13} color="#64748B" />
-            <Text style={styles.locationText} numberOfLines={1}>
-              {item.location || item.district || item.state || 'All India'}
-            </Text>
+          {/* Footer Row: Location & Timestamp */}
+          <View style={styles.cardFooterRow}>
+            <View style={styles.locationCol}>
+              <Icon source="map-marker-outline" size={12} color="#64748B" />
+              <Text style={styles.locationText} numberOfLines={1}>
+                {locationStr}
+              </Text>
+            </View>
+
+            <View style={styles.timeCol}>
+              <Icon source="clock-outline" size={11} color="#94A3B8" />
+              <Text style={styles.timeText} numberOfLines={1}>
+                {timeAgoStr}
+              </Text>
+            </View>
           </View>
         </View>
       </ScalePressable>
@@ -469,7 +634,7 @@ export default function SearchScreen({ navigation, route }: any) {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor="#0B1220" />
 
-      {/* TOP UNIFIED SEARCH ROW (No redundant "Search Parts" title) */}
+      {/* TOP UNIFIED SEARCH ROW - Matching Royal Primary Blue (#0066FF) */}
       <View style={styles.topHeader}>
         <TouchableOpacity
           style={styles.backBtn}
@@ -503,9 +668,9 @@ export default function SearchScreen({ navigation, route }: any) {
         <TouchableOpacity
           style={[styles.filterBtn, activeFiltersCount > 0 && styles.filterBtnActive]}
           activeOpacity={0.75}
-          onPress={() => setIsFilterModalOpen(true)}
+          onPress={() => openFilterModal('budget')}
         >
-          <Icon source="tune-variant" color={activeFiltersCount > 0 ? '#FFFFFF' : '#0F172A'} size={20} />
+          <Icon source="tune-variant" color={activeFiltersCount > 0 ? '#0066FF' : '#FFFFFF'} size={20} />
           {activeFiltersCount > 0 && (
             <View style={styles.filterBadge}>
               <Text style={styles.filterBadgeText}>{activeFiltersCount}</Text>
@@ -529,7 +694,7 @@ export default function SearchScreen({ navigation, route }: any) {
             <ScalePressable
               scaleTo={0.96}
               style={styles.tileCard}
-              onPress={() => setIsBrandModalOpen(true)}
+              onPress={() => openFilterModal('brand')}
             >
               <View style={styles.tileIconCircle}>
                 <Icon source="car" size={22} color="#0284C7" />
@@ -547,7 +712,7 @@ export default function SearchScreen({ navigation, route }: any) {
             <ScalePressable
               scaleTo={0.96}
               style={styles.tileCard}
-              onPress={() => setIsCategoryModalOpen(true)}
+              onPress={() => openFilterModal('category')}
             >
               <View style={[styles.tileIconCircle, { backgroundColor: '#FDF4FF' }]}>
                 <Icon source="view-grid-outline" size={22} color="#A855F7" />
@@ -565,7 +730,12 @@ export default function SearchScreen({ navigation, route }: any) {
             <ScalePressable
               scaleTo={0.96}
               style={styles.tileCard}
-              onPress={() => setIsLocationModalOpen(true)}
+              onPress={() => {
+                navigation.navigate('LocationSelectScreen', {
+                  returnScreen: 'Search',
+                  currentCity: selectedLocation,
+                });
+              }}
             >
               <View style={[styles.tileIconCircle, { backgroundColor: '#FEF2F2' }]}>
                 <Icon source="map-marker-outline" size={22} color="#EF4444" />
@@ -583,7 +753,7 @@ export default function SearchScreen({ navigation, route }: any) {
             <ScalePressable
               scaleTo={0.96}
               style={styles.tileCard}
-              onPress={() => setIsConditionModalOpen(true)}
+              onPress={() => openFilterModal('condition')}
             >
               <View style={[styles.tileIconCircle, { backgroundColor: '#ECFDF5' }]}>
                 <Icon source="tag-outline" size={22} color="#10B981" />
@@ -680,6 +850,17 @@ export default function SearchScreen({ navigation, route }: any) {
           {activeFiltersCount > 0 && (
             <View style={styles.activeChipsContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeChipsScroll}>
+                {(!!minPrice.trim() || !!maxPrice.trim()) && (
+                  <View style={styles.activeChip}>
+                    <Text style={styles.activeChipText}>
+                      💰 {minPrice ? `₹${Number(minPrice).toLocaleString('en-IN')}` : '₹0'} – {maxPrice ? `₹${Number(maxPrice).toLocaleString('en-IN')}` : 'Any'}
+                    </Text>
+                    <TouchableOpacity onPress={() => { setMinPrice(''); setMaxPrice(''); }}>
+                      <Icon source="close-circle" size={16} color="#0284C7" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+
                 {selectedCategory !== 'All Categories' && (
                   <View style={styles.activeChip}>
                     <Text style={styles.activeChipText}>🗂️ {selectedCategory}</Text>
@@ -773,8 +954,6 @@ export default function SearchScreen({ navigation, route }: any) {
               data={filteredParts}
               renderItem={renderPartItem}
               keyExtractor={(item) => item.id}
-              numColumns={2}
-              columnWrapperStyle={styles.columnWrapper}
               contentContainerStyle={styles.listContent}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
@@ -783,340 +962,105 @@ export default function SearchScreen({ navigation, route }: any) {
         </View>
       )}
 
-      {/* ================= MODAL: SELECT BRAND ================= */}
-      <Modal
-        visible={isBrandModalOpen}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsBrandModalOpen(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setIsBrandModalOpen(false)}
+      {/* Bottom Navigation Bar when search results are shown */}
+      {isSearchActive && (
+        <View
+          style={[
+            styles.bottomNavBar,
+            {
+              paddingBottom: insets.bottom > 0 ? insets.bottom : (Platform.OS === 'ios' ? 16 : 8),
+              height: 58 + (insets.bottom > 0 ? insets.bottom : (Platform.OS === 'ios' ? 16 : 8)),
+            },
+          ]}
         >
+          {/* 1. Home Tab */}
           <TouchableOpacity
-            activeOpacity={1}
-            style={[styles.modalSheet, { maxHeight: '80%', paddingBottom: insets.bottom + 16 }]}
-            onPress={(e) => e.stopPropagation()}
+            style={styles.bottomTabItem}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'HomeTab' })}
           >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Car Brand</Text>
-              <TouchableOpacity onPress={() => setIsBrandModalOpen(false)}>
-                <Icon source="close" size={24} color="#0F172A" />
-              </TouchableOpacity>
-            </View>
+            <Icon source="home-outline" size={24} color="#64748B" />
+            <Text style={styles.bottomTabLabel}>Home</Text>
+          </TouchableOpacity>
 
-            <View style={styles.modalSearchBox}>
-              <Icon source="magnify" size={20} color="#94A3B8" />
-              <TextInput
-                style={styles.modalSearchInput}
-                placeholder="Search car brands (e.g. Maruti, Tata)..."
-                placeholderTextColor="#94A3B8"
-                value={brandSearchInput}
-                onChangeText={setBrandSearchInput}
-              />
-              {brandSearchInput.length > 0 && (
-                <TouchableOpacity onPress={() => setBrandSearchInput('')}>
-                  <Icon source="close-circle" size={18} color="#94A3B8" />
-                </TouchableOpacity>
+          {/* 2. Chats Tab */}
+          <TouchableOpacity
+            style={styles.bottomTabItem}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'ChatsTab' })}
+          >
+            <View style={{ position: 'relative' }}>
+              <Icon source="comment-processing-outline" size={23} color="#64748B" />
+              {unreadCounts.unreadChats > 0 && (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>
+                    {unreadCounts.unreadChats > 99 ? '99+' : unreadCounts.unreadChats}
+                  </Text>
+                </View>
               )}
             </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
-              <View style={styles.modalOptionsList}>
-                {filteredBrandsForModal.map((brand) => {
-                  const isSelected = selectedBrand === brand;
-                  return (
-                    <TouchableOpacity
-                      key={brand}
-                      style={[styles.modalOptionItem, isSelected && styles.modalOptionItemActive]}
-                      onPress={() => handleSelectBrand(brand)}
-                    >
-                      <View style={styles.modalOptionRow}>
-                        <Icon source="car" size={20} color={isSelected ? '#0284C7' : '#64748B'} />
-                        <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextActive]}>
-                          {brand}
-                        </Text>
-                      </View>
-                      {isSelected && <Icon source="check-circle" size={20} color="#0284C7" />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </ScrollView>
+            <Text style={styles.bottomTabLabel}>Chats</Text>
           </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
-      {/* ================= MODAL: SELECT CATEGORY ================= */}
-      <Modal
-        visible={isCategoryModalOpen}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsCategoryModalOpen(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setIsCategoryModalOpen(false)}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={[styles.modalSheet, { maxHeight: '80%', paddingBottom: insets.bottom + 16 }]}
-            onPress={(e) => e.stopPropagation()}
+          {/* 3. SELL Button (Elevated) */}
+          <ScalePressable
+            scaleTo={0.92}
+            style={styles.customSellButtonTouch}
+            onPress={() => navigation.navigate('SellPart')}
           >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Category</Text>
-              <TouchableOpacity onPress={() => setIsCategoryModalOpen(false)}>
-                <Icon source="close" size={24} color="#0F172A" />
-              </TouchableOpacity>
+            <View style={styles.sellButtonCircle}>
+              <Icon source="plus" color="#FFFFFF" size={30} />
             </View>
+            <Text style={styles.sellButtonLabel}>SELL</Text>
+          </ScalePressable>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
-              <View style={styles.modalOptionsList}>
-                {/* All Categories Option */}
-                <TouchableOpacity
-                  style={[styles.modalOptionItem, selectedCategory === 'All Categories' && styles.modalOptionItemActive]}
-                  onPress={() => handleSelectCategory('All Categories')}
-                >
-                  <View style={styles.modalOptionRow}>
-                    <Icon source="view-grid" size={20} color={selectedCategory === 'All Categories' ? '#0284C7' : '#64748B'} />
-                    <Text style={[styles.modalOptionText, selectedCategory === 'All Categories' && styles.modalOptionTextActive]}>
-                      All Categories
-                    </Text>
-                  </View>
-                  {selectedCategory === 'All Categories' && <Icon source="check-circle" size={20} color="#0284C7" />}
-                </TouchableOpacity>
-
-                {dynamicCategoriesList.map((cat) => {
-                  const isSelected = selectedCategory === cat.name;
-                  return (
-                    <TouchableOpacity
-                      key={cat.id || cat.name}
-                      style={[styles.modalOptionItem, isSelected && styles.modalOptionItemActive]}
-                      onPress={() => handleSelectCategory(cat.name)}
-                    >
-                      <View style={styles.modalOptionRow}>
-                        <Icon source={cat.icon || 'car-cog'} size={20} color={isSelected ? '#0284C7' : '#64748B'} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextActive]}>
-                            {cat.name}
-                          </Text>
-                          <Text style={styles.modalOptionSubtext} numberOfLines={1}>
-                            {cat.description}
-                          </Text>
-                        </View>
-                      </View>
-                      {isSelected && <Icon source="check-circle" size={20} color="#0284C7" />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* ================= MODAL: SELECT LOCATION ================= */}
-      <Modal
-        visible={isLocationModalOpen}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsLocationModalOpen(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setIsLocationModalOpen(false)}
-        >
+          {/* 4. My Ads Tab */}
           <TouchableOpacity
-            activeOpacity={1}
-            style={[styles.modalSheet, { maxHeight: '75%', paddingBottom: insets.bottom + 16 }]}
-            onPress={(e) => e.stopPropagation()}
+            style={styles.bottomTabItem}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'MyAdsTab' })}
           >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Location / State</Text>
-              <TouchableOpacity onPress={() => setIsLocationModalOpen(false)}>
-                <Icon source="close" size={24} color="#0F172A" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
-              <View style={styles.modalOptionsList}>
-                {POPULAR_STATES.map((state) => {
-                  const isSelected = selectedLocation === state;
-                  return (
-                    <TouchableOpacity
-                      key={state}
-                      style={[styles.modalOptionItem, isSelected && styles.modalOptionItemActive]}
-                      onPress={() => handleSelectLocation(state)}
-                    >
-                      <View style={styles.modalOptionRow}>
-                        <Icon source="map-marker" size={20} color={isSelected ? '#0284C7' : '#64748B'} />
-                        <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextActive]}>
-                          {state}
-                        </Text>
-                      </View>
-                      {isSelected && <Icon source="check-circle" size={20} color="#0284C7" />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </ScrollView>
+            <Icon source="clipboard-text-outline" size={23} color="#64748B" />
+            <Text style={styles.bottomTabLabel}>My Ads</Text>
           </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
-      {/* ================= MODAL: CONDITION ================= */}
-      <Modal
-        visible={isConditionModalOpen}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsConditionModalOpen(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setIsConditionModalOpen(false)}
-        >
+          {/* 5. Profile Tab */}
           <TouchableOpacity
-            activeOpacity={1}
-            style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}
-            onPress={(e) => e.stopPropagation()}
+            style={styles.bottomTabItem}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'ProfileTab' })}
           >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Part Condition</Text>
-              <TouchableOpacity onPress={() => setIsConditionModalOpen(false)}>
-                <Icon source="close" size={24} color="#0F172A" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalOptionsList}>
-              {CONDITIONS.map((cond) => {
-                const isSelected = selectedCondition === cond;
-                return (
-                  <TouchableOpacity
-                    key={cond}
-                    style={[styles.modalOptionItem, isSelected && styles.modalOptionItemActive]}
-                    onPress={() => handleSelectCondition(cond)}
-                  >
-                    <View style={styles.modalOptionRow}>
-                      <Icon source="tag-outline" size={20} color={isSelected ? '#0284C7' : '#64748B'} />
-                      <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextActive]}>
-                        {cond}
-                      </Text>
-                    </View>
-                    {isSelected && <Icon source="check-circle" size={20} color="#0284C7" />}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <Icon source="account-outline" size={24} color="#64748B" />
+            <Text style={styles.bottomTabLabel}>Profile</Text>
           </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        </View>
+      )}
 
-      {/* ================= FULL FILTER MODAL ================= */}
-      <Modal
+      {/* ================= MODERN TWO-COLUMN FILTER & SORT MODAL ================= */}
+      <FilterAndSortModal
         visible={isFilterModalOpen}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsFilterModalOpen(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setIsFilterModalOpen(false)}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={[styles.modalSheet, { maxHeight: '88%', paddingBottom: insets.bottom + 16 }]}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter Spare Parts</Text>
-              <TouchableOpacity onPress={() => setIsFilterModalOpen(false)}>
-                <Icon source="close" size={24} color="#0F172A" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
-              {/* Category Section */}
-              <Text style={styles.filterSectionTitle}>Category</Text>
-              <View style={styles.filterOptionsGrid}>
-                {['All Categories', ...dynamicCategoriesList.map((c) => c.name)].map((cat) => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[styles.filterChip, selectedCategory === cat && styles.filterChipActive]}
-                    onPress={() => setSelectedCategory(cat)}
-                  >
-                    <Text style={[styles.filterChipText, selectedCategory === cat && styles.filterChipTextActive]}>
-                      {cat}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Brand Section */}
-              <Text style={styles.filterSectionTitle}>Car Brand</Text>
-              <View style={styles.filterOptionsGrid}>
-                {dynamicBrandsList.map((brand) => (
-                  <TouchableOpacity
-                    key={brand}
-                    style={[styles.filterChip, selectedBrand === brand && styles.filterChipActive]}
-                    onPress={() => setSelectedBrand(brand)}
-                  >
-                    <Text style={[styles.filterChipText, selectedBrand === brand && styles.filterChipTextActive]}>
-                      {brand}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Condition Section */}
-              <Text style={styles.filterSectionTitle}>Condition</Text>
-              <View style={styles.filterOptionsGrid}>
-                {CONDITIONS.map((cond) => (
-                  <TouchableOpacity
-                    key={cond}
-                    style={[styles.filterChip, selectedCondition === cond && styles.filterChipActive]}
-                    onPress={() => setSelectedCondition(cond)}
-                  >
-                    <Text style={[styles.filterChipText, selectedCondition === cond && styles.filterChipTextActive]}>
-                      {cond}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Location State Section */}
-              <Text style={styles.filterSectionTitle}>Location</Text>
-              <View style={styles.filterOptionsGrid}>
-                {POPULAR_STATES.map((st) => (
-                  <TouchableOpacity
-                    key={st}
-                    style={[styles.filterChip, selectedLocation === st && styles.filterChipActive]}
-                    onPress={() => setSelectedLocation(st)}
-                  >
-                    <Text style={[styles.filterChipText, selectedLocation === st && styles.filterChipTextActive]}>
-                      {st}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.modalResetBtn} onPress={resetFilters}>
-                <Text style={styles.modalResetText}>Reset All</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalApplyBtn} onPress={() => setIsFilterModalOpen(false)}>
-                <Text style={styles.modalApplyText}>Show Results ({filteredParts.length})</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        onClose={() => setIsFilterModalOpen(false)}
+        initialTab={filterModalInitialTab}
+        minPrice={minPrice}
+        maxPrice={maxPrice}
+        selectedBrand={selectedBrand}
+        selectedCategory={selectedCategory}
+        selectedCondition={selectedCondition}
+        selectedLocation={selectedLocation}
+        sortBy={sortBy}
+        categoriesList={dynamicCategoriesList}
+        brandsList={dynamicBrandsList}
+        locationsList={POPULAR_STATES}
+        conditionsList={CONDITIONS}
+        onOpenLocationScreen={() => {
+          navigation.navigate('LocationSelectScreen', {
+            returnScreen: 'Search',
+            currentCity: selectedLocation,
+          });
+        }}
+        onApply={handleApplyFilters}
+        onReset={resetFilters}
+      />
     </View>
   );
 }
@@ -1126,14 +1070,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
-  // Top Unified Bar
+  // Top Unified Bar - Matching Home Screen Royal Blue
   topHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: '#0B1220',
-    gap: 8,
+    backgroundColor: '#0066FF',
+    gap: 10,
+    shadowColor: '#0066FF',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
   },
   backBtn: {
     padding: 6,
@@ -1151,9 +1100,9 @@ const styles = StyleSheet.create({
     gap: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   searchInput: {
     flex: 1,
@@ -1163,28 +1112,31 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   filterBtn: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 12,
     width: 44,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   filterBtnActive: {
-    backgroundColor: '#0284C7',
+    backgroundColor: '#FFFFFF',
   },
   filterBadge: {
     position: 'absolute',
-    top: -3,
-    right: -3,
+    top: -4,
+    right: -4,
     backgroundColor: '#EF4444',
-    borderRadius: 9,
-    width: 18,
+    borderRadius: 10,
+    minWidth: 18,
     height: 18,
+    paddingHorizontal: 4,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#0B1220',
+    borderColor: '#0066FF',
   },
   filterBadgeText: {
     color: '#FFFFFF',
@@ -1268,12 +1220,12 @@ const styles = StyleSheet.create({
   clearAllText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#0284C7',
+    color: '#0066FF',
   },
   seeAllText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#0284C7',
+    color: '#0066FF',
   },
   recentListContainer: {
     backgroundColor: '#FFFFFF',
@@ -1376,8 +1328,8 @@ const styles = StyleSheet.create({
   activeChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0F9FF',
-    borderColor: '#BAE6FD',
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -1387,7 +1339,7 @@ const styles = StyleSheet.create({
   activeChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#0369A1',
+    color: '#0066FF',
   },
   clearAllFiltersBtn: {
     paddingHorizontal: 10,
@@ -1404,7 +1356,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 10,
   },
   resultCountText: {
@@ -1428,7 +1380,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E2E8F0',
   },
   sortBtnActive: {
-    backgroundColor: '#0284C7',
+    backgroundColor: '#0066FF',
   },
   sortBtnText: {
     fontSize: 11,
@@ -1439,30 +1391,30 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   listContent: {
-    paddingHorizontal: 8,
-    paddingBottom: 24,
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    paddingBottom: 28,
   },
-  columnWrapper: {
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-  },
+
+  // Modern Reference Card (Horizontal Layout: Left Image, Right Details)
   card: {
-    flex: 1,
+    flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    margin: 4,
-    maxWidth: '48.5%',
+    borderRadius: 14,
+    marginBottom: 12,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
-    shadowRadius: 3,
+    shadowRadius: 4,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
   imageContainer: {
     position: 'relative',
-    width: '100%',
-    height: 130,
+    width: 120,
+    height: 126,
     backgroundColor: '#E2E8F0',
   },
   cardImage: {
@@ -1488,64 +1440,103 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: 'bold',
   },
-  favBtn: {
+  imageCountBadge: {
     position: 'absolute',
-    top: 6,
+    bottom: 6,
     right: 6,
-  },
-  favoriteCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 6,
+    gap: 3,
+  },
+  imageCountText: {
+    color: '#FFFFFF',
+    fontSize: 9.5,
+    fontWeight: 'bold',
   },
   cardContent: {
+    flex: 1,
     padding: 10,
+    justifyContent: 'space-between',
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
   },
   cardPrice: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#0284C7',
-    marginBottom: 3,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0066FF',
+  },
+  favCircleBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   cardTitle: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#0F172A',
     lineHeight: 17,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   tagRow: {
     flexDirection: 'row',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   brandTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#F1F5F9',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+    gap: 4,
+    maxWidth: '90%',
   },
   brandTagText: {
-    fontSize: 10.5,
-    color: '#475569',
-    fontWeight: '500',
+    fontSize: 11,
+    color: '#334155',
+    fontWeight: '600',
   },
-  locationRow: {
+  cardFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    justifyContent: 'space-between',
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#F8FAFC',
+  },
+  locationCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    flex: 1,
+    marginRight: 6,
   },
   locationText: {
     fontSize: 11,
     color: '#64748B',
     flex: 1,
+  },
+  timeCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  timeText: {
+    fontSize: 10.5,
+    color: '#94A3B8',
   },
   emptyState: {
     flex: 1,
@@ -1738,5 +1729,77 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  // Bottom Navigation Bar
+  bottomNavBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: '#FFFFFF',
+    borderTopColor: '#E2E8F0',
+    borderTopWidth: 1,
+    paddingTop: 6,
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+  },
+  bottomTabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomTabLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    marginTop: 2,
+  },
+  customSellButtonTouch: {
+    top: -16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flex: 1,
+  },
+  sellButtonCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#0066FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#0066FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 8,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
+  sellButtonLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0066FF',
+    marginTop: 2,
+    letterSpacing: 0.5,
+  },
+  tabBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: '#EF4444',
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  tabBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+    lineHeight: Platform.OS === 'android' ? 14 : undefined,
   },
 });

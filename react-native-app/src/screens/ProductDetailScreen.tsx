@@ -697,7 +697,7 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
           <Text style={styles.sectionHeaderTitle}>Seller Information</Text>
           <Card style={styles.sellerCard}>
             <Card.Title
-              title={part.contactName || part.sellerEmail || 'Verified Auto Parts Seller'}
+              title={part.contactName || part.sellerName || 'Verified Auto Parts Seller'}
               titleStyle={{ fontWeight: '700', fontSize: 15, color: '#0F172A' }}
               subtitle="Tap photo to inspect profile"
               subtitleStyle={{ fontSize: 11, color: '#64748B' }}
@@ -731,7 +731,7 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
                   style={{ flexDirection: 'row', alignItems: 'center', paddingRight: 8 }}
                   onPress={() => {
                     const sId = part.sellerId || part.userId || part.ownerId || 'seller';
-                    const sName = part.contactName || part.sellerName || part.sellerEmail || 'Automotive Seller';
+                    const sName = part.contactName || part.sellerName || 'Automotive Seller';
                     const sLoc = part.location || part.district || part.state || 'India';
                     const sPhoto = liveSellerPhoto || part.sellerPhotoURL || part.sellerPhoto || part.sellerAvatar || part.photoURL || null;
                     navigation.navigate('SellerProfile', {

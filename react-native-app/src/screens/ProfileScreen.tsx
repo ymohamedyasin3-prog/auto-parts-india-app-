@@ -166,9 +166,6 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
               style={styles.avatarImage} 
               key={displayPhotoUrl}
             />
-            <View style={styles.avatarEditBadge}>
-              <Icon source="pencil" size={12} color="#FFFFFF" />
-            </View>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -186,16 +183,6 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
             <Text style={styles.viewPublicProfileText}>View Seller Profile →</Text>
           </TouchableOpacity>
         </View>
-
-        {/* Quick Edit Profile Button */}
-        <TouchableOpacity
-          style={styles.quickEditBtn}
-          onPress={() => setIsEditProfileModalOpen(true)}
-          activeOpacity={0.85}
-        >
-          <Icon source="account-edit-outline" size={20} color="#1565FF" />
-          <Text style={styles.quickEditBtnText}>Edit Profile</Text>
-        </TouchableOpacity>
 
         {/* Menu Options List */}
         <View style={styles.menuContainer}>
@@ -373,19 +360,6 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 32,
   },
-  avatarEditBadge: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    backgroundColor: '#1565FF',
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   profileInfoWrap: {
     flex: 1,
     marginLeft: 14,
@@ -405,23 +379,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1565FF',
     marginTop: 6,
-  },
-  quickEditBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EFF6FF',
-    borderRadius: 12,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    marginBottom: 16,
-    gap: 8,
-  },
-  quickEditBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1565FF',
   },
   menuContainer: {
     backgroundColor: '#FFFFFF',

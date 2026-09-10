@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
 import { sendChatMessageNotification, markNotificationAsRead } from '../services/notifications';
 import { promptImageSourceDialog } from '../services/imagePickerService';
-import { uploadImageToCloudinary } from '../services/cloudinary';
+import { uploadImageToCloudinary, deleteImageFromCloudinary } from '../services/cloudinary';
 import { useLanguage } from '../context/LanguageContext';
 import { LanguageSelectorModal } from '../components/LanguageSelectorModal';
 
@@ -181,7 +181,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadingImageUri, setUploadingImageUri] = useState<string | null>(null);
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -189,7 +189,11 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
 
   // Unified Back Navigation Logic
   const handleBackNavigation = useCallback(() => {
-    navigation.navigate('MainTabs', { screen: 'ChatsTab' });
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('MainTabs', { screen: 'ChatsTab' });
+    }
     return true; // Prevent default behavior
   }, [navigation]);
 
@@ -485,7 +489,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
     }
   };
 
-  // 4. Image Picker via Cloudinary
+  // 4. Instant WhatsApp-Style Image Attachment with Real-time Optimistic Preview
   const handlePickImage = async () => {
     try {
       const selectedUri = await promptImageSourceDialog(
@@ -494,21 +498,31 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
       );
 
       if (selectedUri) {
-        setIsUploadingImage(true);
+        // Show instant preview bubble right away (WhatsApp Experience)
+        setUploadingImageUri(selectedUri);
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+
         try {
           const cloudinaryUrl = await uploadImageToCloudinary(selectedUri, 'chat_attachments');
-          if (cloudinaryUrl) {
-            await executeSend('', cloudinaryUrl);
-          }
+          // Send either the secure cloudinary URL or the base64/URI directly
+          await executeSend('', cloudinaryUrl || selectedUri);
         } catch (err) {
           console.warn('[ChatRoomScreen] Image upload error:', err);
-          Alert.alert('Upload Failed', 'Could not upload image. Please try again.');
+          // Still attempt to send with local/direct URI rather than completely failing
+          try {
+            await executeSend('', selectedUri);
+          } catch (_) {
+            Alert.alert('Upload Failed', 'Could not send photo. Please try again.');
+          }
         } finally {
-          setIsUploadingImage(false);
+          setUploadingImageUri(null);
         }
       }
     } catch (err) {
       console.warn('[ChatRoomScreen] Image picker dialog error:', err);
+      setUploadingImageUri(null);
     }
   };
 
@@ -707,6 +721,17 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
             try {
               const db = getFirebaseFirestore();
               if (db && typeof db.collection === 'function' && chatId && msgItem.id) {
+                
+                // If it's an image message, delete from Cloudinary backend first
+                if (msgItem.imageUrl) {
+                  try {
+                    await deleteImageFromCloudinary(msgItem.imageUrl);
+                    console.log('[ChatRoomScreen] Image deleted from backend');
+                  } catch (imgError) {
+                    console.warn('[ChatRoomScreen] Failed to delete image from backend', imgError);
+                  }
+                }
+
                 await db
                   .collection('chats')
                   .doc(chatId)
@@ -1037,12 +1062,17 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
                   <ActivityIndicator size={10} color="#0072F5" />
                 </View>
               )}
-              {isUploadingImage && (
-                <View style={styles.uploadingImageBubble}>
-                  <ActivityIndicator size={14} color="#0072F5" />
-                  <Text style={styles.uploadingImageText}>
-                    {translateDynamic('Uploading image...')}
-                  </Text>
+              {uploadingImageUri && (
+                <View style={styles.uploadingImageCard}>
+                  <Image source={{ uri: uploadingImageUri }} style={styles.uploadingImageThumb} resizeMode="cover" />
+                  <View style={styles.uploadingImageOverlay}>
+                    <View style={styles.uploadingSpinnerCircle}>
+                      <ActivityIndicator size={20} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.uploadingImageOverlayText}>
+                      {translateDynamic('Sending photo...')}
+                    </Text>
+                  </View>
                 </View>
               )}
             </>
@@ -1064,7 +1094,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
                 key={`bar-${idx}`}
                 style={styles.quickReplyChip}
                 onPress={() => executeSend(replyText)}
-                disabled={isSending || isUploadingImage}
+                disabled={isSending || !!uploadingImageUri}
                 activeOpacity={0.7}
               >
                 <Text style={styles.quickReplyChipText}>{replyText}</Text>
@@ -1097,7 +1127,7 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
           <TouchableOpacity
             style={styles.attachBtn}
             onPress={handlePickImage}
-            disabled={isUploadingImage || isSending}
+            disabled={!!uploadingImageUri || isSending}
             activeOpacity={0.7}
           >
             <Icon source="paperclip" size={24} color="#64748B" />
@@ -1630,24 +1660,40 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontWeight: '600',
   },
-  uploadingImageBubble: {
+  uploadingImageCard: {
     alignSelf: 'flex-end',
-    backgroundColor: '#E0F2FE',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    width: 140,
+    height: 140,
     borderRadius: 14,
     borderTopRightRadius: 2,
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     marginVertical: 4,
+    overflow: 'hidden',
+    backgroundColor: '#F1F5F9',
   },
-  uploadingImageText: {
+  uploadingImageThumb: {
+    width: '100%',
+    height: '100%',
+    opacity: 0.6,
+  },
+  uploadingImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadingSpinnerCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  uploadingImageOverlayText: {
     fontSize: 11,
-    color: '#0066FF',
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   emptyFeedContainer: {
     flex: 1,

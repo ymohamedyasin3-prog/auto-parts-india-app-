@@ -45,7 +45,6 @@ import { useLanguage } from '../context/LanguageContext';
 import { MapLocationModal } from '../components/MapLocationModal';
 import { BrandLogo } from '../components/BrandLogo';
 import { INDIAN_STATES_AND_DISTRICTS, StateWithDistricts } from '../data/indianLocations';
-import { callGeminiDirectlyFromDevice } from '../services/directGeminiService';
 import { MASTER_CATEGORY_PARTS } from '../constants/categories';
 
 const { width } = Dimensions.get('window');
@@ -775,83 +774,66 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
       let data: any = null;
       let lastFetchErr: any = null;
 
-      // 1. Direct Client-Side Gemini Engine (Zero Broker / Direct Device AI)
-      try {
-        console.log('[AI AutoFill] Attempting direct Google Gemini AI call from device...');
-        const directResult = await callGeminiDirectlyFromDevice({
-          imageUriOrBase64: imageToSend,
-          currentBrand: finalBrand,
-          currentModel: finalModel,
-          currentCategory: finalCategory,
-          currentPartName: finalPartName,
-          taxonomyBrands,
-          taxonomyCategories,
-        });
-        if (directResult) {
-          data = directResult;
+      const endpoints: string[] = [];
+      
+      // Relative API route (primary for web & reverse proxy)
+      endpoints.push('/api/ai/autofill-listing');
+
+      if (typeof window !== 'undefined' && window.location?.origin) {
+        const winOrigin = window.location.origin;
+        if (winOrigin.startsWith('http://') || winOrigin.startsWith('https://')) {
+          const absoluteUrl = `${winOrigin}/api/ai/autofill-listing`;
+          if (!endpoints.includes(absoluteUrl)) {
+            endpoints.unshift(absoluteUrl);
+          }
         }
-      } catch (directErr: any) {
-        console.warn('[AI AutoFill] Direct device Gemini call failed or key absent, falling back to server endpoints:', directErr?.message);
-        lastFetchErr = directErr;
       }
 
-      // 2. Fallback to server endpoints if direct device call did not yield data
-      if (!data) {
-        const endpoints: string[] = [];
-        
-        // Relative API route (primary for web & browser previews)
-        endpoints.push('/api/ai/autofill-listing');
+      for (const endpoint of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-        if (typeof window !== 'undefined' && window.location?.origin) {
-          const winOrigin = window.location.origin;
-          if (!endpoints.includes(`${winOrigin}/api/ai/autofill-listing`)) {
-            endpoints.push(`${winOrigin}/api/ai/autofill-listing`);
+          const candidateRes = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            signal: controller.signal,
+            body: JSON.stringify({
+              image: imageToSend,
+              currentBrand: finalBrand,
+              currentModel: finalModel,
+              currentCategory: finalCategory,
+              currentPartName: finalPartName,
+            }),
+          });
+          clearTimeout(timeoutId);
+
+          const contentType = candidateRes.headers.get('content-type') || '';
+          if (!contentType.includes('application/json')) {
+            console.warn(`[AI AutoFill] Endpoint ${endpoint} returned non-JSON response (${candidateRes.status})`);
+            continue;
           }
-        }
-        endpoints.push('https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/ai/autofill-listing');
 
-        for (const endpoint of endpoints) {
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 12000);
+          const resJson = await candidateRes.json();
 
-            const candidateRes = await fetch(endpoint, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-              },
-              signal: controller.signal,
-              body: JSON.stringify({
-                image: imageToSend,
-                currentBrand: finalBrand,
-                currentModel: finalModel,
-                currentCategory: finalCategory,
-                currentPartName: finalPartName,
-              }),
-            });
-            clearTimeout(timeoutId);
-
-            let resJson: any = null;
-            try {
-              resJson = await candidateRes.json();
-            } catch (_) {}
-
-            if (candidateRes.ok && resJson && resJson.success) {
-              data = resJson;
-              break;
-            } else if (resJson && resJson.isAutomotive === false) {
-              // Non-automotive image rejection response from server
-              data = resJson;
-              break;
-            } else if (resJson && (resJson.error || resJson.message)) {
-              lastFetchErr = new Error(resJson.error || resJson.message);
-            } else {
-              lastFetchErr = new Error(`Server returned HTTP ${candidateRes.status}`);
-            }
-          } catch (err: any) {
-            lastFetchErr = err;
+          if (candidateRes.ok && resJson && resJson.success) {
+            data = resJson;
+            break;
+          } else if (resJson && resJson.isAutomotive === false) {
+            // Non-automotive image rejection response from server
+            data = resJson;
+            break;
+          } else if (resJson && (resJson.error || resJson.message)) {
+            lastFetchErr = new Error(resJson.error || resJson.message);
+          } else {
+            lastFetchErr = new Error(`AI service returned HTTP ${candidateRes.status}`);
           }
+        } catch (err: any) {
+          console.warn(`[AI AutoFill] Attempt failed for ${endpoint}:`, err?.message);
+          lastFetchErr = err;
         }
       }
 

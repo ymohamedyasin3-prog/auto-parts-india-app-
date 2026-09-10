@@ -1,6 +1,5 @@
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
 import {
-  Animated,
   TouchableOpacity,
   StyleSheet,
   View,
@@ -21,7 +20,8 @@ interface FavoriteHeartButtonProps {
 
 /**
  * FavoriteHeartButton
- * High-performance animated favorite button with a playful spring pop when liked.
+ * High-performance standard button without Animated nodes
+ * to prevent screen blinking and app stuck issues in long lists.
  */
 export function FavoriteHeartButton({
   isFavorited,
@@ -31,49 +31,6 @@ export function FavoriteHeartButton({
   iconColor = '#EF4444',
   inactiveIconColor = '#334155',
 }: FavoriteHeartButtonProps) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const isFirstRender = useRef(true);
-
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-
-    if (isFavorited) {
-      // Pop scale bounce on like
-      Animated.sequence([
-        Animated.spring(scaleAnim, {
-          toValue: 1.35,
-          friction: 4,
-          tension: 140,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 4,
-          tension: 100,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      // Subtle pulse on unlike
-      Animated.sequence([
-        Animated.timing(scaleAnim, {
-          toValue: 0.85,
-          duration: 90,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 5,
-          tension: 90,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [isFavorited, scaleAnim]);
-
   const handlePress = (e: GestureResponderEvent) => {
     e.stopPropagation?.();
     onPress(e);
@@ -81,19 +38,17 @@ export function FavoriteHeartButton({
 
   return (
     <TouchableOpacity
-      activeOpacity={0.8}
+      activeOpacity={0.7}
       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       onPress={handlePress}
       style={[styles.btnWrap, containerStyle]}
     >
       <View style={styles.circle}>
-        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-          <Icon
-            source={isFavorited ? 'heart' : 'heart-outline'}
-            size={size}
-            color={isFavorited ? iconColor : inactiveIconColor}
-          />
-        </Animated.View>
+        <Icon
+          source={isFavorited ? 'heart' : 'heart-outline'}
+          size={size}
+          color={isFavorited ? iconColor : inactiveIconColor}
+        />
       </View>
     </TouchableOpacity>
   );

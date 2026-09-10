@@ -205,12 +205,30 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
         lng: details?.lng,
       });
 
-      navigation.navigate('MainTabs', {
-        screen: 'HomeTab',
-        params: { selectedCity: cityToSave },
-      });
+      if (typeof route?.params?.onSelect === 'function') {
+        try {
+          route.params.onSelect(cityToSave, details);
+        } catch (_) {}
+      }
+
+      if (route?.params?.returnScreen) {
+        navigation.navigate(route.params.returnScreen, {
+          selectedLocation: cityToSave,
+          selectedCity: cityToSave,
+          initialState: cityToSave,
+          locationDetails: details,
+          ...(route?.params?.returnParams || {}),
+        });
+      } else if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('MainTabs', {
+          screen: 'HomeTab',
+          params: { selectedCity: cityToSave },
+        });
+      }
     },
-    [navigation]
+    [navigation, route]
   );
 
   // GPS Auto-detect handler

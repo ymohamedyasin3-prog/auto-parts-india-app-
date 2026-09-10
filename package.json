@@ -9,8 +9,7 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit",
-    "postinstall": "node generate-app-icons.js || true"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@babel/runtime": "^7.25.0",

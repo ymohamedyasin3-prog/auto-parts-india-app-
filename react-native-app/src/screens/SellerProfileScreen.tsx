@@ -44,7 +44,6 @@ export default function SellerProfileScreen({ route, navigation }: any) {
   const [activeListings, setActiveListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState(false);
-  const [followLoading, setFollowLoading] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
 
@@ -207,7 +206,6 @@ export default function SellerProfileScreen({ route, navigation }: any) {
     }
     if (isOwnProfile) return;
 
-    setFollowLoading(true);
     const followId = `${currentUser.uid}_${targetUid}`;
     const previousState = isFollowing;
     const previousFollowersCount = followersCount;
@@ -226,7 +224,7 @@ export default function SellerProfileScreen({ route, navigation }: any) {
             id: followId,
             followerId: currentUser.uid,
             followingId: targetUid,
-            followerName: currentUser.displayName || currentUser.email || 'Buyer',
+            followerName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Buyer',
             followerPhoto: currentUser.photoURL || currentUser.profilePhoto || '',
             createdAt: Date.now(),
           }, { merge: true });
@@ -236,9 +234,9 @@ export default function SellerProfileScreen({ route, navigation }: any) {
               id: `follow_${followId}`,
               recipientId: targetUid,
               senderId: currentUser.uid,
-              senderName: currentUser.displayName || currentUser.email || 'A buyer',
+              senderName: currentUser.displayName || currentUser.email?.split('@')[0] || 'A buyer',
               senderPhoto: currentUser.photoURL || currentUser.profilePhoto || '',
-              text: `${currentUser.displayName || 'A buyer'} started following you.`,
+              text: `${currentUser.displayName || currentUser.email?.split('@')[0] || 'A buyer'} started following you.`,
               type: 'new_follower',
               createdAt: Date.now(),
               read: false,
@@ -251,8 +249,6 @@ export default function SellerProfileScreen({ route, navigation }: any) {
       setIsFollowing(previousState);
       setFollowersCount(previousFollowersCount);
       Alert.alert('Error', 'Unable to update follow status.');
-    } finally {
-      setFollowLoading(false);
     }
   };
 
@@ -310,7 +306,7 @@ export default function SellerProfileScreen({ route, navigation }: any) {
         <View style={styles.profileHeaderBlock}>
           {/* Avatar and Name/Handle Row */}
           <View style={styles.identityRow}>
-            {/* Avatar on Left with Pencil Badge */}
+            {/* Avatar on Left */}
             <TouchableOpacity
               style={styles.avatarWrap}
               onPress={handleProfilePhotoPress}
@@ -321,13 +317,6 @@ export default function SellerProfileScreen({ route, navigation }: any) {
               ) : (
                 <View style={styles.avatarBlueCircle}>
                   <Icon source="account" size={46} color="#FFFFFF" />
-                </View>
-              )}
-
-              {/* Pencil Badge in Circle Overlay */}
-              {isOwnProfile && (
-                <View style={styles.pencilBadge}>
-                  <Icon source="pencil" size={13} color="#FFFFFF" />
                 </View>
               )}
             </TouchableOpacity>
@@ -404,23 +393,16 @@ export default function SellerProfileScreen({ route, navigation }: any) {
               <TouchableOpacity
                 style={[styles.visitorBtn, isFollowing ? styles.followingBtn : styles.followBtn]}
                 onPress={handleToggleFollow}
-                disabled={followLoading}
                 activeOpacity={0.85}
               >
-                {followLoading ? (
-                  <ActivityIndicator size="small" color={isFollowing ? '#0F172A' : '#FFFFFF'} />
-                ) : (
-                  <>
-                    <Icon
-                      source={isFollowing ? 'account-check' : 'account-plus'}
-                      size={18}
-                      color={isFollowing ? '#0F172A' : '#FFFFFF'}
-                    />
-                    <Text style={[styles.visitorBtnText, isFollowing && styles.followingBtnText]}>
-                      {isFollowing ? 'Following' : 'Follow'}
-                    </Text>
-                  </>
-                )}
+                <Icon
+                  source={isFollowing ? 'account-check' : 'account-plus'}
+                  size={18}
+                  color={isFollowing ? '#0F172A' : '#FFFFFF'}
+                />
+                <Text style={[styles.visitorBtnText, isFollowing && styles.followingBtnText]}>
+                  {isFollowing ? 'Following' : 'Follow'}
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -591,19 +573,6 @@ const styles = StyleSheet.create({
     height: 78,
     borderRadius: 39,
     backgroundColor: '#1565FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pencilBadge: {
-    position: 'absolute',
-    bottom: -1,
-    right: -1,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#004BD6',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },

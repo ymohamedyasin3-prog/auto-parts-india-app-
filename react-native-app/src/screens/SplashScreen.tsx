@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   Animated, 
   View, 
@@ -6,14 +6,31 @@ import {
   StyleSheet, 
   SafeAreaView, 
   Image,
-  Dimensions
+  Dimensions,
+  Alert,
+  Linking
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getCurrentUser } from '../services/firebase';
+import { getCurrentUser, getFirebaseFirestore } from '../services/firebase';
 import { AppLogo } from '../components/AppLogo';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Current Hardcoded Version for this app build
+const CURRENT_APP_VERSION = '1.0.0';
+
+function isVersionLower(current: string, required: string) {
+  const cParts = current.split('.').map(Number);
+  const rParts = required.split('.').map(Number);
+  for (let i = 0; i < Math.max(cParts.length, rParts.length); i++) {
+    const c = cParts[i] || 0;
+    const r = rParts[i] || 0;
+    if (c < r) return true;
+    if (c > r) return false;
+  }
+  return false;
+}
 
 export default function SplashScreen({ navigation }: any) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -42,8 +59,7 @@ export default function SplashScreen({ navigation }: any) {
       }),
     ]).start();
 
-    // Check persistent login state: if already signed in, enter MainTabs; otherwise show Auth
-    const checkAuthAndNavigate = async () => {
+    const proceedToApp = async () => {
       try {
         let user = getCurrentUser();
         if (!user || (!user.uid && !user.id)) {
@@ -58,24 +74,68 @@ export default function SplashScreen({ navigation }: any) {
         const targetScreen = (user && (user.uid || user.id)) ? 'MainTabs' : 'Auth';
 
         if (navigation?.reset) {
-          navigation.reset({
-            index: 0,
-            routes: [{ name: targetScreen }],
-          });
+          navigation.reset({ index: 0, routes: [{ name: targetScreen }] });
         } else if (navigation?.replace) {
           navigation.replace(targetScreen);
         } else if (navigation?.navigate) {
           navigation.navigate(targetScreen);
         }
       } catch (e) {
-        try {
-          navigation?.navigate('Auth');
-        } catch (_) {}
+        try { navigation?.navigate('Auth'); } catch (_) {}
       }
     };
 
+    const checkAppUpdate = async () => {
+      try {
+        const db = getFirebaseFirestore();
+        if (!db) {
+          proceedToApp();
+          return;
+        }
+
+        const snap = await db.collection('app_version').doc('config').get();
+        if (snap.exists) {
+          const config = snap.data();
+          const minVersion = config?.minimumSupportedVersion || '1.0.0';
+          const forceUpdate = config?.forceUpdate === true;
+          const apkUrl = config?.apkDownloadUrl || config?.playStoreUrl || '';
+          
+          if (isVersionLower(CURRENT_APP_VERSION, minVersion)) {
+            // Needs Update
+            const promptUpdate = () => {
+              Alert.alert(
+                'Update Required',
+                'A new version of the app is available. Please update to continue using the app.',
+                [
+                  {
+                    text: 'Update Now',
+                    onPress: () => {
+                      if (apkUrl) Linking.openURL(apkUrl).catch(() => {});
+                      if (forceUpdate) {
+                        setTimeout(promptUpdate, 1000); // Loop if forced
+                      } else {
+                        proceedToApp();
+                      }
+                    }
+                  },
+                  ...(forceUpdate ? [] : [{ text: 'Later', onPress: proceedToApp, style: 'cancel' }])
+                ],
+                { cancelable: !forceUpdate }
+              );
+            };
+            promptUpdate();
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Update check failed:', err);
+      }
+      // If no update required or error, proceed
+      proceedToApp();
+    };
+
     const timer = setTimeout(() => {
-      checkAuthAndNavigate();
+      checkAppUpdate();
     }, 1400);
 
     return () => clearTimeout(timer);

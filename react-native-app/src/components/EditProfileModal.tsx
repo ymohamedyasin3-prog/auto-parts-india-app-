@@ -403,13 +403,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 editable={!isSaving}
               />
             </View>
-
-            <View style={styles.helperTipBox}>
-              <Icon source="information-outline" size={18} color="#1565FF" />
-              <Text style={styles.helperTipText}>
-                Updating your name and profile picture will automatically refresh across your active spare part listings and buyer chats.
-              </Text>
-            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -535,23 +528,5 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     fontSize: 15,
     fontWeight: '400',
-  },
-  helperTipBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#EFF6FF',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 8,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-  },
-  helperTipText: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
-    color: '#1E40AF',
-    fontWeight: '500',
   },
 });

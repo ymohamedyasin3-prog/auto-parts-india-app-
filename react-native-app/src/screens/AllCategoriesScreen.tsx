@@ -172,9 +172,6 @@ export default function AllCategoriesScreen({ navigation, route }: any) {
 
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>All Categories</Text>
-          <Text style={styles.headerSubtitle}>
-            {ALL_AUTOMOTIVE_CATEGORIES.length} Auto Spare Parts Categories
-          </Text>
         </View>
       </View>
 

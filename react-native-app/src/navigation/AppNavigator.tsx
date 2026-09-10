@@ -644,7 +644,7 @@ export default function AppNavigator({ user }: { user?: any } = {}) {
         <Stack.Screen 
           name="SellerProfile" 
           component={SellerProfileScreen}
-          options={{ title: 'Seller Profile' }}
+          options={{ headerShown: false }}
         />
 
         <Stack.Screen 

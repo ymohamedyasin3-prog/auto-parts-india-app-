@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import crypto from "crypto";
 import dotenv from "dotenv";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 dotenv.config();
 
@@ -270,9 +270,55 @@ Respond strictly in valid JSON format matching this schema:
         try {
           const response = await ai.models.generateContent({
             model: modelName,
-            contents: [{ role: "user", parts: promptParts }],
+            contents: promptParts,
             config: {
-              responseMimeType: "application/json"
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  isAutomotive: {
+                    type: Type.BOOLEAN,
+                    description: "True if image represents a car, vehicle, automotive spare part, body panel, mechanical component, or scrap/accidental car. False for non-automotive photos."
+                  },
+                  rejectionReason: {
+                    type: Type.STRING,
+                    description: "Polite reason if isAutomotive is false"
+                  },
+                  itemType: {
+                    type: Type.STRING,
+                    description: "spare_part, full_vehicle, or accidental_scrap_vehicle"
+                  },
+                  title: {
+                    type: Type.STRING,
+                    description: "Professional listing title for Indian marketplace"
+                  },
+                  carBrand: {
+                    type: Type.STRING,
+                    description: "Accurate car brand in India (e.g. Maruti Suzuki, Hyundai, Tata, Mahindra, Toyota, Honda, etc.)"
+                  },
+                  carModel: {
+                    type: Type.STRING,
+                    description: "Accurate car model in India (e.g. Swift, Zen, Baleno, Creta, i20, Nexon, Thar, etc.)"
+                  },
+                  category: {
+                    type: Type.STRING,
+                    description: "Category matching standard app categories"
+                  },
+                  partName: {
+                    type: Type.STRING,
+                    description: "Precise spare part or vehicle component name"
+                  },
+                  condition: {
+                    type: Type.STRING,
+                    description: "Used or New"
+                  },
+                  description: {
+                    type: Type.STRING,
+                    description: "Realistic 2-3 sentence description"
+                  }
+                },
+                required: ["isAutomotive", "title", "carBrand", "carModel", "category", "partName", "condition", "description"]
+              }
             }
           });
           const text = response.text?.trim();

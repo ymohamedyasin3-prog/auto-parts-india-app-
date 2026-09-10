@@ -790,7 +790,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
     }).map((item) => item.part);
   }, [parts, searchQuery, selectedCategory, selectedBrand, minPrice, maxPrice, selectedCity]);
 
-  // Display Categories: Prefer Firestore topCategories if populated, otherwise fallback to defaults
+  // Display Categories for Grid: Top 7 + More
   const displayCategories = useMemo(() => {
     let rawList: any[] = [];
     if (topCategories && topCategories.length > 0) {
@@ -808,9 +808,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
       rawList = HOME_DEFAULT_CATEGORIES;
     }
 
-    // Filter out any existing 'More'
     const withoutMore = rawList.filter((c: any) => c.name?.toLowerCase() !== 'more' && c.id !== 'More');
-    // Take at most 7 categories, and put 'More' as the 8th item
     const top7 = withoutMore.slice(0, 7);
     const moreItem = {
       id: 'More',
@@ -821,6 +819,24 @@ export default function HomeScreen({ navigation, route, user }: any) {
       order: 999,
     };
     return [...top7, moreItem];
+  }, [topCategories]);
+
+  // Full Categories list for Filter Modal (shows all categories without 'More' button)
+  const allCategoriesForFilter = useMemo(() => {
+    let rawList: any[] = [];
+    if (topCategories && topCategories.length > 0) {
+      const activeList = topCategories.filter((c: any) => c.active !== false);
+      rawList = activeList.map((c: any) => ({
+        id: c.id || c.name,
+        name: c.name || c.title,
+        order: typeof c.order === 'number' ? c.order : 0,
+      }));
+      rawList.sort((a, b) => a.order - b.order);
+    } else {
+      rawList = HOME_DEFAULT_CATEGORIES;
+    }
+    // Return all categories, ensuring no 'More' button is mixed in
+    return rawList.filter((c: any) => c.name?.toLowerCase() !== 'more' && c.id !== 'More');
   }, [topCategories]);
 
   // Display Brands: Prefer Firestore carBrands if populated, otherwise fallback to defaults
@@ -1279,17 +1295,21 @@ export default function HomeScreen({ navigation, route, user }: any) {
 
               <Text style={[styles.filterLabel, { marginTop: 16 }]}>Category</Text>
               <View style={styles.modalPillWrap}>
-                {['All', ...displayCategories.map((c) => c.name)].map((cat) => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[styles.modalPill, selectedCategory === cat && styles.modalPillActive]}
-                    onPress={() => setSelectedCategory(cat)}
-                  >
-                    <Text style={[styles.modalPillText, selectedCategory === cat && styles.modalPillTextActive]}>
-                      {cat}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {['All', ...allCategoriesForFilter.map((c) => c.name)].map((cat) => {
+                  return (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[styles.modalPill, selectedCategory === cat && styles.modalPillActive]}
+                      onPress={() => {
+                        setSelectedCategory(cat);
+                      }}
+                    >
+                      <Text style={[styles.modalPillText, selectedCategory === cat && styles.modalPillTextActive]}>
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </ScrollView>
 

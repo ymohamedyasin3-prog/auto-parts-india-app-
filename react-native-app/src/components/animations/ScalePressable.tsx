@@ -1,7 +1,6 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import {
-  Animated,
-  TouchableWithoutFeedback,
+  TouchableOpacity,
   ViewStyle,
   StyleProp,
   GestureResponderEvent,
@@ -12,7 +11,7 @@ interface ScalePressableProps {
   style?: StyleProp<ViewStyle>;
   onPress?: (event: GestureResponderEvent) => void;
   onLongPress?: (event: GestureResponderEvent) => void;
-  scaleTo?: number;
+  scaleTo?: number; // Ignored for performance
   disabled?: boolean;
   activeOpacity?: number;
   hitSlop?: { top?: number; bottom?: number; left?: number; right?: number };
@@ -20,76 +19,28 @@ interface ScalePressableProps {
 
 /**
  * ScalePressable
- * Delivers silky-smooth native spring tactile press animations on cards, tiles, and buttons
- * without altering any existing layout or styles.
+ * Fallback to high-performance TouchableOpacity to prevent memory leaks and UI thread blocking
+ * which was causing screen blinking and app sticking.
  */
 export function ScalePressable({
   children,
   style,
   onPress,
   onLongPress,
-  scaleTo = 0.96,
   disabled = false,
-  activeOpacity = 0.92,
+  activeOpacity = 0.7, // Standard touchable opacity
   hitSlop,
 }: ScalePressableProps) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const opacityAnim = useRef(new Animated.Value(1)).current;
-
-  const handlePressIn = () => {
-    if (disabled) return;
-    Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: scaleTo,
-        friction: 6,
-        tension: 120,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: activeOpacity,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  const handlePressOut = () => {
-    if (disabled) return;
-    Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 5,
-        tension: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: 1,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
   return (
-    <TouchableWithoutFeedback
+    <TouchableOpacity
+      style={style}
       disabled={disabled}
       onPress={onPress}
       onLongPress={onLongPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
+      activeOpacity={activeOpacity}
       hitSlop={hitSlop}
     >
-      <Animated.View
-        style={[
-          style,
-          {
-            transform: [{ scale: scaleAnim }],
-            opacity: opacityAnim,
-          },
-        ]}
-      >
-        {children}
-      </Animated.View>
-    </TouchableWithoutFeedback>
+      {children}
+    </TouchableOpacity>
   );
 }
