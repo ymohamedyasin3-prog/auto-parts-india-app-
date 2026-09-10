@@ -475,24 +475,30 @@ export async function markAllUserNotificationsAsRead(userId: string): Promise<vo
   }
 }
 
-/**
- * Subscribes to real-time unread counts for Chats and General Notifications
- */
-export function subscribeToUserUnreadCounts(
-  userId: string | null | undefined,
-  callback: (counts: {
-    unreadChats: number;
-    unreadNotifications: number;
-    totalUnread: number;
-    latestNotification?: any;
-  }) => void
-): () => void {
-  if (!userId) {
-    callback({ unreadChats: 0, unreadNotifications: 0, totalUnread: 0 });
-    return () => {};
-  }
+// Singleton Store for Real-time Unread Counts
+type UnreadCountsResult = {
+  unreadChats: number;
+  unreadNotifications: number;
+  totalUnread: number;
+  latestNotification?: any;
+};
 
-  let isMounted = true;
+let activeSingletonUserId: string | null = null;
+let activeSubscribers = new Set<(counts: UnreadCountsResult) => void>();
+let activeSingletonUnsub: (() => void) | null = null;
+let cachedUnreadResult: UnreadCountsResult = { unreadChats: 0, unreadNotifications: 0, totalUnread: 0 };
+let emitDebounceTimer: any = null;
+
+function notifySubscribers() {
+  if (emitDebounceTimer) clearTimeout(emitDebounceTimer);
+  emitDebounceTimer = setTimeout(() => {
+    activeSubscribers.forEach((cb) => {
+      try { cb(cachedUnreadResult); } catch (_) {}
+    });
+  }, 50);
+}
+
+function startSingletonListener(userId: string): () => void {
   let unreadChatCount = 0;
   let unreadNotifCount = 0;
   let unreadAnnounceCount = 0;
@@ -502,108 +508,63 @@ export function subscribeToUserUnreadCounts(
   let unsubNotifs = () => {};
   let unsubAnnouncements = () => {};
 
-  const emit = () => {
-    if (!isMounted) return;
+  const db = getFirebaseFirestore();
+  if (!db || typeof db.collection !== 'function') {
+    return () => {};
+  }
+
+  const updateAndEmit = () => {
     const totalNotifs = unreadNotifCount + unreadAnnounceCount;
-    callback({
+    cachedUnreadResult = {
       unreadChats: unreadChatCount,
       unreadNotifications: totalNotifs,
       totalUnread: unreadChatCount + totalNotifs,
       latestNotification: latestNotifItem,
-    });
+    };
+    notifySubscribers();
   };
 
   try {
-    const db = getFirebaseFirestore();
-    if (!db || typeof db.collection !== 'function') {
-      callback({ unreadChats: 0, unreadNotifications: 0, totalUnread: 0 });
-      return () => {};
-    }
+    // 1. Single query for chats using participants array-contains
+    unsubChats = db.collection('chats').where('participants', 'array-contains', userId).onSnapshot(
+      (snapshot: any) => {
+        try {
+          const chatsMap = new Map<string, any>();
+          const hiddenChatSet = getSyncLocalHiddenChatIds();
 
-    // 1. Listen to unread chats
-    let buyerChats: any[] = [];
-    let sellerChats: any[] = [];
-    let partChats: any[] = [];
-
-    const computeUnread = async () => {
-      if (!isMounted) return;
-      try {
-        const chatsMap = new Map<string, any>();
-        const hiddenChatSet = await getLocalHiddenChatIds();
-
-        [...buyerChats, ...sellerChats, ...partChats].forEach((c) => {
-          const docId = c.id || (c.data && c.data().id);
-          const data = c.data ? c.data() : c;
-          if (!docId || !data) return;
-          if (hiddenChatSet.has(docId)) return;
-          if (Array.isArray(data.hiddenFor) && data.hiddenFor.includes(userId)) return;
-          chatsMap.set(docId, data);
-        });
-
-        let count = 0;
-        chatsMap.forEach((data) => {
-          const unreadFromMap = typeof data?.unreadCount?.[userId] === 'number' 
-            ? data.unreadCount[userId] 
-            : 0;
-
-          const hasUnreadFlag = data && data.lastSenderId && data.lastSenderId !== userId && data.unread === true;
-
-          if (unreadFromMap > 0 || hasUnreadFlag) {
-            count += Math.max(unreadFromMap, 1);
+          if (snapshot && typeof snapshot.forEach === 'function') {
+            snapshot.forEach((doc: any) => {
+              const docId = doc.id;
+              const data = doc.data ? doc.data() : doc;
+              if (!docId || !data) return;
+              if (hiddenChatSet.has(docId)) return;
+              if (Array.isArray(data.hiddenFor) && data.hiddenFor.includes(userId)) return;
+              chatsMap.set(docId, data);
+            });
           }
-        });
-        unreadChatCount = count;
-        emit();
-      } catch (_) {
+
+          let count = 0;
+          chatsMap.forEach((data) => {
+            const unreadFromMap = typeof data?.unreadCount?.[userId] === 'number' 
+              ? data.unreadCount[userId] 
+              : 0;
+            const hasUnreadFlag = data && data.lastSenderId && data.lastSenderId !== userId && data.unread === true;
+
+            if (unreadFromMap > 0 || hasUnreadFlag) {
+              count += Math.max(unreadFromMap, 1);
+            }
+          });
+          unreadChatCount = count;
+        } catch (_) {
+          unreadChatCount = 0;
+        }
+        updateAndEmit();
+      },
+      () => {
         unreadChatCount = 0;
-        emit();
-      }
-    };
-
-    const unsubBuyer = db.collection('chats').where('buyerId', '==', userId).onSnapshot(
-      (snapshot: any) => {
-        buyerChats = [];
-        if (snapshot && typeof snapshot.forEach === 'function') {
-          snapshot.forEach((doc: any) => buyerChats.push(doc));
-        }
-        computeUnread();
-      },
-      () => {
-        computeUnread();
+        updateAndEmit();
       }
     );
-
-    const unsubSeller = db.collection('chats').where('sellerId', '==', userId).onSnapshot(
-      (snapshot: any) => {
-        sellerChats = [];
-        if (snapshot && typeof snapshot.forEach === 'function') {
-          snapshot.forEach((doc: any) => sellerChats.push(doc));
-        }
-        computeUnread();
-      },
-      () => {
-        computeUnread();
-      }
-    );
-
-    const unsubPart = db.collection('chats').where('participants', 'array-contains', userId).onSnapshot(
-      (snapshot: any) => {
-        partChats = [];
-        if (snapshot && typeof snapshot.forEach === 'function') {
-          snapshot.forEach((doc: any) => partChats.push(doc));
-        }
-        computeUnread();
-      },
-      () => {
-        computeUnread();
-      }
-    );
-
-    unsubChats = () => {
-      unsubBuyer();
-      unsubSeller();
-      unsubPart();
-    };
 
     // 2. Listen to unread personal notifications
     unsubNotifs = db
@@ -631,18 +592,18 @@ export function subscribeToUserUnreadCounts(
           } catch (_) {}
           unreadNotifCount = count;
           latestNotifItem = newest;
-          emit();
+          updateAndEmit();
         },
         () => {
           unreadNotifCount = 0;
-          emit();
+          updateAndEmit();
         }
       );
 
     // 3. Listen to announcements
     unsubAnnouncements = db
       .collection('announcements')
-      .limit(20)
+      .limit(10)
       .onSnapshot(
         (snapshot: any) => {
           try {
@@ -658,27 +619,67 @@ export function subscribeToUserUnreadCounts(
               });
             }
             unreadAnnounceCount = count;
-            emit();
           } catch (_) {
             unreadAnnounceCount = 0;
-            emit();
           }
+          updateAndEmit();
         },
         () => {
           unreadAnnounceCount = 0;
-          emit();
+          updateAndEmit();
         }
       );
   } catch (err) {
-    console.warn('[notifications] Error in subscribeToUserUnreadCounts:', err);
-    callback({ unreadChats: 0, unreadNotifications: 0, totalUnread: 0 });
+    console.warn('[notifications] Error in startSingletonListener:', err);
   }
 
   return () => {
-    isMounted = false;
     try { unsubChats(); } catch (_) {}
     try { unsubNotifs(); } catch (_) {}
     try { unsubAnnouncements(); } catch (_) {}
+  };
+}
+
+/**
+ * Subscribes to real-time unread counts for Chats and General Notifications
+ */
+export function subscribeToUserUnreadCounts(
+  userId: string | null | undefined,
+  callback: (counts: UnreadCountsResult) => void
+): () => void {
+  if (!userId) {
+    callback({ unreadChats: 0, unreadNotifications: 0, totalUnread: 0 });
+    return () => {};
+  }
+
+  // Teardown previous user singleton if logged-in user changed
+  if (activeSingletonUserId !== userId) {
+    if (activeSingletonUnsub) {
+      try { activeSingletonUnsub(); } catch (_) {}
+      activeSingletonUnsub = null;
+    }
+    activeSubscribers.clear();
+    activeSingletonUserId = userId;
+    cachedUnreadResult = { unreadChats: 0, unreadNotifications: 0, totalUnread: 0 };
+  }
+
+  activeSubscribers.add(callback);
+  // Send immediate cached result
+  callback(cachedUnreadResult);
+
+  if (!activeSingletonUnsub) {
+    activeSingletonUnsub = startSingletonListener(userId);
+  }
+
+  return () => {
+    activeSubscribers.delete(callback);
+    if (activeSubscribers.size === 0) {
+      if (activeSingletonUnsub) {
+        try { activeSingletonUnsub(); } catch (_) {}
+        activeSingletonUnsub = null;
+      }
+      activeSingletonUserId = null;
+    }
   };
 }
 
