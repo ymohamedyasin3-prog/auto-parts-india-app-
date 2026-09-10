@@ -546,6 +546,19 @@ export default function HomeScreen({ navigation, route, user }: any) {
   const fetchParts = useCallback(() => {
     setLoading(true);
     try {
+      // Load from local cache first for instant display on slow/no internet
+      AsyncStorage.getItem('@autoparts_firestore_parts').then((cached) => {
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setParts(parsed);
+              setLoading(false);
+            }
+          } catch (_) {}
+        }
+      }).catch(() => {});
+
       const db = getFirebaseFirestore();
       if (!db || typeof db.collection !== 'function') {
         setParts(INITIAL_SPARE_PARTS);
@@ -571,6 +584,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
           } else {
             partsList.sort((a, b) => parseCreatedAt(b.createdAt) - parseCreatedAt(a.createdAt));
             setParts(partsList);
+            AsyncStorage.setItem('@autoparts_firestore_parts', JSON.stringify(partsList)).catch(() => {});
           }
           setLoading(false);
           setRefreshing(false);
