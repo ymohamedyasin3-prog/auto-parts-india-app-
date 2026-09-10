@@ -1,0 +1,88 @@
+name: Build Android App (APK & AAB)
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+permissions: write-all
+
+jobs:
+  build-android:
+    name: Build Android Release APK & AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Free up disk space on GitHub Runner
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/local/lib/android/ndk/25.*
+          sudo rm -rf /usr/local/lib/android/ndk/24.*
+          sudo rm -rf /usr/local/lib/android/ndk/23.*
+          sudo rm -rf /usr/local/lib/android/ndk/22.*
+          sudo rm -rf /usr/local/lib/android/ndk/21.*
+          df -h
+
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "zulu"
+          cache: "gradle"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Ensure Android Setup Files & Keystore
+        run: |
+          mkdir -p react-native-app/android/app
+          mkdir -p react-native-app/android/gradle/wrapper
+
+          if [ ! -f "react-native-app/android/app/google-services.json" ] || [ ! -s "react-native-app/android/app/google-services.json" ]; then
+            echo "Writing google-services.json via Base64..."
+            echo "ewogICJwcm9qZWN0X2luZm8iOiB7CiAgICAicHJvamVjdF9udW1iZXIiOiAiNzUxNzY0MTE2NTIyIiwKICAgICJmaXJlYmFzZV91cmwiOiAiaHR0cHM6Ly9hdXRvLXBhcnRzLW1hcmtldC1wbGFjZS0yMDMxMi1kZWZhdWx0LXJ0ZGIuZmlyZWJhc2Vpby5jb20iLAogICAgInByb2plY3RfaWQiOiAiYXV0by1wYXJ0cy1tYXJrZXQtcGxhY2UtMjAzMTIiLAogICAgInN0b3JhZ2VfYnVja2V0IjogImF1dG8tcGFydHMtbWFya2V0LXBsYWNlLTIwMzEyLmZpcmViYXNlc3RvcmFnZS5hcHAiCiAgfSwKICAiY2xpZW50IjogWwogICAgewogICAgICAiY2xpZW50X2luZm8iOiB7CiAgICAgICAgIm1vYmlsZXNka19hcHBfaWQiOiAiMTo3NTE3NjQxMTY1MjI6YW5kcm9pZDpmNDcwNWVlM2FlZDdhYTE5N2FkZjUzIiwKICAgICAgICAiYW5kcm9pZF9jbGllbnRfaW5mbyI6IHsKICAgICAgICAgICJwYWNrYWdlX25hbWUiOiAiY29tLmF1dG9wYXJ0cy5hcHAiCiAgICAgICAgfQogICAgICB9LAogICAgICAib2F1dGhfY2xpZW50IjogWwogICAgICAgIHsKICAgICAgICAgICJjbGllbnRfaWQiOiAiNzUxNzY0MTE2NTIyLW9jNGx1cnFzMmZmbGJyNWZkYW5scTMyMzQzaWYxZTVrLmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29tIiwKICAgICAgICAgICJjbGllbnRfdHlwZSI6IDEsCiAgICAgICAgICAiYW5kcm9pZF9pbmZvIjogewogICAgICAgICAgICAicGFja2FnZV9uYW1lIjogImNvbS5hdXRvcGFydHMuYXBwIiwKICAgICAgICAgICAgImNlcnRpZmljYXRlX2hhc2giOiAiMTRkNmE2MGU0ODA2OWY2N2NjZmFhNDcyNDE3OTdiOTVkOWI1Njg5YSIKICAgICAgICAgIH0KICAgICAgICB9LAogICAgICAgIHsKICAgICAgICAgICJjbGllbnRfaWQiOiAiNzUxNzY0MTE2NTIyLWdyNTlrb2JqM2MzaTFoc2dyNWhpdW1hdWs1b3RyNXNxLmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29tIiwKICAgICAgICAgICJjbGllbnRfdHlwZSI6IDMKICAgICAgICB9CiAgICAgIF0sCiAgICAgICJhcGlfa2V5IjogWwogICAgICAgIHsKICAgICAgICAgICJjdXJyZW50X2tleSI6ICJBSXphU3lCVGZpdllieEU3UERCN0Z4eUFsSmpGRGlkNkxLUHBseDgiCiAgICAgICAgfQogICAgICBdLAogICAgICAic2VydmljZXMiOiB7CiAgICAgICAgImFwcGludml0ZV9zZXJ2aWNlIjogewogICAgICAgICAgIm90aGVyX3BsYXRmb3JtX29hdXRoX2NsaWVudCI6IFsKICAgICAgICAgICAgewogICAgICAgICAgICAgICJjbGllbnRfaWQiOiAiNzUxNzY0MTE2NTIyLWdyNTlrb2JqM2MzaTFoc2dyNWhpdW1hdWs1b3RyNXNxLmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29tIiwKICAgICAgICAgICAgICAiY2xpZW50X3R5cGUiOiAzCiAgICAgICAgAg0KICAgICAgICAgIF0KICAgICAgICB9CiAgICAgIH0KICAgIH0sCiAgICB7CiAgICAgICJjbGllbnRfaW5mbyI6IHsKICAgICAgICAibW9iaWxlc2RrX2FwcF9pZCI6ICIxOjc1MTc2NDExNjUyMjphbmRyb2lkOjk2ZDgzZGQxOTBmMzkzNDE3YWRmNTMiLAogICAgICAgICJhbmRyb2lkX2NsaWVudF9pbmZvIjogewogICAgICAgICAgInBhY2thZ2VfbmFtZSI6ICJjb20uYXV0b3BhcnRzLmluZGlhIgogICAgICAgIH0KICAgICAgfSwKICAgICAgIm9hdXRoX2NsaWVudCI6IFsKICAgICAgICB7CiAgICAgICAgICAiY2xpZW50X2lkIjogIjc1MTc2NDExNjUyMi1ncjU5a29iajNjM2kxaHNncjVoaXVtYXVrNW90cjVzcS5hcHBzLmdvb2dsZXVzZXJjb250ZW50LmNvbSIsCiAgICAgICAgICAiY2xpZW50X3R5cGUiOiAzCiAgICAgICAgfQogICAgICBdLAogICAgICAiYXBpX2tleSI6IFsKICAgICAgICB7CiAgICAgICAgICAiY3VycmVudF9rZXkiOiAiQUl6YVN5QlRmaXZZYnhFN1BEQjdGeHlBbEpqRkRpZDZMS1BwbHg4IgogICAgICAgIH0KICAgICAgXSwKICAgICAgInNlcnZpY2VzIjogewogICAgICAgICJhcHBpbnZpdGVfc2VydmljZSI6IHsKICAgICAgICAgICJvdGhlcl9wbGF0Zm9ybV9vYXV0aF9jbGllbnQiOiBbCiAgICAgICAgICAgIHsKICAgICAgICAgICAgICAiY2xpZW50X2lkIjogIjc1MTc2NDExNjUyMi1ncjU5a29iajNjM2kxaHNncjVoaXVtYXVrNW90cjVzcS5hcHBzLmdvb2dsZXVzZXJjb250ZW50LmNvbSIsCiAgICAgICAgICAgICAgImNsaWVudF90eXBlIjogMwogICAgICAgICAgICB9CiAgICAgICAgICBdCiAgICAgICAgfQogICAgICB9CiAgICB9LAogICAgewogICAgICAiY2xpZW50X2luZm8iOiB7CiAgICAgICAgIm1vYmlsZXNka19hcHBfaWQiOiAiMTo3NTE3NjQxMTY1MjI6YW5kcm9pZDo0MjQ0ZGM0YjdhODE1MGY3N2FkZjUzIiwKICAgICAgICAiYW5kcm9pZF9jbGllbnRfaW5mbyI6IHsKICAgICAgICAgICJwYWNrYWdlX25hbWUiOiAiY29tLmF1dG9wYXJ0c2luZGlhIgogICAgICAgIH0KICAgICAgfSwKICAgICAgIm9hdXRoX2NsaWVudCI6IFsKICAgICAgICB7CiAgICAgICAgICAiY2xpZW50X2lkIjogIjc1MTc2NDExNjUyMi1ncjU5a29iajNjM2kxaHNncjVoaXVtYXVrNW90cjVzcS5hcHBzLmdvb2dsZXVzZXJjb250ZW50LmNvbSIsCiAgICAgICAgICAiY2xpZW50X3R5cGUiOiAzCiAgICAgICAgfQogICAgICBdLAogICAgICAiYXBpX2tleSI6IFsKICAgICAgICB7CiAgICAgICAgICAiY3VycmVudF9rZXkiOiAiQUl6YVN5QlRmaXZZYnhFN1BEQjdGeHlBbEpqRkRpZDZMS1BwbHg4IgogICAgICAgIH0KICAgICAgXSwKICAgICAgInNlcnZpY2VzIjogewogICAgICAgICJhcHBpbnZpdGVfc2VydmljZSI6IHsKICAgICAgICAgICJvdGhlcl9wbGF0Zm9ybV9vYXV0aF9jbGllbnQiOiBbCiAgICAgICAgICAgIHsKICAgICAgICAgICAgICAiY2xpZW50X2lkIjogIjc1MTc2NDExNjUyMi1ncjU5a29iajNjM2kxaHNncjVoaXVtYXVrNW90cjVzcS5hcHBzLmdvb2dsZXVzZXJjb250ZW50LmNvbSIsCiAgICAgICAgICAgICAgImNsaWVudF90eXBlIjogMwogICAgICAgICAgICB9CiAgICAgICAgICBdCiAgICAgICAgfQogICAgICB9CiAgICB9CiAgXSwKICAiY29uZmlndXJhdGlvbl92ZXJzaW9uIjogIjEiCn0K" | base64 -d > react-native-app/android/app/google-services.json
+          fi
+
+          if [ ! -f "react-native-app/android/app/release.keystore" ] || [ ! -s "react-native-app/android/app/release.keystore" ]; then
+            echo "Writing persistent release.keystore via Base64..."
+            echo "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" | base64 -d > react-native-app/android/app/release.keystore
+          fi
+
+          if [ ! -f "react-native-app/android/gradle/wrapper/gradle-wrapper.jar" ] || [ ! -s "react-native-app/android/gradle/wrapper/gradle-wrapper.jar" ]; then
+            echo "Downloading gradle-wrapper.jar..."
+            curl -sSL -o react-native-app/android/gradle/wrapper/gradle-wrapper.jar "https://raw.githubusercontent.com/gradle/gradle/v8.8.0/gradle/wrapper/gradle-wrapper.jar"
+          fi
+
+      - name: Install Root Dependencies
+        run: |
+          cd react-native-app
+          npm install --legacy-peer-deps
+
+      - name: Generate Android Asset Bundle & APK
+        run: |
+          cd react-native-app/android
+          chmod +x ./gradlew || true
+          ./gradlew assembleRelease bundleRelease --no-daemon --no-parallel --build-cache -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+UseParallelGC"
+
+      - name: Upload Android Artifacts (APK & AAB)
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-parts-india-android-bundles
+          path: |
+            react-native-app/android/app/build/outputs/apk/**/*.apk
+            react-native-app/android/app/build/outputs/bundle/**/*.aab

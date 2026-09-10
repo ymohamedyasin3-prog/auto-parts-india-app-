@@ -53,7 +53,12 @@ android {
             }
         }
         release {
-            if (project.hasProperty('MYAPP_RELEASE_STORE_FILE') && file(MYAPP_RELEASE_STORE_FILE).exists()) {
+            if (file('release.keystore').exists()) {
+                storeFile file('release.keystore')
+                storePassword 'android'
+                keyAlias 'autoparts-key'
+                keyPassword 'android'
+            } else if (project.hasProperty('MYAPP_RELEASE_STORE_FILE') && file(MYAPP_RELEASE_STORE_FILE).exists()) {
                 storeFile file(MYAPP_RELEASE_STORE_FILE)
                 storePassword MYAPP_RELEASE_STORE_PASSWORD
                 keyAlias MYAPP_RELEASE_KEY_ALIAS
