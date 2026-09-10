@@ -46,7 +46,7 @@ import { InAppNotification, InAppNotificationData } from '../components/InAppNot
 import { matchesCategoryFilter } from '../utils/categoryMatcher';
 import { matchPartSearch, parseCreatedAt } from '../utils/searchHelper';
 import { Category3DIcon } from '../components/Category3DIcon';
-import { subscribeToUnreadNotificationCount } from '../services/notifications';
+import { subscribeToUnreadNotificationCount, subscribeToUserUnreadCounts } from '../services/notifications';
 import { getOptimizedImageUrl } from '../services/cloudinary';
 import { BannerPartsCollage } from '../components/BannerPartsCollage';
 import { 
@@ -136,43 +136,43 @@ export const HOME_DEFAULT_CATEGORIES = [
     id: 'Engine & Mechanical',
     name: 'Engine & Mechanical',
     icon: 'engine',
-    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788828857/categories/v40ctc1xzsul1nmquwno.png',
+    imageUrl: 'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=400&q=80',
   },
   {
     id: 'Body & Exterior',
     name: 'Body & Exterior',
     icon: 'car-door',
-    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788915211/categories/ssxl1agf8ydkau5aqv4h.png',
+    imageUrl: 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=400&q=80',
   },
   {
     id: 'Lights & Electricals',
     name: 'Lights & Electricals',
     icon: 'lightning-bolt',
-    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788746594/categories/w1tym7epvnhv0f9aapuf.png',
+    imageUrl: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=400&q=80',
   },
   {
     id: 'Suspension & Brakes',
     name: 'Suspension & Brakes',
     icon: 'car-brake-alert',
-    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788808169/categories/ebbks7ce3jejqgtxlndo.png',
+    imageUrl: 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&w=400&q=80',
   },
   {
     id: 'Interior & Wheels',
     name: 'Interior & Wheels',
     icon: 'car-seat',
-    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973203/categories/cat_interior_wheels.jpg',
+    imageUrl: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=400&q=80',
   },
   {
     id: 'Cooling & AC',
     name: 'Cooling & AC',
     icon: 'fan',
-    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973204/categories/cat_cooling_ac.jpg',
+    imageUrl: 'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=400&q=80',
   },
   {
     id: 'Transmission & Clutch',
     name: 'Transmission & Clutch',
     icon: 'car-shift-pattern',
-    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788973205/categories/cat_transmission.jpg',
+    imageUrl: 'https://images.unsplash.com/photo-1542282088-72c9c27ed0cd?auto=format&fit=crop&w=400&q=80',
   },
   {
     id: 'More',
@@ -513,11 +513,32 @@ export default function HomeScreen({ navigation, route, user }: any) {
     }
   };
 
-  // Real notification unread count listener
+  // Real notification unread count listener and In-App Banner alert
+  const lastSeenNotifIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    const unsub = subscribeToUnreadNotificationCount((count) => {
-      setUnreadCount(count);
+    const currentU = getCurrentUser();
+    const uid = currentU?.uid || currentU?.id;
+    if (!uid) return;
+
+    const unsub = subscribeToUserUnreadCounts(uid, (counts) => {
+      setUnreadCount(counts.totalUnread);
+      if (counts.latestNotification && counts.latestNotification.id) {
+        const notif = counts.latestNotification;
+        if (lastSeenNotifIdRef.current && lastSeenNotifIdRef.current !== notif.id) {
+          setInAppNotification({
+            id: notif.id,
+            senderName: notif.senderName || 'Buyer/Seller',
+            text: notif.text || 'Sent you a message',
+            partTitle: notif.partTitle,
+            partPrice: notif.partPrice,
+            chatId: notif.chatId,
+          });
+        }
+        lastSeenNotifIdRef.current = notif.id;
+      }
     });
+
     return () => {
       try { unsub(); } catch (_) {}
     };
@@ -526,10 +547,16 @@ export default function HomeScreen({ navigation, route, user }: any) {
   // Refresh notification count when returning to HomeScreen
   useEffect(() => {
     const unsubFocus = navigation?.addListener ? navigation.addListener('focus', () => {
-      const unsub = subscribeToUnreadNotificationCount((count) => {
-        setUnreadCount(count);
-      });
-      try { unsub(); } catch (_) {}
+      const currentU = getCurrentUser();
+      const uid = currentU?.uid || currentU?.id;
+      if (uid) {
+        const unsub = subscribeToUserUnreadCounts(uid, (counts) => {
+          setUnreadCount(counts.totalUnread);
+        });
+        setTimeout(() => {
+          try { unsub(); } catch (_) {}
+        }, 3000);
+      }
     }) : undefined;
 
     return () => {
@@ -942,16 +969,6 @@ export default function HomeScreen({ navigation, route, user }: any) {
                   <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
                 </View>
               )}
-            </TouchableOpacity>
-
-            {/* User Profile Avatar */}
-            <TouchableOpacity
-              style={styles.profileHeaderBtn}
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('MainTabs', { screen: 'ProfileTab' })}
-              hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
-            >
-              <UserAvatar size={30} borderWidth={1.5} borderColor="rgba(255,255,255,0.85)" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1390,6 +1407,19 @@ export default function HomeScreen({ navigation, route, user }: any) {
       <LanguageSelectorModal
         visible={showLanguageModal}
         onClose={() => setShowLanguageModal(false)}
+      />
+
+      {/* Real-time In-App Notification Banner */}
+      <InAppNotification
+        notification={inAppNotification}
+        onClose={() => setInAppNotification(null)}
+        onPress={(item) => {
+          if (item.chatId) {
+            navigation.navigate('ChatRoom', { chatId: item.chatId });
+          } else {
+            navigation.navigate('Notifications');
+          }
+        }}
       />
     </SafeAreaView>
   );

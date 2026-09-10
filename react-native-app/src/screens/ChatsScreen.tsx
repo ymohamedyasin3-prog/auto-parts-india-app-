@@ -56,8 +56,28 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'buy' | 'sell'>('all');
-  const activeUser = initialUser || getCurrentUser();
+  const [activeUser, setActiveUser] = useState<any>(initialUser || getCurrentUser());
   const { translateDynamic } = useLanguage();
+
+  // Listen to auth state changes reactively
+  useEffect(() => {
+    let unsubAuth = () => {};
+    try {
+      const auth = getFirebaseAuth();
+      if (auth && typeof auth.onAuthStateChanged === 'function') {
+        unsubAuth = auth.onAuthStateChanged((u: any) => {
+          setActiveUser(u || getCurrentUser());
+        });
+      } else {
+        setActiveUser(getCurrentUser());
+      }
+    } catch (_) {
+      setActiveUser(getCurrentUser());
+    }
+    return () => {
+      try { unsubAuth(); } catch (_) {}
+    };
+  }, []);
 
   const getCleanId = (val: any): string => {
     if (!val) return '';
@@ -124,94 +144,96 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
         return () => {};
       }
 
-      // To support legacy chats and new chats simultaneously, we fetch where buyerId == activeUid, sellerId == activeUid, and participants array-contains activeUid.
       let buyerChats: any[] = [];
       let sellerChats: any[] = [];
       let partChats: any[] = [];
-      let buyerLoaded = false;
-      let sellerLoaded = false;
-      let partLoaded = false;
+      let ownerChats: any[] = [];
 
       const mergeChats = async () => {
-        if (!buyerLoaded || !sellerLoaded || !partLoaded) return;
-        const chatsMap = new Map<string, any>();
-        const hiddenChatSet = await getLocalHiddenChatIds();
+        try {
+          const chatsMap = new Map<string, any>();
+          const hiddenChatSet = await getLocalHiddenChatIds();
 
-        [...buyerChats, ...sellerChats, ...partChats].forEach((c) => {
-          if (!c || !c.id) return;
-          if (hiddenChatSet.has(c.id)) return;
-          if (Array.isArray(c.hiddenFor) && c.hiddenFor.includes(activeUid)) return;
-          chatsMap.set(c.id, c);
-        });
-        
-        const list = Array.from(chatsMap.values());
-        
-        // Sort by latest message time
-        list.sort((a, b) => {
-          const timeA = parseTimestamp(a.lastMessageAt || a.updatedAt || a.createdAt || 0);
-          const timeB = parseTimestamp(b.lastMessageAt || b.updatedAt || b.createdAt || 0);
-          return timeB - timeA;
-        });
-
-        setChats(list);
-        setLoading(false);
-        setRefreshing(false);
-
-        // Enrich with live user profile photos from Firestore
-        const partnerIds = Array.from(
-          new Set(
-            list
-              .map((c: any) => getPartnerIdFromChat(c, activeUid))
-              .filter((id: string) => id && id !== 'seller' && id !== 'buyer')
-          )
-        );
-
-        if (partnerIds.length > 0) {
-          Promise.all(
-            partnerIds.map(async (pId) => {
-              try {
-                if (!pId) return { pId, photo: null };
-                const uDoc = await db.collection('users').doc(pId).get();
-                const exists = typeof uDoc?.exists === 'function' ? uDoc.exists() : Boolean(uDoc?.exists);
-                if (exists) {
-                  const uData = typeof uDoc?.data === 'function' ? uDoc.data() : uDoc?.data;
-                  const photo =
-                    uData?.photoURL ||
-                    uData?.profilePhoto ||
-                    uData?.profileImageUrl ||
-                    uData?.avatarUrl ||
-                    uData?.photo ||
-                    uData?.customPhoto ||
-                    null;
-                  return { pId, photo };
-                }
-              } catch (_) {}
-              return { pId, photo: null };
-            })
-          ).then((results) => {
-            const photoMap: Record<string, string> = {};
-            results.forEach((r) => {
-              if (r.photo) photoMap[r.pId] = r.photo;
-            });
-            if (Object.keys(photoMap).length > 0) {
-              setChats((prev) =>
-                prev.map((c) => {
-                  const pId = getPartnerIdFromChat(c, activeUid);
-                  const livePhoto = pId ? photoMap[pId] : null;
-                  const isUserBuyer = isCurrentUserBuyer(c, activeUid);
-                  if (livePhoto) {
-                    return {
-                      ...c,
-                      partnerPhoto: livePhoto,
-                      sellerPhoto: isUserBuyer ? livePhoto : (c.sellerPhoto || livePhoto),
-                      buyerPhoto: !isUserBuyer ? livePhoto : (c.buyerPhoto || livePhoto),
-                    };
-                  }
-                  return c;
-                })
-              );
-            }
+          [...buyerChats, ...sellerChats, ...partChats, ...ownerChats].forEach((c) => {
+            if (!c || !c.id) return;
+            if (hiddenChatSet.has(c.id)) return;
+            if (Array.isArray(c.hiddenFor) && c.hiddenFor.includes(activeUid)) return;
+            chatsMap.set(c.id, c);
           });
+          
+          const list = Array.from(chatsMap.values());
+          
+          // Sort by latest message time
+          list.sort((a, b) => {
+            const timeA = parseTimestamp(a.lastMessageAt || a.updatedAt || a.createdAt || 0);
+            const timeB = parseTimestamp(b.lastMessageAt || b.updatedAt || b.createdAt || 0);
+            return timeB - timeA;
+          });
+
+          setChats(list);
+          setLoading(false);
+          setRefreshing(false);
+
+          // Enrich with live user profile photos from Firestore
+          const partnerIds = Array.from(
+            new Set(
+              list
+                .map((c: any) => getPartnerIdFromChat(c, activeUid))
+                .filter((id: string) => id && id !== 'seller' && id !== 'buyer')
+            )
+          );
+
+          if (partnerIds.length > 0) {
+            Promise.all(
+              partnerIds.map(async (pId) => {
+                try {
+                  if (!pId) return { pId, photo: null };
+                  const uDoc = await db.collection('users').doc(pId).get();
+                  const exists = typeof uDoc?.exists === 'function' ? uDoc.exists() : Boolean(uDoc?.exists);
+                  if (exists) {
+                    const uData = typeof uDoc?.data === 'function' ? uDoc.data() : uDoc?.data;
+                    const photo =
+                      uData?.photoURL ||
+                      uData?.profilePhoto ||
+                      uData?.profileImageUrl ||
+                      uData?.avatarUrl ||
+                      uData?.photo ||
+                      uData?.customPhoto ||
+                      null;
+                    return { pId, photo };
+                  }
+                } catch (_) {}
+                return { pId, photo: null };
+              })
+            ).then((results) => {
+              const photoMap: Record<string, string> = {};
+              results.forEach((r) => {
+                if (r.photo) photoMap[r.pId] = r.photo;
+              });
+              if (Object.keys(photoMap).length > 0) {
+                setChats((prev) =>
+                  prev.map((c) => {
+                    const pId = getPartnerIdFromChat(c, activeUid);
+                    const livePhoto = pId ? photoMap[pId] : null;
+                    const isUserBuyer = isCurrentUserBuyer(c, activeUid);
+                    if (livePhoto) {
+                      return {
+                        ...c,
+                        partnerPhoto: livePhoto,
+                        sellerPhoto: isUserBuyer ? livePhoto : (c.sellerPhoto || livePhoto),
+                        buyerPhoto: !isUserBuyer ? livePhoto : (c.buyerPhoto || livePhoto),
+                      };
+                    }
+                    return c;
+                  })
+                );
+              }
+            });
+          }
+        } catch (err) {
+          console.warn('[ChatsScreen] mergeChats error:', err);
+          setLoading(false);
+          setRefreshing(false);
         }
       };
 
@@ -221,11 +243,9 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
           if (snapshot && typeof snapshot.forEach === 'function') {
             snapshot.forEach((doc: any) => buyerChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
           }
-          buyerLoaded = true;
           mergeChats();
         },
         () => {
-          buyerLoaded = true;
           mergeChats();
         }
       );
@@ -236,11 +256,9 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
           if (snapshot && typeof snapshot.forEach === 'function') {
             snapshot.forEach((doc: any) => sellerChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
           }
-          sellerLoaded = true;
           mergeChats();
         },
         () => {
-          sellerLoaded = true;
           mergeChats();
         }
       );
@@ -251,19 +269,17 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
           if (snapshot && typeof snapshot.forEach === 'function') {
             snapshot.forEach((doc: any) => partChats.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
           }
-          partLoaded = true;
           mergeChats();
         },
         () => {
-          partLoaded = true;
           mergeChats();
         }
       );
 
       return () => {
-        unsubBuyer();
-        unsubSeller();
-        unsubPart();
+        try { unsubBuyer(); } catch (_) {}
+        try { unsubSeller(); } catch (_) {}
+        try { unsubPart(); } catch (_) {}
       };
     } catch (e) {
       console.warn('[ChatsScreen] Error in loadUserChats:', e);
@@ -588,13 +604,6 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
               activeOpacity={0.7}
             >
               <Icon source="dots-vertical" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.headerProfileBtn}
-              onPress={() => navigation.navigate('MainTabs', { screen: 'ProfileTab' })}
-              activeOpacity={0.8}
-            >
-              <UserAvatar size={30} borderWidth={1.5} borderColor="#BAE6FD" />
             </TouchableOpacity>
           </View>
         </View>

@@ -298,6 +298,8 @@ export function setupFcmListeners(userId?: string): () => void {
             channelId: 'auto_parts_alerts_v2',
             importance: AndroidImportance.HIGH,
             sound: 'default',
+            smallIcon: 'ic_notification',
+            color: '#0066FF',
             pressAction: {
               id: 'default',
             },

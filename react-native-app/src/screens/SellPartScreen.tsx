@@ -431,6 +431,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
   const [isLimitReached, setIsLimitReached] = useState(false);
 
   // Dynamic Taxonomy
+  const scrollRef = useRef<ScrollView>(null);
   const [taxonomyBrands, setTaxonomyBrands] = useState<Record<string, string[]>>(DEFAULT_BRAND_MODELS);
   const [taxonomyCategories, setTaxonomyCategories] = useState<Record<string, string[]>>(DEFAULT_CATEGORY_PARTS);
   const [isTaxonomyLoading, setIsTaxonomyLoading] = useState(true);
@@ -974,24 +975,104 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
     setSubmittedAttempt(true);
     setErrorMessage(null);
 
-    // Robust auto-defaults for seamless posting
-    const resolvedImagesToUse = finalImagesToUse.length > 0 ? finalImagesToUse : [
-      'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&q=80&w=800'
-    ];
-    const resolvedBrand = finalBrand.trim() || 'Universal';
-    const resolvedModel = finalModel.trim() || 'All Models';
-    const resolvedCategory = finalCategory.trim() || 'Engine & Mechanical';
-    const resolvedPartName = finalPartName.trim() || 'Genuine Spare Part';
+    // 0. Authentication Check
+    if (!activeUser?.uid) {
+      Alert.alert(
+        'Login Required',
+        'Please login or sign in to post a spare part ad.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Auth') },
+        ]
+      );
+      return;
+    }
 
+    // 1. Mandatory Photos Validation
+    if (finalImagesToUse.length === 0) {
+      setErrorMessage('Please add at least 1 photo of the spare part.');
+      Alert.alert('Photo Required', 'Please upload or capture at least 1 photo of the spare part.');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+
+    // 2. Mandatory Category Validation
+    if (!finalCategory.trim()) {
+      setErrorMessage('Please select a spare part category.');
+      Alert.alert('Category Required', 'Please select a category for your part.');
+      scrollRef.current?.scrollTo({ y: 150, animated: true });
+      return;
+    }
+
+    // 3. Mandatory Part Name Validation
+    if (!finalPartName.trim()) {
+      setErrorMessage('Please select or enter the spare part name.');
+      Alert.alert('Part Name Required', 'Please select or enter the name of the spare part.');
+      scrollRef.current?.scrollTo({ y: 220, animated: true });
+      return;
+    }
+
+    // 4. Mandatory Ad Title Validation
+    const resolvedTitle = title.trim() || `${finalBrand} ${finalModel} ${finalPartName}`.trim();
+    if (!resolvedTitle) {
+      setErrorMessage('Please enter an ad title.');
+      Alert.alert('Ad Title Required', 'Please enter a title describing your spare part.');
+      scrollRef.current?.scrollTo({ y: 280, animated: true });
+      return;
+    }
+
+    // 5. Mandatory Brand Validation
+    if (!finalBrand.trim()) {
+      setErrorMessage('Please select the car brand.');
+      Alert.alert('Car Brand Required', 'Please choose the car brand this part is compatible with.');
+      scrollRef.current?.scrollTo({ y: 350, animated: true });
+      return;
+    }
+
+    // 6. Mandatory Model Validation
+    if (!finalModel.trim()) {
+      setErrorMessage('Please select the car model.');
+      Alert.alert('Car Model Required', 'Please choose the car model for this spare part.');
+      scrollRef.current?.scrollTo({ y: 420, animated: true });
+      return;
+    }
+
+    // 7. Mandatory Price Validation
     const cleanPriceDigits = String(price).replace(/[^0-9.]/g, '');
-    const priceNum = parseFloat(cleanPriceDigits) || 1500;
+    const priceNum = parseFloat(cleanPriceDigits);
+    if (!cleanPriceDigits || isNaN(priceNum) || priceNum <= 0) {
+      setErrorMessage('Please enter a valid selling price in ₹.');
+      Alert.alert('Price Required', 'Please enter a valid selling price greater than ₹0.');
+      scrollRef.current?.scrollTo({ y: 550, animated: true });
+      return;
+    }
 
-    const resolvedTitle = title || `${resolvedBrand} ${resolvedModel} - ${resolvedPartName}`;
-    const resolvedDesc = description || `High quality ${resolvedPartName} for ${resolvedBrand} ${resolvedModel} in excellent working condition.`;
-    const resolvedState = finalState.trim() || 'Tamil Nadu';
-    const resolvedDistrict = finalDistrict.trim() || 'Chennai';
-    const resolvedContactName = contactName || 'Auto Parts Seller';
-    const resolvedContactPhone = contactPhone || '9876543210';
+    // 8. Mandatory State & District Validation
+    if (!finalState.trim() || !finalDistrict.trim()) {
+      setErrorMessage('Please select both State and District / City.');
+      Alert.alert('Location Required', 'Please select the State and District where the part is located.');
+      scrollRef.current?.scrollTo({ y: 680, animated: true });
+      return;
+    }
+
+    // 9. Mandatory Contact Phone Validation
+    const cleanPhone = (contactPhone || '').replace(/[^0-9]/g, '');
+    if (!cleanPhone || cleanPhone.length < 10) {
+      setErrorMessage('Please enter a valid 10-digit mobile number.');
+      Alert.alert('Contact Number Required', 'Please enter a valid 10-digit mobile number so interested buyers can call you.');
+      scrollRef.current?.scrollTo({ y: 800, animated: true });
+      return;
+    }
+
+    const resolvedBrand = finalBrand.trim();
+    const resolvedModel = finalModel.trim();
+    const resolvedCategory = finalCategory.trim();
+    const resolvedPartName = finalPartName.trim();
+    const resolvedDesc = description.trim() || `High quality ${resolvedPartName} for ${resolvedBrand} ${resolvedModel} in ${condition} condition.`;
+    const resolvedState = finalState.trim();
+    const resolvedDistrict = finalDistrict.trim();
+    const resolvedContactName = contactName.trim() || activeUser?.displayName || 'Auto Parts Seller';
+    const resolvedContactPhone = cleanPhone;
 
     if (isSubmitting) return;
 
@@ -1001,7 +1082,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
     try {
       // 1. Fast parallel batch upload for all images at once
       const finalImageUrls = await uploadMultipleImagesToCloudinary(
-        resolvedImagesToUse,
+        finalImagesToUse,
         'spare_parts',
         (completed, total) => {
           setUploadProgress(`Uploading photos (${completed}/${total})...`);
@@ -1051,9 +1132,9 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
         longitude: finalLng || null,
         contactName: resolvedContactName,
         contactPhone: resolvedContactPhone,
-        imageUrl: finalImageUrls[0] || resolvedImagesToUse[0] || '',
-        imageUrls: finalImageUrls.length > 0 ? finalImageUrls : resolvedImagesToUse,
-        images: finalImageUrls.length > 0 ? finalImageUrls : resolvedImagesToUse,
+        imageUrl: finalImageUrls[0] || finalImagesToUse[0] || '',
+        imageUrls: finalImageUrls.length > 0 ? finalImageUrls : finalImagesToUse,
+        images: finalImageUrls.length > 0 ? finalImageUrls : finalImagesToUse,
         sellerId: activeUser?.uid || 'guest-seller',
         ownerId: activeUser?.uid || 'guest-seller',
         userId: activeUser?.uid || 'guest-seller',
@@ -1244,6 +1325,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.nativeScroll}
         contentContainerStyle={styles.nativeContent}
         keyboardShouldPersistTaps="handled"
@@ -1267,7 +1349,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
         <View style={styles.nativeSection}>
           <View style={styles.sectionTopRow}>
             <View>
-              <Text style={styles.nativeSectionTitle}>Photos</Text>
+              <Text style={styles.nativeSectionTitle}>Photos *</Text>
               <Text style={styles.nativeSectionHint}>Add clear photos of your part</Text>
             </View>
             <View style={styles.countPill}>
@@ -1276,7 +1358,7 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
           </View>
 
           {finalImagesToUse.length === 0 ? (
-            <View style={styles.photoEmpty}>
+            <View style={[styles.photoEmpty, submittedAttempt && finalImagesToUse.length === 0 && styles.fieldError]}>
               <View style={styles.photoEmptyIcon}>
                 <IconButton icon="camera-plus-outline" size={28} iconColor="#2563EB" style={{ margin: 0 }} />
               </View>
@@ -1580,9 +1662,9 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
 
         {/* PRICE */}
         <View style={styles.nativeSection}>
-          <Text style={styles.nativeSectionTitle}>Price & condition</Text>
+          <Text style={styles.nativeSectionTitle}>Price & condition *</Text>
 
-          <View style={styles.priceBox}>
+          <View style={[styles.priceBox, submittedAttempt && (!price || parseFloat(price) <= 0) && styles.fieldError]}>
             <Text style={styles.priceSymbol}>₹</Text>
             <RNTextInput
               value={price ? formatIndianCurrency(price) : ''}

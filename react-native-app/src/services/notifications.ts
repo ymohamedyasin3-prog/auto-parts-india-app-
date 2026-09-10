@@ -2,6 +2,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFirebaseFirestore, getCurrentUser } from './firebase';
 
 const READ_ANNOUNCEMENTS_STORAGE_KEY = '@autoparts_read_announcements';
+const HIDDEN_CHATS_STORAGE_KEY = '@autoparts_hidden_chats';
+
+export async function getLocalHiddenChatIds(): Promise<Set<string>> {
+  try {
+    const raw = await AsyncStorage.getItem(HIDDEN_CHATS_STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        return new Set<string>(arr);
+      }
+    }
+  } catch (_) {}
+  return new Set<string>();
+}
 
 /**
  * Gets all announcement IDs that have been read by the current device/user
@@ -399,35 +413,43 @@ export function subscribeToUserUnreadCounts(
     }
 
     // 1. Listen to unread chats
-    // Replicate the 3-way merge logic used in the Web app to ensure all legacy chats are counted.
     let buyerChats: any[] = [];
     let sellerChats: any[] = [];
     let partChats: any[] = [];
-    let buyerLoaded = false;
-    let sellerLoaded = false;
-    let partLoaded = false;
 
-    const computeUnread = () => {
-      if (!isMounted || !buyerLoaded || !sellerLoaded || !partLoaded) return;
-      const chatsMap = new Map<string, any>();
-      buyerChats.forEach(c => chatsMap.set(c.id || (c.data && c.data().id), c.data ? c.data() : c));
-      sellerChats.forEach(c => chatsMap.set(c.id || (c.data && c.data().id), c.data ? c.data() : c));
-      partChats.forEach(c => chatsMap.set(c.id || (c.data && c.data().id), c.data ? c.data() : c));
+    const computeUnread = async () => {
+      if (!isMounted) return;
+      try {
+        const chatsMap = new Map<string, any>();
+        const hiddenChatSet = await getLocalHiddenChatIds();
 
-      let count = 0;
-      chatsMap.forEach((data) => {
-        const unreadFromMap = typeof data?.unreadCount?.[userId] === 'number' 
-          ? data.unreadCount[userId] 
-          : 0;
+        [...buyerChats, ...sellerChats, ...partChats].forEach((c) => {
+          const docId = c.id || (c.data && c.data().id);
+          const data = c.data ? c.data() : c;
+          if (!docId || !data) return;
+          if (hiddenChatSet.has(docId)) return;
+          if (Array.isArray(data.hiddenFor) && data.hiddenFor.includes(userId)) return;
+          chatsMap.set(docId, data);
+        });
 
-        const hasUnreadFlag = data && data.lastSenderId && data.lastSenderId !== userId && data.unread === true;
+        let count = 0;
+        chatsMap.forEach((data) => {
+          const unreadFromMap = typeof data?.unreadCount?.[userId] === 'number' 
+            ? data.unreadCount[userId] 
+            : 0;
 
-        if (unreadFromMap > 0 || hasUnreadFlag) {
-          count += Math.max(unreadFromMap, 1);
-        }
-      });
-      unreadChatCount = count;
-      emit();
+          const hasUnreadFlag = data && data.lastSenderId && data.lastSenderId !== userId && data.unread === true;
+
+          if (unreadFromMap > 0 || hasUnreadFlag) {
+            count += Math.max(unreadFromMap, 1);
+          }
+        });
+        unreadChatCount = count;
+        emit();
+      } catch (_) {
+        unreadChatCount = 0;
+        emit();
+      }
     };
 
     const unsubBuyer = db.collection('chats').where('buyerId', '==', userId).onSnapshot(
@@ -436,11 +458,9 @@ export function subscribeToUserUnreadCounts(
         if (snapshot && typeof snapshot.forEach === 'function') {
           snapshot.forEach((doc: any) => buyerChats.push(doc));
         }
-        buyerLoaded = true;
         computeUnread();
       },
       () => {
-        buyerLoaded = true;
         computeUnread();
       }
     );
@@ -451,11 +471,9 @@ export function subscribeToUserUnreadCounts(
         if (snapshot && typeof snapshot.forEach === 'function') {
           snapshot.forEach((doc: any) => sellerChats.push(doc));
         }
-        sellerLoaded = true;
         computeUnread();
       },
       () => {
-        sellerLoaded = true;
         computeUnread();
       }
     );
@@ -466,11 +484,9 @@ export function subscribeToUserUnreadCounts(
         if (snapshot && typeof snapshot.forEach === 'function') {
           snapshot.forEach((doc: any) => partChats.push(doc));
         }
-        partLoaded = true;
         computeUnread();
       },
       () => {
-        partLoaded = true;
         computeUnread();
       }
     );

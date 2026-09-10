@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Text, Surface, ActivityIndicator, Icon } from 'react-native-paper';
 import { NotificationListSkeleton } from '../components/SkeletonLoaders';
-import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
+import { getFirebaseFirestore, getCurrentUser, getFirebaseAuth } from '../services/firebase';
 import { 
   markAnnouncementsAsRead, 
   markNotificationAsRead, 
@@ -31,8 +31,23 @@ export default function NotificationsScreen({ navigation }: any) {
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(getCurrentUser());
   
-  const currentUser = getCurrentUser();
+  useEffect(() => {
+    let unsubAuth = () => {};
+    try {
+      const auth = getFirebaseAuth();
+      if (auth && typeof auth.onAuthStateChanged === 'function') {
+        unsubAuth = auth.onAuthStateChanged((u: any) => {
+          setCurrentUser(u || getCurrentUser());
+        });
+      }
+    } catch (_) {}
+    return () => {
+      try { unsubAuth(); } catch (_) {}
+    };
+  }, []);
+
   const currentUid = currentUser?.uid || currentUser?.id;
 
   const fetchNotifications = () => {
