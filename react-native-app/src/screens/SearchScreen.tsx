@@ -112,6 +112,10 @@ export default function SearchScreen({ navigation, route }: any) {
   const [loading, setLoading] = useState<boolean>(true);
   const { favorites, toggleFavorite } = useFavorites();
 
+  const favoritedIdsSet = useMemo(() => {
+    return new Set((favorites || []).map((f: any) => typeof f === 'string' ? f : (f?.id || f?.partId)).filter(Boolean));
+  }, [favorites]);
+
   // Unread badge counts for bottom navigation bar
   const [unreadCounts, setUnreadCounts] = useState({ unreadChats: 0, unreadNotifications: 0, totalUnread: 0 });
 
@@ -232,7 +236,7 @@ export default function SearchScreen({ navigation, route }: any) {
       const db = getFirebaseFirestore();
       if (db && typeof db.collection === 'function') {
         // 1. Sync Spare Parts
-        const unsubParts = db.collection('spareParts').onSnapshot(
+        const unsubParts = db.collection('spareParts').limit(80).onSnapshot(
           (snapshot: any) => {
             const list: any[] = [];
             snapshot.forEach((doc: any) => {
@@ -554,7 +558,7 @@ export default function SearchScreen({ navigation, route }: any) {
 
   // Render Product Card in Search Results (Modern Reference Layout: Left Image, Right Info)
   const renderPartItem = ({ item }: { item: any }) => {
-    const isFav = favorites.includes(item.id);
+    const isFav = favoritedIdsSet.has(item.id);
     const primaryUri =
       item.imageUrl ||
       item.images?.[0] ||

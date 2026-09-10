@@ -244,19 +244,13 @@ export default function HomeScreen({
   const [selectedCondition, setSelectedCondition] = useState("All Conditions");
   const [selectedPart, setSelectedPart] = useState<SparePart | null>(null);
 
-  // Filter change loading transition
-  const [isFilterLoading, setIsFilterLoading] = useState(false);
+  // Filter change state
   const isFirstFilterMount = React.useRef(true);
   React.useEffect(() => {
     if (isFirstFilterMount.current) {
       isFirstFilterMount.current = false;
       return;
     }
-    setIsFilterLoading(true);
-    const timer = setTimeout(() => {
-      setIsFilterLoading(false);
-    }, 220);
-    return () => clearTimeout(timer);
   }, [
     selectedBrand,
     selectedModel,
@@ -1403,7 +1397,7 @@ export default function HomeScreen({
             </span>
           </div>
 
-        {partsError && !partsLoading && !isFilterLoading ? (
+        {partsError && !partsLoading ? (
           <div className="flex flex-col items-center justify-center text-center py-14 px-6 bg-white rounded-2xl border border-rose-200/90 shadow-2xs space-y-3 my-2" id="parts-error-container">
             <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 border border-rose-100 shadow-2xs">
               <AlertCircle size={24} />
@@ -1425,7 +1419,7 @@ export default function HomeScreen({
               <span>Retry</span>
             </button>
           </div>
-        ) : (partsLoading || isFilterLoading || (taxonomyLoading && categories.length === 0)) ? (
+        ) : (partsLoading || (taxonomyLoading && categories.length === 0)) ? (
           <div className="flex flex-col items-center justify-center text-center py-16 px-6 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3.5 my-2" id="parts-loading-spinner">
             <div className="relative flex items-center justify-center">
               <div className="w-12 h-12 border-3 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
@@ -1435,12 +1429,10 @@ export default function HomeScreen({
             </div>
             <div className="space-y-1">
               <h4 className="text-xs font-black text-slate-800 tracking-wide uppercase">
-                {isFilterLoading ? "Filtering Listings..." : "Loading Spare Parts..."}
+                Loading Spare Parts...
               </h4>
               <p className="text-[11px] text-slate-400 font-medium max-w-xs">
-                {isFilterLoading 
-                  ? "Finding matching parts for your selected filters..." 
-                  : "Fetching verified spare parts across India..."}
+                Fetching verified spare parts across India...
               </p>
             </div>
           </div>

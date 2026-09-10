@@ -394,19 +394,6 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
         unsubs.push(unsubEmailPart);
       }
 
-      // Fallback: general query on chats collection
-      const unsubAll = db.collection('chats').onSnapshot(
-        (snapshot: any) => {
-          allChatsFallback = [];
-          if (snapshot && typeof snapshot.forEach === 'function') {
-            snapshot.forEach((doc: any) => allChatsFallback.push({ id: doc.id || (doc.data && doc.data().id), ...(doc.data ? doc.data() : doc) }));
-          }
-          mergeChats();
-        },
-        () => { mergeChats(); }
-      );
-      unsubs.push(unsubAll);
-
       return () => {
         unsubs.forEach((fn) => {
           try { fn(); } catch (_) {}

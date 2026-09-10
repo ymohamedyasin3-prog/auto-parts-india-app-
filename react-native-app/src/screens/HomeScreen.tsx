@@ -349,6 +349,10 @@ export default function HomeScreen({ navigation, route, user }: any) {
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
   const [updateConfig, setUpdateConfig] = useState<any>(null);
 
+  const favoritedIdsSet = useMemo(() => {
+    return new Set((favorites || []).map((f: any) => typeof f === 'string' ? f : (f?.id || f?.partId)).filter(Boolean));
+  }, [favorites]);
+
   const bannerScrollRef = useRef<ScrollView>(null);
 
   const activeBanners = useMemo(() => {
@@ -544,26 +548,6 @@ export default function HomeScreen({ navigation, route, user }: any) {
     };
   }, []);
 
-  // Refresh notification count when returning to HomeScreen
-  useEffect(() => {
-    const unsubFocus = navigation?.addListener ? navigation.addListener('focus', () => {
-      const currentU = getCurrentUser();
-      const uid = currentU?.uid || currentU?.id;
-      if (uid) {
-        const unsub = subscribeToUserUnreadCounts(uid, (counts) => {
-          setUnreadCount(counts.totalUnread);
-        });
-        setTimeout(() => {
-          try { unsub(); } catch (_) {}
-        }, 3000);
-      }
-    }) : undefined;
-
-    return () => {
-      if (typeof unsubFocus === 'function') unsubFocus();
-    };
-  }, [navigation]);
-
   // Entrance Animations
   const headerFade = useRef(new Animated.Value(0)).current;
 
@@ -612,7 +596,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
         return () => {};
       }
 
-      const unsubscribe = db.collection('spareParts').onSnapshot(
+      const unsubscribe = db.collection('spareParts').limit(80).onSnapshot(
         (snapshot: any) => {
           const partsList: any[] = [];
           if (snapshot && typeof snapshot.forEach === 'function') {
@@ -1327,7 +1311,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
                 item={item}
                 navigation={navigation}
                 cardWidth={productCardWidth}
-                isFavorited={favorites.includes(item.id) || (favorites as any[]).some((f: any) => f === item.id || f?.id === item.id)}
+                isFavorited={favoritedIdsSet.has(item.id)}
                 toggleFavorite={toggleFavorite}
                 selectedCity={selectedCity}
               />
