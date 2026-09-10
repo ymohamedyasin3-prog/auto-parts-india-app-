@@ -1,19 +1,20 @@
-name: Build Android App (APK & AAB)
+name: Build React Native Android APK
 
 on:
   push:
     branches:
-      - '**'
+      - "**"
   pull_request:
     branches:
-      - '**'
+      - "**"
   workflow_dispatch:
 
-permissions: write-all
+permissions:
+  contents: read
 
 jobs:
-  build-android:
-    name: Build Android Release APK & AAB
+  build:
+    name: Build Native Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -48,41 +49,268 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Ensure Android Setup Files & Keystore
+      - name: Ensure Android settings.gradle
         run: |
-          mkdir -p react-native-app/android/app
-          mkdir -p react-native-app/android/gradle/wrapper
-
-          if [ ! -f "react-native-app/android/app/google-services.json" ] || [ ! -s "react-native-app/android/app/google-services.json" ]; then
-            echo "Writing google-services.json via Base64..."
-            echo "ewogICJwcm9qZWN0X2luZm8iOiB7CiAgICAicHJvamVjdF9udW1iZXIiOiAiNzUxNzY0MTE2NTIyIiwKICAgICJmaXJlYmFzZV91cmwiOiAiaHR0cHM6Ly9hdXRvLXBhcnRzLW1hcmtldC1wbGFjZS0yMDMxMi1kZWZhdWx0LXJ0ZGIuZmlyZWJhc2Vpby5jb20iLAogICAgInByb2plY3RfaWQiOiAiYXV0by1wYXJ0cy1tYXJrZXQtcGxhY2UtMjAzMTIiLAogICAgInN0b3JhZ2VfYnVja2V0IjogImF1dG8tcGFydHMtbWFya2V0LXBsYWNlLTIwMzEyLmZpcmViYXNlc3RvcmFnZS5hcHAiCiAgfSwKICAiY2xpZW50IjogWwogICAgewogICAgICAiY2xpZW50X2luZm8iOiB7CiAgICAgICAgIm1vYmlsZXNka19hcHBfaWQiOiAiMTo3NTE3NjQxMTY1MjI6YW5kcm9pZDpmNDcwNWVlM2FlZDdhYTE5N2FkZjUzIiwKICAgICAgICAiYW5kcm9pZF9jbGllbnRfaW5mbyI6IHsKICAgICAgICAgICJwYWNrYWdlX25hbWUiOiAiY29tLmF1dG9wYXJ0cy5hcHAiCiAgICAgICAgfQogICAgICB9LAogICAgICAib2F1dGhfY2xpZW50IjogWwogICAgICAgIHsKICAgICAgICAgICJjbGllbnRfaWQiOiAiNzUxNzY0MTE2NTIyLW9jNGx1cnFzMmZmbGJyNWZkYW5scTMyMzQzaWYxZTVrLmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29tIiwKICAgICAgICAgICJjbGllbnRfdHlwZSI6IDEsCiAgICAgICAgICAiYW5kcm9pZF9pbmZvIjogewogICAgICAgICAgICAicGFja2FnZV9uYW1lIjogImNvbS5hdXRvcGFydHMuYXBwIiwKICAgICAgICAgICAgImNlcnRpZmljYXRlX2hhc2giOiAiMTRkNmE2MGU0ODA2OWY2N2NjZmFhNDcyNDE3OTdiOTVkOWI1Njg5YSIKICAgICAgICAgIH0KICAgICAgICB9LAogICAgICAgIHsKICAgICAgICAgICJjbGllbnRfaWQiOiAiNzUxNzY0MTE2NTIyLWdyNTlrb2JqM2MzaTFoc2dyNWhpdW1hdWs1b3RyNXNxLmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29tIiwKICAgICAgICAgICJjbGllbnRfdHlwZSI6IDMKICAgICAgICB9CiAgICAgIF0sCiAgICAgICJhcGlfa2V5IjogWwogICAgICAgIHsKICAgICAgICAgICJjdXJyZW50X2tleSI6ICJBSXphU3lCVGZpdllieEU3UERCN0Z4eUFsSmpGRGlkNkxLUHBseDgiCiAgICAgICAgfQogICAgICBdLAogICAgICAic2VydmljZXMiOiB7CiAgICAgICAgImFwcGludml0ZV9zZXJ2aWNlIjogewogICAgICAgICAgIm90aGVyX3BsYXRmb3JtX29hdXRoX2NsaWVudCI6IFsKICAgICAgICAgICAgewogICAgICAgICAgICAgICJjbGllbnRfaWQiOiAiNzUxNzY0MTE2NTIyLWdyNTlrb2JqM2MzaTFoc2dyNWhpdW1hdWs1b3RyNXNxLmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29tIiwKICAgICAgICAgICAgICAiY2xpZW50X3R5cGUiOiAzCiAgICAgICAgAg0KICAgICAgICAgIF0KICAgICAgICB9CiAgICAgIH0KICAgIH0sCiAgICB7CiAgICAgICJjbGllbnRfaW5mbyI6IHsKICAgICAgICAibW9iaWxlc2RrX2FwcF9pZCI6ICIxOjc1MTc2NDExNjUyMjphbmRyb2lkOjk2ZDgzZGQxOTBmMzkzNDE3YWRmNTMiLAogICAgICAgICJhbmRyb2lkX2NsaWVudF9pbmZvIjogewogICAgICAgICAgInBhY2thZ2VfbmFtZSI6ICJjb20uYXV0b3BhcnRzLmluZGlhIgogICAgICAgIH0KICAgICAgfSwKICAgICAgIm9hdXRoX2NsaWVudCI6IFsKICAgICAgICB7CiAgICAgICAgICAiY2xpZW50X2lkIjogIjc1MTc2NDExNjUyMi1ncjU5a29iajNjM2kxaHNncjVoaXVtYXVrNW90cjVzcS5hcHBzLmdvb2dsZXVzZXJjb250ZW50LmNvbSIsCiAgICAgICAgICAiY2xpZW50X3R5cGUiOiAzCiAgICAgICAgfQogICAgICBdLAogICAgICAiYXBpX2tleSI6IFsKICAgICAgICB7CiAgICAgICAgICAiY3VycmVudF9rZXkiOiAiQUl6YVN5QlRmaXZZYnhFN1BEQjdGeHlBbEpqRkRpZDZMS1BwbHg4IgogICAgICAgIH0KICAgICAgXSwKICAgICAgInNlcnZpY2VzIjogewogICAgICAgICJhcHBpbnZpdGVfc2VydmljZSI6IHsKICAgICAgICAgICJvdGhlcl9wbGF0Zm9ybV9vYXV0aF9jbGllbnQiOiBbCiAgICAgICAgICAgIHsKICAgICAgICAgICAgICAiY2xpZW50X2lkIjogIjc1MTc2NDExNjUyMi1ncjU5a29iajNjM2kxaHNncjVoaXVtYXVrNW90cjVzcS5hcHBzLmdvb2dsZXVzZXJjb250ZW50LmNvbSIsCiAgICAgICAgICAgICAgImNsaWVudF90eXBlIjogMwogICAgICAgICAgICB9CiAgICAgICAgICBdCiAgICAgICAgfQogICAgICB9CiAgICB9LAogICAgewogICAgICAiY2xpZW50X2luZm8iOiB7CiAgICAgICAgIm1vYmlsZXNka19hcHBfaWQiOiAiMTo3NTE3NjQxMTY1MjI6YW5kcm9pZDo0MjQ0ZGM0YjdhODE1MGY3N2FkZjUzIiwKICAgICAgICAiYW5kcm9pZF9jbGllbnRfaW5mbyI6IHsKICAgICAgICAgICJwYWNrYWdlX25hbWUiOiAiY29tLmF1dG9wYXJ0c2luZGlhIgogICAgICAgIH0KICAgICAgfSwKICAgICAgIm9hdXRoX2NsaWVudCI6IFsKICAgICAgICB7CiAgICAgICAgICAiY2xpZW50X2lkIjogIjc1MTc2NDExNjUyMi1ncjU5a29iajNjM2kxaHNncjVoaXVtYXVrNW90cjVzcS5hcHBzLmdvb2dsZXVzZXJjb250ZW50LmNvbSIsCiAgICAgICAgICAiY2xpZW50X3R5cGUiOiAzCiAgICAgICAgfQogICAgICBdLAogICAgICAiYXBpX2tleSI6IFsKICAgICAgICB7CiAgICAgICAgICAiY3VycmVudF9rZXkiOiAiQUl6YVN5QlRmaXZZYnhFN1BEQjdGeHlBbEpqRkRpZDZMS1BwbHg4IgogICAgICAgIH0KICAgICAgXSwKICAgICAgInNlcnZpY2VzIjogewogICAgICAgICJhcHBpbnZpdGVfc2VydmljZSI6IHsKICAgICAgICAgICJvdGhlcl9wbGF0Zm9ybV9vYXV0aF9jbGllbnQiOiBbCiAgICAgICAgICAgIHsKICAgICAgICAgICAgICAiY2xpZW50X2lkIjogIjc1MTc2NDExNjUyMi1ncjU5a29iajNjM2kxaHNncjVoaXVtYXVrNW90cjVzcS5hcHBzLmdvb2dsZXVzZXJjb250ZW50LmNvbSIsCiAgICAgICAgICAgICAgImNsaWVudF90eXBlIjogMwogICAgICAgICAgICB9CiAgICAgICAgICBdCiAgICAgICAgfQogICAgICB9CiAgICB9CiAgXSwKICAiY29uZmlndXJhdGlvbl92ZXJzaW9uIjogIjEiCn0K" | base64 -d > react-native-app/android/app/google-services.json
+          mkdir -p react-native-app/android
+          if [ ! -f "react-native-app/android/settings.gradle" ]; then
+            echo "Generating clean settings.gradle..."
+            cat << 'EOF' > react-native-app/android/settings.gradle
+          pluginManagement {
+              includeBuild(new File(["node", "--print", "require.resolve('@react-native/gradle-plugin/package.json')"].execute(null, rootDir).text.trim()).getParentFile().toString())
+          }
+          plugins { id("com.facebook.react.settings") }
+          extensions.configure(com.facebook.react.ReactSettingsExtension){ it.autolinkLibrariesFromCommand() }
+          rootProject.name = 'AutoPartsIndia'
+          include ':app'
+          includeBuild(new File(["node", "--print", "require.resolve('@react-native/gradle-plugin/package.json')"].execute(null, rootDir).text.trim()).getParentFile().toString())
+          EOF
           fi
 
-          if [ ! -f "react-native-app/android/app/release.keystore" ] || [ ! -s "react-native-app/android/app/release.keystore" ]; then
-            echo "Writing persistent release.keystore via Base64..."
-            echo "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" | base64 -d > react-native-app/android/app/release.keystore
-          fi
-
-          if [ ! -f "react-native-app/android/gradle/wrapper/gradle-wrapper.jar" ] || [ ! -s "react-native-app/android/gradle/wrapper/gradle-wrapper.jar" ]; then
-            echo "Downloading gradle-wrapper.jar..."
-            curl -sSL -o react-native-app/android/gradle/wrapper/gradle-wrapper.jar "https://raw.githubusercontent.com/gradle/gradle/v8.8.0/gradle/wrapper/gradle-wrapper.jar"
-          fi
-
-      - name: Install Root Dependencies
+      - name: Install React Native Dependencies
         run: |
           cd react-native-app
           npm install --legacy-peer-deps
 
-      - name: Generate Android Asset Bundle & APK
+      - name: Patch Dependencies for RN 0.76 New Architecture Compatibility
+        run: |
+          cd react-native-app
+          find node_modules/@react-native-firebase -name CMakeLists.txt -exec sed -i 's/target_compile_reactnative_options(\(.*\) PRIVATE)/target_compile_options(\1 PRIVATE -fexceptions -frtti -std=c++20 -Wall)/g' {} + || true
+          find node_modules/react-native-svg -name "RNSVGLayoutableShadowNode.cpp" -exec sed -i 's/yoga::StyleSizeLength/yoga::StyleLength/g' {} + || true
+          find node_modules/@react-navigation/native-stack -name "*.js" -exec sed -i "s/'usesNewAndroidHeaderHeightImplementation' in compatibilityFlags/compatibilityFlags \&\& 'usesNewAndroidHeaderHeightImplementation' in compatibilityFlags/g" {} + || true
+          find node_modules/@react-navigation/native-stack -name "*.js" -exec sed -i "s/in compatibilityFlags/in (compatibilityFlags || {})/g" {} + || true
+          node -e "
+          const fs = require('fs');
+          const modPath = 'node_modules/react-native-screens/lib/module/index.js';
+          if (fs.existsSync(modPath)) {
+            let src = fs.readFileSync(modPath, 'utf8');
+            if (!src.includes('ScreenStackItem')) {
+              src += '\nexport const ScreenStackItem = Screen;\nexport const compatibilityFlags = { usesNewAndroidHeaderHeightImplementation: false, isNewBackTitleImplementation: true, usesHeaderFlexboxImplementation: true, usesStableTabsApi: true };\n';
+              fs.writeFileSync(modPath, src);
+            }
+          }
+          const cjsPath = 'node_modules/react-native-screens/lib/commonjs/index.js';
+          if (fs.existsSync(cjsPath)) {
+            let src = fs.readFileSync(cjsPath, 'utf8');
+            if (!src.includes('ScreenStackItem')) {
+              src += '\nexports.ScreenStackItem = exports.Screen;\nexports.compatibilityFlags = { usesNewAndroidHeaderHeightImplementation: false, isNewBackTitleImplementation: true, usesHeaderFlexboxImplementation: true, usesStableTabsApi: true };\n';
+              fs.writeFileSync(cjsPath, src);
+            }
+          }
+          " || true
+
+      - name: Pre-bundle JS for Release
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          cd react-native-app
+          mkdir -p android/app/src/main/assets
+          mkdir -p android/app/src/main/res
+          # Inject GEMINI_API_KEY directly into directGeminiService if secret is present in GitHub
+          if [ -n "$GEMINI_API_KEY" ]; then
+            echo "Embedding GEMINI_API_KEY into direct device AI engine..."
+            sed -i "s|const GEMINI_DIRECT_API_KEY = .*|const GEMINI_DIRECT_API_KEY = '$GEMINI_API_KEY';|g" src/services/directGeminiService.ts || true
+          fi
+          npx @react-native-community/cli bundle \
+            --platform android \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res || npx react-native bundle \
+            --platform android \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res || true
+
+      - name: Ensure Gradle Wrapper & Executable
+        run: |
+          cd react-native-app/android
+          echo "Force downloading official gradle-wrapper.jar..."
+          mkdir -p gradle/wrapper
+          wget -qO gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v8.8.0/gradle/wrapper/gradle-wrapper.jar || \
+          curl -fsSL https://raw.githubusercontent.com/gradle/gradle/v8.8.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
+          chmod +x gradlew || true
+          sed -i 's/\r$//' gradlew || true
+
+      - name: Ensure google-services.json
+        env:
+          GOOGLE_SERVICES_JSON_SECRET: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          cd react-native-app/android/app
+          if [ -n "$GOOGLE_SERVICES_JSON_SECRET" ]; then
+            echo "Using google-services.json from GitHub Secrets..."
+            echo "$GOOGLE_SERVICES_JSON_SECRET" > google-services.json
+          elif [ ! -f "google-services.json" ]; then
+            echo "google-services.json is missing, embedding exact project configuration..."
+            cat << 'EOF' > google-services.json
+          {
+            "project_info": {
+              "project_number": "751764116522",
+              "firebase_url": "https://auto-parts-market-place-20312-default-rtdb.firebaseio.com",
+              "project_id": "auto-parts-market-place-20312",
+              "storage_bucket": "auto-parts-market-place-20312.firebasestorage.app"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:751764116522:android:f4705ee3aed7aa197adf53",
+                  "android_client_info": {
+                    "package_name": "com.autoparts.app"
+                  }
+                },
+                "oauth_client": [
+                  {
+                    "client_id": "751764116522-oc4lurqs2fflbr5fdanlq32343if1e5k.apps.googleusercontent.com",
+                    "client_type": 1,
+                    "android_info": {
+                      "package_name": "com.autoparts.app",
+                      "certificate_hash": "14d6a60e48069f67ccfaa47241797b95d9b5689a"
+                    }
+                  },
+                  {
+                    "client_id": "751764116522-gr59kobj3c3i1hsgr5hiumauk5otr5sq.apps.googleusercontent.com",
+                    "client_type": 3
+                  }
+                ],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyBTfivYbxE7PDB7FxyAlJjFDid6LKPplx8"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": [
+                      {
+                        "client_id": "751764116522-gr59kobj3c3i1hsgr5hiumauk5otr5sq.apps.googleusercontent.com",
+                        "client_type": 3
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:751764116522:android:96d83dd190f393417adf53",
+                  "android_client_info": {
+                    "package_name": "com.autoparts.india"
+                  }
+                },
+                "oauth_client": [
+                  {
+                    "client_id": "751764116522-gr59kobj3c3i1hsgr5hiumauk5otr5sq.apps.googleusercontent.com",
+                    "client_type": 3
+                  }
+                ],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyBTfivYbxE7PDB7FxyAlJjFDid6LKPplx8"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": [
+                      {
+                        "client_id": "751764116522-gr59kobj3c3i1hsgr5hiumauk5otr5sq.apps.googleusercontent.com",
+                        "client_type": 3
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:751764116522:android:4244dc4b7a8150f77adf53",
+                  "android_client_info": {
+                    "package_name": "com.autopartsindia"
+                  }
+                },
+                "oauth_client": [
+                  {
+                    "client_id": "751764116522-gr59kobj3c3i1hsgr5hiumauk5otr5sq.apps.googleusercontent.com",
+                    "client_type": 1,
+                    "android_info": {
+                      "package_name": "com.autopartsindia",
+                      "certificate_hash": "7563efa05fa3ff12872c3ed8574c4da93ec81a10"
+                    }
+                  },
+                  {
+                    "client_id": "751764116522-gr59kobj3c3i1hsgr5hiumauk5otr5sq.apps.googleusercontent.com",
+                    "client_type": 3
+                  }
+                ],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyBTfivYbxE7PDB7FxyAlJjFDid6LKPplx8"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": [
+                      {
+                        "client_id": "751764116522-gr59kobj3c3i1hsgr5hiumauk5otr5sq.apps.googleusercontent.com",
+                        "client_type": 3
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+          else
+            echo "google-services.json is already present."
+          fi
+
+      - name: Ensure Fixed Debug Keystore with Firebase SHA-1
+        run: |
+          cd react-native-app/android/app
+          if [ ! -f "debug.keystore" ] || [ $(wc -c <"debug.keystore") -lt 100 ]; then
+            echo "Writing fixed development signing keystore matching Firebase SHA-1..."
+            echo "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" | base64 -d > debug.keystore
+          fi
+          echo "=== VERIFYING KEYSTORE SIGNING FINGERPRINT ==="
+          keytool -list -v -keystore debug.keystore -storepass android -alias androiddebugkey | grep -E "(SHA1|SHA256):" || true
+          echo "==============================================="
+
+      - name: Create Swap File to Prevent Out of Memory
+        run: |
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile || true
+          sudo fallocate -l 4G /mnt/swapfile || sudo dd if=/dev/zero of=/mnt/swapfile bs=1M count=4096
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          free -h
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.8"
+          cache-read-only: false
+
+      - name: Setup Android NDK
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;26.1.10909125"
+
+      - name: Build React Native Android Release APK
+        env:
+          CI: true
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          REACT_NATIVE_MAX_WORKERS: 4
+          CMAKE_BUILD_PARALLEL_LEVEL: 4
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.caching=true -Dorg.gradle.jvmargs=\"-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+UseParallelGC\""
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/26.1.10909125
         run: |
           cd react-native-app/android
           chmod +x ./gradlew || true
-          ./gradlew assembleRelease bundleRelease --no-daemon --no-parallel --build-cache -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+UseParallelGC"
+          ./gradlew assembleRelease bundleRelease --no-daemon --no-parallel --build-cache \
+            -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+UseParallelGC"
 
-      - name: Upload Android Artifacts (APK & AAB)
+      - name: Upload APK & AAB Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: auto-parts-india-android-bundles
+          name: auto-parts-india-release-bundles
           path: |
             react-native-app/android/app/build/outputs/apk/**/*.apk
             react-native-app/android/app/build/outputs/bundle/**/*.aab
