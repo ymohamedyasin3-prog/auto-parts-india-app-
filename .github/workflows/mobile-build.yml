@@ -64,6 +64,15 @@ jobs:
           EOF
           fi
 
+      - name: Ensure Gradle Wrapper Jar
+        run: |
+          mkdir -p react-native-app/android/gradle/wrapper
+          if [ ! -f "react-native-app/android/gradle/wrapper/gradle-wrapper.jar" ] || [ ! -s "react-native-app/android/gradle/wrapper/gradle-wrapper.jar" ]; then
+            echo "Downloading gradle-wrapper.jar..."
+            curl -sSL -o react-native-app/android/gradle/wrapper/gradle-wrapper.jar \
+              "https://raw.githubusercontent.com/gradle/gradle/v8.8.0/gradle/wrapper/gradle-wrapper.jar"
+          fi
+
       - name: Install Root Dependencies
         run: |
           cd react-native-app
