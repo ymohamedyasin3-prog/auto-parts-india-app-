@@ -223,27 +223,6 @@ export async function markNotificationAsRead(notificationId: string): Promise<vo
   }
 }
 
-const DELETED_ANNOUNCEMENTS_STORAGE_KEY = '@autoparts_deleted_announcements';
-const DELETED_NOTIFICATIONS_STORAGE_KEY = '@autoparts_deleted_notifications';
-
-/**
- * Gets all personal notification IDs that have been deleted by current device/user
- */
-export async function getLocalDeletedNotificationIds(): Promise<Set<string>> {
-  try {
-    const raw = await AsyncStorage.getItem(DELETED_NOTIFICATIONS_STORAGE_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        return new Set<string>(arr);
-      }
-    }
-  } catch (err) {
-    console.warn('[notifications] Error reading local deleted notifications:', err);
-  }
-  return new Set<string>();
-}
-
 /**
  * Adds a notification ID to local deleted list
  */
@@ -270,24 +249,6 @@ export async function addLocalDeletedNotificationIds(ids: string[]): Promise<voi
   } catch (err) {
     console.warn('[notifications] Error saving local deleted notifications:', err);
   }
-}
-
-/**
- * Gets all announcement IDs that have been dismissed/deleted by current device/user
- */
-export async function getLocalDeletedAnnouncementIds(): Promise<Set<string>> {
-  try {
-    const raw = await AsyncStorage.getItem(DELETED_ANNOUNCEMENTS_STORAGE_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        return new Set<string>(arr);
-      }
-    }
-  } catch (err) {
-    console.warn('[notifications] Error reading local deleted announcements:', err);
-  }
-  return new Set<string>();
 }
 
 /**
