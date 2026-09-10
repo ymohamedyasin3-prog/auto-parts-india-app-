@@ -290,6 +290,8 @@ export function setupFcmListeners(userId?: string): () => void {
       const body = remoteMessage.notification?.body || (remoteMessage.data?.body as string) || 'You have a new message';
 
       try {
+        const largeIconImage = remoteMessage.data?.partImageUrl || remoteMessage.data?.senderPhoto || 'ic_launcher';
+
         await notifee.displayNotification({
           title,
           body,
@@ -299,6 +301,8 @@ export function setupFcmListeners(userId?: string): () => void {
             importance: AndroidImportance.HIGH,
             sound: 'default',
             smallIcon: 'ic_notification',
+            largeIcon: largeIconImage,
+            circularLargeIcon: true,
             color: '#0066FF',
             pressAction: {
               id: 'default',

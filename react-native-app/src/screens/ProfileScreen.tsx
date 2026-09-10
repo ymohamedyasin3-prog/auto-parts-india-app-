@@ -168,9 +168,6 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
               borderWidth={2}
               borderColor="#0066FF"
             />
-            <View style={styles.cameraIconBadge}>
-              <Icon source="camera" size={12} color="#FFFFFF" />
-            </View>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -215,25 +212,6 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
               <Divider style={styles.divider} />
             </>
           )}
-
-          {/* Seller Store / Public Profile */}
-          <TouchableOpacity 
-            style={styles.menuItem} 
-            onPress={() => {
-              const uid = activeUid || getCurrentUser()?.uid;
-              if (uid) {
-                navigation.navigate('SellerProfile', { sellerId: uid, sellerName: displayName });
-              }
-            }}
-          >
-            <View style={[styles.menuIconBox, { backgroundColor: '#EEF2FF' }]}>
-              <Icon source="store-outline" size={20} color="#4F46E5" />
-            </View>
-            <Text style={styles.menuItemText}>My Seller Store / Listings</Text>
-            <Icon source="chevron-right" size={20} color="#CBD5E1" />
-          </TouchableOpacity>
-
-          <Divider style={styles.divider} />
 
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('MyAdsTab')}>
             <View style={[styles.menuIconBox, { backgroundColor: '#EFF6FF' }]}>

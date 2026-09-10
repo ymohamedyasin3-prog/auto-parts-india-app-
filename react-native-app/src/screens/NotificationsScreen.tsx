@@ -59,8 +59,10 @@ export default function NotificationsScreen({ navigation }: any) {
         return () => {};
       }
 
-      // 1. Fetch personal chat/inquiry notifications
+      // 1. Fetch personal chat/inquiry notifications & real-time chat inquiries
       let unsubNotifs = () => {};
+      let unsubChats = () => {};
+
       if (currentUid) {
         const notifQuery = db
           .collection('notifications')
@@ -78,6 +80,48 @@ export default function NotificationsScreen({ navigation }: any) {
               list.push({ id: docId, ...data });
             });
           }
+
+          // Also check active chat inquiries where user has unread messages
+          try {
+            const chatSnapshots = await db
+              .collection('chats')
+              .where('participants', 'array-contains', currentUid)
+              .get();
+
+            if (chatSnapshots && typeof chatSnapshots.forEach === 'function') {
+              chatSnapshots.forEach((cDoc: any) => {
+                const cData = cDoc.data ? cDoc.data() : cDoc;
+                const cId = cDoc.id;
+                // If this chat has unread message from partner and not yet in list
+                const unreadForMe = (typeof cData?.unreadCount?.[currentUid] === 'number' && cData.unreadCount[currentUid] > 0) ||
+                                    (cData?.lastSenderId && cData.lastSenderId !== currentUid && cData.unread === true);
+                
+                const alreadyInNotifs = list.some((n) => n.chatId === cId || n.id === cId);
+                if (!alreadyInNotifs && (unreadForMe || cData?.lastMessageText)) {
+                  const partnerName = cData?.buyerId === currentUid ? (cData?.sellerName || 'Seller') : (cData?.buyerName || 'Buyer');
+                  list.push({
+                    id: `chat_inq_${cId}`,
+                    chatId: cId,
+                    type: 'chat_message',
+                    senderId: cData?.lastSenderId || '',
+                    senderName: partnerName,
+                    text: cData?.lastMessageText || 'New message in chat',
+                    partId: cData?.partId || '',
+                    partTitle: cData?.partTitle || 'Auto Spare Part',
+                    partPrice: cData?.partPrice || 0,
+                    partImageUrl: cData?.partImageUrl || '',
+                    buyerId: cData?.buyerId,
+                    buyerName: cData?.buyerName,
+                    sellerId: cData?.sellerId,
+                    sellerName: cData?.sellerName,
+                    read: !unreadForMe,
+                    createdAt: cData?.lastMessageAt || cData?.updatedAt || Date.now(),
+                  });
+                }
+              });
+            }
+          } catch (_) {}
+
           list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
           setPersonalNotifs(list);
           setLoading(false);

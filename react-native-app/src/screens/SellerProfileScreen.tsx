@@ -49,8 +49,9 @@ export default function SellerProfileScreen({ route, navigation }: any) {
   const [followingCount, setFollowingCount] = useState(0);
 
   const currentUser = getCurrentUser();
-  const isOwnProfile = !sellerId || currentUser?.uid === sellerId;
-  const targetUid = sellerId || currentUser?.uid;
+  const [resolvedUid, setResolvedUid] = useState<string | undefined>(sellerId || currentUser?.uid);
+  const isOwnProfile = !sellerId || (resolvedUid && currentUser?.uid === resolvedUid);
+  const targetUid = sellerId || resolvedUid || currentUser?.uid;
 
   // Format creation timestamp into "Mon Year" (e.g., "Jan 2024")
   const formatMemberSince = (timestampOrDateString?: any): string => {
@@ -68,23 +69,48 @@ export default function SellerProfileScreen({ route, navigation }: any) {
   };
 
   useEffect(() => {
-    if (!targetUid) return;
+    const authInst = getFirebaseAuth();
+    if (authInst && typeof authInst.onAuthStateChanged === 'function') {
+      const unsub = authInst.onAuthStateChanged((u) => {
+        if (u && !sellerId) {
+          setResolvedUid(u.uid);
+          if (u.displayName && !sellerName) setSellerName(u.displayName);
+          if (u.photoURL && !sellerPhoto) setSellerPhoto(u.photoURL);
+        }
+      });
+      return unsub;
+    }
+  }, [sellerId]);
 
+  useEffect(() => {
     let isMounted = true;
     let unsubFollowers = () => {};
     let unsubFollowing = () => {};
     let unsubMyFollow = () => {};
     let unsubUserDoc = () => {};
 
+    // Safety timeout: ensure skeleton disappears within 1.5s max even on slow networks
+    const timer = setTimeout(() => {
+      if (isMounted) setLoading(false);
+    }, 1500);
+
     const fetchSellerData = async () => {
-      setLoading(true);
       try {
+        const activeTarget = targetUid || getCurrentUser()?.uid;
+        if (!activeTarget) {
+          if (isMounted) setLoading(false);
+          return;
+        }
+
         const db = getFirebaseFirestore();
-        if (!db || typeof db.collection !== 'function') return;
+        if (!db || typeof db.collection !== 'function') {
+          if (isMounted) setLoading(false);
+          return;
+        }
 
         // 1. Real-time User doc listener
         try {
-          unsubUserDoc = db.collection('users').doc(targetUid).onSnapshot((userDoc: any) => {
+          unsubUserDoc = db.collection('users').doc(activeTarget).onSnapshot((userDoc: any) => {
             const exists = typeof userDoc?.exists === 'function' ? userDoc.exists() : Boolean(userDoc?.exists);
             if (exists && isMounted) {
               const userData = typeof userDoc?.data === 'function' ? userDoc.data() : userDoc?.data;
@@ -124,27 +150,37 @@ export default function SellerProfileScreen({ route, navigation }: any) {
                 }
               }
             }
-          }, (err: any) => console.warn('User doc listener error:', err));
-        } catch (_) {}
-
-        // 2. Fetch seller listings
-        const q = db.collection('spareParts').where('sellerId', '==', targetUid);
-        const listingsSnap = await q.get();
-        const items: any[] = [];
-        if (listingsSnap) {
-          listingsSnap.forEach((d: any) => {
-            const data = typeof d.data === 'function' ? d.data() : d.data;
-            items.push({ id: d.id, ...data });
+            if (isMounted) setLoading(false);
+          }, (err: any) => {
+            console.warn('User doc listener error:', err);
+            if (isMounted) setLoading(false);
           });
+        } catch (_) {
+          if (isMounted) setLoading(false);
         }
 
-        if (isMounted) {
-          setActiveListings(items.filter((it: any) => !it.sold && it.status !== 'removed'));
+        // 2. Fetch seller listings
+        try {
+          const q = db.collection('spareParts').where('sellerId', '==', activeTarget);
+          const listingsSnap = await q.get();
+          const items: any[] = [];
+          if (listingsSnap) {
+            listingsSnap.forEach((d: any) => {
+              const data = typeof d.data === 'function' ? d.data() : d.data;
+              items.push({ id: d.id, ...data });
+            });
+          }
+
+          if (isMounted) {
+            setActiveListings(items.filter((it: any) => !it.sold && it.status !== 'removed'));
+          }
+        } catch (e) {
+          console.warn('Listings fetch error:', e);
         }
 
         // 3. Set up real-time listener for Followers count
         try {
-          unsubFollowers = db.collection('follows').where('followingId', '==', targetUid).onSnapshot((snap: any) => {
+          unsubFollowers = db.collection('follows').where('followingId', '==', activeTarget).onSnapshot((snap: any) => {
             if (isMounted && snap) {
               setFollowersCount(snap.size || 0);
             }
@@ -153,7 +189,7 @@ export default function SellerProfileScreen({ route, navigation }: any) {
 
         // 4. Set up real-time listener for Following count
         try {
-          unsubFollowing = db.collection('follows').where('followerId', '==', targetUid).onSnapshot((snap: any) => {
+          unsubFollowing = db.collection('follows').where('followerId', '==', activeTarget).onSnapshot((snap: any) => {
             if (isMounted && snap) {
               setFollowingCount(snap.size || 0);
             }
@@ -161,9 +197,10 @@ export default function SellerProfileScreen({ route, navigation }: any) {
         } catch (_) {}
 
         // 5. Follow status for visitor
-        if (currentUser?.uid && currentUser.uid !== targetUid) {
+        const currentU = getCurrentUser();
+        if (currentU?.uid && currentU.uid !== activeTarget) {
           try {
-            unsubMyFollow = db.collection('follows').doc(`${currentUser.uid}_${targetUid}`).onSnapshot((docSnap: any) => {
+            unsubMyFollow = db.collection('follows').doc(`${currentU.uid}_${activeTarget}`).onSnapshot((docSnap: any) => {
               if (isMounted) {
                 const exists = typeof docSnap?.exists === 'function' ? docSnap.exists() : Boolean(docSnap?.exists);
                 setIsFollowing(Boolean(exists));
@@ -182,12 +219,13 @@ export default function SellerProfileScreen({ route, navigation }: any) {
 
     return () => {
       isMounted = false;
+      clearTimeout(timer);
       try { unsubUserDoc(); } catch (_) {}
       try { unsubFollowers(); } catch (_) {}
       try { unsubFollowing(); } catch (_) {}
       try { unsubMyFollow(); } catch (_) {}
     };
-  }, [targetUid, currentUser?.uid]);
+  }, [targetUid, resolvedUid, currentUser?.uid]);
 
   const handleShareProfile = async () => {
     try {

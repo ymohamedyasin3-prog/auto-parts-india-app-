@@ -136,25 +136,25 @@ export const HOME_DEFAULT_CATEGORIES = [
     id: 'Engine & Mechanical',
     name: 'Engine & Mechanical',
     icon: 'engine',
-    imageUrl: 'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=400&q=80',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788828857/categories/v40ctc1xzsul1nmquwno.png',
   },
   {
     id: 'Body & Exterior',
     name: 'Body & Exterior',
     icon: 'car-door',
-    imageUrl: 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=400&q=80',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788915211/categories/ssxl1agf8ydkau5aqv4h.png',
   },
   {
     id: 'Lights & Electricals',
     name: 'Lights & Electricals',
     icon: 'lightning-bolt',
-    imageUrl: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=400&q=80',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788746594/categories/w1tym7epvnhv0f9aapuf.png',
   },
   {
     id: 'Suspension & Brakes',
     name: 'Suspension & Brakes',
     icon: 'car-brake-alert',
-    imageUrl: 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&w=400&q=80',
+    imageUrl: 'https://res.cloudinary.com/rqf1hlrx/image/upload/v1788808169/categories/ebbks7ce3jejqgtxlndo.png',
   },
   {
     id: 'Interior & Wheels',
@@ -337,7 +337,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
   const [parts, setParts] = useState<any[]>([]);
   const [topCategories, setTopCategories] = useState<any[]>(HOME_DEFAULT_CATEGORIES);
   const [carBrands, setCarBrands] = useState<any[]>(HOME_DEFAULT_BRANDS);
-  const [banners, setBanners] = useState<any[]>([]);
+  const [banners, setBanners] = useState<any[]>(DEFAULT_BANNERS);
   const [activeBannerIndex, setActiveBannerIndex] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -576,17 +576,25 @@ export default function HomeScreen({ navigation, route, user }: any) {
   }, []);
 
   // Fetch Parts from Firestore
-  const fetchParts = useCallback(() => {
+  const fetchParts = useCallback((isPullRefresh = false) => {
     setLoading(true);
+    const startTime = Date.now();
+    const MIN_LOADING_TIME = isPullRefresh ? 600 : 700; // Guarantee smooth skeleton display
+
     try {
-      // Load from local cache first for instant display on slow/no internet
+      // Load from local cache first for offline safety
       AsyncStorage.getItem('@autoparts_firestore_parts').then((cached) => {
         if (cached) {
           try {
             const parsed = JSON.parse(cached);
             if (Array.isArray(parsed) && parsed.length > 0) {
               setParts(parsed);
-              setLoading(false);
+              const elapsed = Date.now() - startTime;
+              const remaining = Math.max(0, MIN_LOADING_TIME - elapsed);
+              setTimeout(() => {
+                setLoading(false);
+                setRefreshing(false);
+              }, remaining);
             }
           } catch (_) {}
         }
@@ -595,8 +603,12 @@ export default function HomeScreen({ navigation, route, user }: any) {
       const db = getFirebaseFirestore();
       if (!db || typeof db.collection !== 'function') {
         setParts(INITIAL_SPARE_PARTS);
-        setLoading(false);
-        setRefreshing(false);
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, MIN_LOADING_TIME - elapsed);
+        setTimeout(() => {
+          setLoading(false);
+          setRefreshing(false);
+        }, remaining);
         return () => {};
       }
 
@@ -619,14 +631,22 @@ export default function HomeScreen({ navigation, route, user }: any) {
             setParts(partsList);
             AsyncStorage.setItem('@autoparts_firestore_parts', JSON.stringify(partsList)).catch(() => {});
           }
-          setLoading(false);
-          setRefreshing(false);
+          const elapsed = Date.now() - startTime;
+          const remaining = Math.max(0, MIN_LOADING_TIME - elapsed);
+          setTimeout(() => {
+            setLoading(false);
+            setRefreshing(false);
+          }, remaining);
         },
         (error: any) => {
           console.warn('[HomeScreen] Firestore parts snapshot error, fallback to initial parts:', error);
           setParts(INITIAL_SPARE_PARTS);
-          setLoading(false);
-          setRefreshing(false);
+          const elapsed = Date.now() - startTime;
+          const remaining = Math.max(0, MIN_LOADING_TIME - elapsed);
+          setTimeout(() => {
+            setLoading(false);
+            setRefreshing(false);
+          }, remaining);
         }
       );
 
@@ -634,8 +654,12 @@ export default function HomeScreen({ navigation, route, user }: any) {
     } catch (e) {
       console.warn('[HomeScreen] Exception fetching parts:', e);
       setParts(INITIAL_SPARE_PARTS);
-      setLoading(false);
-      setRefreshing(false);
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, MIN_LOADING_TIME - elapsed);
+      setTimeout(() => {
+        setLoading(false);
+        setRefreshing(false);
+      }, remaining);
       return () => {};
     }
   }, []);
@@ -720,7 +744,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchParts();
+    fetchParts(true);
 
     try {
       const db = getFirebaseFirestore();

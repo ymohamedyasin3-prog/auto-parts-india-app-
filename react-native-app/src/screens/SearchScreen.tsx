@@ -352,10 +352,10 @@ export default function SearchScreen({ navigation, route }: any) {
 
   // Count active filters
   const activeFiltersCount = [
-    selectedCategory !== 'All Categories' && selectedCategory !== 'All',
-    selectedBrand !== 'All Brands' && selectedBrand !== 'All',
-    selectedCondition !== 'All Conditions',
-    selectedLocation !== 'All India' && selectedLocation !== 'All States',
+    selectedCategory && selectedCategory !== 'All Categories' && selectedCategory !== 'All',
+    selectedBrand && selectedBrand !== 'All Brands' && selectedBrand !== 'All',
+    selectedCondition && selectedCondition !== 'All Conditions' && selectedCondition !== 'All',
+    selectedLocation && selectedLocation !== 'All India' && selectedLocation !== 'All States' && selectedLocation !== 'All',
     !!minPrice.trim() || !!maxPrice.trim(),
     sortBy !== 'newest',
   ].filter(Boolean).length;
@@ -883,62 +883,82 @@ export default function SearchScreen({ navigation, route }: any) {
         /* LIVE RESULTS VIEW */
         <View style={styles.resultsContainer}>
           {/* Active Filter Chips Bar */}
-          {(activeFiltersCount > 0 || isFilterApplied) && (
+          {(activeFiltersCount > 0 || (isFilterApplied && !!searchQuery.trim())) && (
             <View style={styles.activeChipsContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeChipsScroll}>
+                {!!searchQuery.trim() && (
+                  <View style={styles.activeChip}>
+                    <Text style={styles.activeChipText}>🔍 "{searchQuery}"</Text>
+                    <TouchableOpacity
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      onPress={() => setSearchQuery('')}
+                    >
+                      <Icon source="close-circle" size={16} color="#0066FF" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+
                 {(!!minPrice.trim() || !!maxPrice.trim()) && (
                   <View style={styles.activeChip}>
                     <Text style={styles.activeChipText}>
                       💰 {minPrice ? `₹${Number(minPrice).toLocaleString('en-IN')}` : '₹0'} – {maxPrice ? `₹${Number(maxPrice).toLocaleString('en-IN')}` : 'Any'}
                     </Text>
-                    <TouchableOpacity onPress={() => { setMinPrice(''); setMaxPrice(''); }}>
-                      <Icon source="close-circle" size={16} color="#0284C7" />
+                    <TouchableOpacity
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      onPress={() => { setMinPrice(''); setMaxPrice(''); }}
+                    >
+                      <Icon source="close-circle" size={16} color="#0066FF" />
                     </TouchableOpacity>
                   </View>
                 )}
 
-                {selectedCategory !== 'All Categories' ? (
+                {selectedCategory && selectedCategory !== 'All Categories' && selectedCategory !== 'All' ? (
                   <View style={styles.activeChip}>
                     <Text style={styles.activeChipText}>🗂️ {selectedCategory}</Text>
-                    <TouchableOpacity onPress={() => setSelectedCategory('All Categories')}>
-                      <Icon source="close-circle" size={16} color="#0284C7" />
+                    <TouchableOpacity
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      onPress={() => setSelectedCategory('All Categories')}
+                    >
+                      <Icon source="close-circle" size={16} color="#0066FF" />
                     </TouchableOpacity>
                   </View>
-                ) : (
-                  <View style={styles.activeChip}>
-                    <Text style={styles.activeChipText}>🗂️ All Categories</Text>
-                    <TouchableOpacity onPress={() => setSelectedCategory('All Categories')}>
-                      <Icon source="close-circle" size={16} color="#0284C7" />
-                    </TouchableOpacity>
-                  </View>
-                )}
+                ) : null}
 
-                {selectedBrand !== 'All Brands' && (
+                {selectedBrand && selectedBrand !== 'All Brands' && selectedBrand !== 'All' ? (
                   <View style={styles.activeChip}>
                     <Text style={styles.activeChipText}>🚗 {selectedBrand}</Text>
-                    <TouchableOpacity onPress={() => setSelectedBrand('All Brands')}>
-                      <Icon source="close-circle" size={16} color="#0284C7" />
+                    <TouchableOpacity
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      onPress={() => setSelectedBrand('All Brands')}
+                    >
+                      <Icon source="close-circle" size={16} color="#0066FF" />
                     </TouchableOpacity>
                   </View>
-                )}
+                ) : null}
 
-                {selectedCondition !== 'All Conditions' && (
+                {selectedCondition && selectedCondition !== 'All Conditions' && selectedCondition !== 'All' ? (
                   <View style={styles.activeChip}>
                     <Text style={styles.activeChipText}>🏷️ {selectedCondition}</Text>
-                    <TouchableOpacity onPress={() => setSelectedCondition('All Conditions')}>
-                      <Icon source="close-circle" size={16} color="#0284C7" />
+                    <TouchableOpacity
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      onPress={() => setSelectedCondition('All Conditions')}
+                    >
+                      <Icon source="close-circle" size={16} color="#0066FF" />
                     </TouchableOpacity>
                   </View>
-                )}
+                ) : null}
 
-                {selectedLocation !== 'All India' && (
+                {selectedLocation && selectedLocation !== 'All India' && selectedLocation !== 'All States' && selectedLocation !== 'All' ? (
                   <View style={styles.activeChip}>
                     <Text style={styles.activeChipText}>📍 {selectedLocation}</Text>
-                    <TouchableOpacity onPress={() => setSelectedLocation('All India')}>
-                      <Icon source="close-circle" size={16} color="#0284C7" />
+                    <TouchableOpacity
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      onPress={() => setSelectedLocation('All India')}
+                    >
+                      <Icon source="close-circle" size={16} color="#0066FF" />
                     </TouchableOpacity>
                   </View>
-                )}
+                ) : null}
 
                 <TouchableOpacity style={styles.clearAllFiltersBtn} onPress={resetFilters}>
                   <Text style={styles.clearAllFiltersText}>Reset All</Text>
