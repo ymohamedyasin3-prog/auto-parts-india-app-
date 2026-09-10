@@ -86,15 +86,35 @@ export default function SplashScreen({ navigation }: any) {
     };
 
     const checkAppUpdate = async () => {
+      let hasProceeded = false;
+      const safeProceed = () => {
+        if (!hasProceeded) {
+          hasProceeded = true;
+          proceedToApp();
+        }
+      };
+
+      // Fallback timer in case network / Firestore check hangs indefinitely
+      const fallbackTimer = setTimeout(() => {
+        safeProceed();
+      }, 3500);
+
       try {
         const db = getFirebaseFirestore();
         if (!db) {
-          proceedToApp();
+          clearTimeout(fallbackTimer);
+          safeProceed();
           return;
         }
 
-        const snap = await db.collection('app_version').doc('config').get();
-        if (snap.exists) {
+        const snap = await Promise.race([
+          db.collection('app_version').doc('config').get(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+        ]) as any;
+
+        clearTimeout(fallbackTimer);
+
+        if (snap && snap.exists) {
           const config = snap.data();
           const minVersion = config?.minimumSupportedVersion || '1.0.0';
           const forceUpdate = config?.forceUpdate === true;
@@ -112,13 +132,13 @@ export default function SplashScreen({ navigation }: any) {
                     onPress: () => {
                       if (apkUrl) Linking.openURL(apkUrl).catch(() => {});
                       if (forceUpdate) {
-                        setTimeout(promptUpdate, 1000); // Loop if forced
+                        setTimeout(promptUpdate, 1000);
                       } else {
-                        proceedToApp();
+                        safeProceed();
                       }
                     }
                   },
-                  ...(forceUpdate ? [] : [{ text: 'Later', onPress: proceedToApp, style: 'cancel' }])
+                  ...(forceUpdate ? [] : [{ text: 'Later', onPress: safeProceed, style: 'cancel' }])
                 ],
                 { cancelable: !forceUpdate }
               );
@@ -128,10 +148,9 @@ export default function SplashScreen({ navigation }: any) {
           }
         }
       } catch (err) {
-        console.warn('Update check failed:', err);
+        console.warn('Update check failed or timed out:', err);
       }
-      // If no update required or error, proceed
-      proceedToApp();
+      safeProceed();
     };
 
     const timer = setTimeout(() => {

@@ -333,10 +333,11 @@ Respond strictly in valid JSON format matching this schema:
       }
 
       if (!responseText) {
+        console.warn("[Gemini AutoFill] All models failed or unavailable.");
         return res.status(503).json({
           success: false,
           error: lastModelError?.message?.includes("high demand")
-            ? "AI model is currently experiencing temporary high demand. Please try again in a moment or enter details manually."
+            ? "AI model is currently experiencing high demand. Please try again in a few moments or enter details manually."
             : "AI service temporarily unavailable. Please enter details manually."
         });
       }

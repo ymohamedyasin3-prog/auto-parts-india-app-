@@ -87,6 +87,13 @@ export default function SearchScreen({ navigation, route }: any) {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [isConditionModalOpen, setIsConditionModalOpen] = useState(false);
+  const [isFilterApplied, setIsFilterApplied] = useState<boolean>(
+    !!route?.params?.initialQuery ||
+    !!route?.params?.initialCategory ||
+    !!route?.params?.selectedCategory ||
+    !!route?.params?.initialBrand ||
+    !!route?.params?.selectedBrand
+  );
 
   // Brand modal search query
   const [brandSearchInput, setBrandSearchInput] = useState('');
@@ -348,7 +355,7 @@ export default function SearchScreen({ navigation, route }: any) {
     sortBy !== 'newest',
   ].filter(Boolean).length;
 
-  const isSearchActive = searchQuery.trim().length > 0 || activeFiltersCount > 0;
+  const isSearchActive = searchQuery.trim().length > 0 || activeFiltersCount > 0 || isFilterApplied;
 
   const resetFilters = () => {
     setSearchQuery('');
@@ -359,6 +366,7 @@ export default function SearchScreen({ navigation, route }: any) {
     setSelectedCondition('All Conditions');
     setSelectedLocation('All India');
     setSortBy('newest');
+    setIsFilterApplied(false);
   };
 
   const openFilterModal = (tab: FilterTabType = 'budget') => {
@@ -374,10 +382,12 @@ export default function SearchScreen({ navigation, route }: any) {
     setSelectedCondition(filters.selectedCondition);
     setSelectedLocation(filters.selectedLocation);
     setSortBy(filters.sortBy);
+    setIsFilterApplied(true);
   };
 
   const handleSearchSubmit = () => {
     Keyboard.dismiss();
+    setIsFilterApplied(true);
     if (searchQuery.trim()) {
       addRecentSearch(searchQuery);
     }
@@ -386,27 +396,32 @@ export default function SearchScreen({ navigation, route }: any) {
   const handleSelectRecentSearch = (term: string) => {
     setSearchQuery(term);
     addRecentSearch(term);
+    setIsFilterApplied(true);
     Keyboard.dismiss();
   };
 
   const handleSelectCategory = (catName: string) => {
     setSelectedCategory(catName);
     setIsCategoryModalOpen(false);
+    setIsFilterApplied(true);
   };
 
   const handleSelectBrand = (brandName: string) => {
     setSelectedBrand(brandName);
     setIsBrandModalOpen(false);
+    setIsFilterApplied(true);
   };
 
   const handleSelectLocation = (locName: string) => {
     setSelectedLocation(locName);
     setIsLocationModalOpen(false);
+    setIsFilterApplied(true);
   };
 
   const handleSelectCondition = (condName: string) => {
     setSelectedCondition(condName);
     setIsConditionModalOpen(false);
+    setIsFilterApplied(true);
   };
 
   // Filtered Parts Memo
@@ -847,7 +862,7 @@ export default function SearchScreen({ navigation, route }: any) {
         /* LIVE RESULTS VIEW */
         <View style={styles.resultsContainer}>
           {/* Active Filter Chips Bar */}
-          {activeFiltersCount > 0 && (
+          {(activeFiltersCount > 0 || isFilterApplied) && (
             <View style={styles.activeChipsContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeChipsScroll}>
                 {(!!minPrice.trim() || !!maxPrice.trim()) && (
@@ -861,9 +876,16 @@ export default function SearchScreen({ navigation, route }: any) {
                   </View>
                 )}
 
-                {selectedCategory !== 'All Categories' && (
+                {selectedCategory !== 'All Categories' ? (
                   <View style={styles.activeChip}>
                     <Text style={styles.activeChipText}>🗂️ {selectedCategory}</Text>
+                    <TouchableOpacity onPress={() => setSelectedCategory('All Categories')}>
+                      <Icon source="close-circle" size={16} color="#0284C7" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.activeChip}>
+                    <Text style={styles.activeChipText}>🗂️ All Categories</Text>
                     <TouchableOpacity onPress={() => setSelectedCategory('All Categories')}>
                       <Icon source="close-circle" size={16} color="#0284C7" />
                     </TouchableOpacity>

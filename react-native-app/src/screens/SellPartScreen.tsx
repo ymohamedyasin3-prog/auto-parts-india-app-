@@ -916,18 +916,12 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
           data.message || 'The uploaded image does not appear to be an automotive vehicle or spare part. Please upload a clear photo of an automobile or car part.'
         );
       } else {
-        const errMsg = data?.error || 'AI could not identify details from this photo. Please enter details manually.';
-        Alert.alert('AI Auto-Fill Notice', errMsg);
+        // Silently fail without popup alert
+        console.warn('AI could not identify details from photo.');
       }
     } catch (err: any) {
       console.warn('Backend AI auto-fill error:', err?.message);
-      const isHighDemand = err?.message?.toLowerCase()?.includes('high demand');
-      Alert.alert(
-        'AI Auto-Fill Notice',
-        isHighDemand
-          ? 'The AI service is experiencing high demand right now. Please try again in a few moments or enter details manually.'
-          : (err?.message || 'Unable to reach AI service. Please check your internet connection and enter details manually.')
-      );
+      // Silently fail without popup alert
     } finally {
       setIsAutoFilling(false);
     }
