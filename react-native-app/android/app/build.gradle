@@ -134,7 +134,9 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            if (project.hasProperty('MYAPP_RELEASE_STORE_FILE') && file(MYAPP_RELEASE_STORE_FILE).exists()) {
+            if (file('release.keystore').exists()) {
+                signingConfig signingConfigs.release
+            } else if (project.hasProperty('MYAPP_RELEASE_STORE_FILE') && file(MYAPP_RELEASE_STORE_FILE).exists()) {
                 signingConfig signingConfigs.release
             } else if (file('debug.keystore').exists()) {
                 signingConfig signingConfigs.release
