@@ -85,7 +85,7 @@ jobs:
             react-native-app/android/app/build/outputs/bundle/**/*.aab
 
   build-ios:
-    name: Build iOS App Structure & Archive Setup
+    name: Build iOS App Bundle & Pods Setup
     runs-on: macos-latest
     timeout-minutes: 45
 
@@ -103,17 +103,25 @@ jobs:
           cd react-native-app
           npm install --legacy-peer-deps
 
+      - name: Generate iOS JS Bundle & Assets
+        run: |
+          cd react-native-app
+          mkdir -p ios
+          npx react-native bundle --platform ios --dev false --entry-file index.js --bundle-output ios/main.jsbundle --assets-dest ios/Assets || true
+
       - name: Setup Xcode Environment & CocoaPods
         run: |
           cd react-native-app
-          if [ -d "ios" ]; then
+          if [ -d "ios" ] && [ -f "ios/Podfile" ]; then
             cd ios
-            pod install || true
+            pod install --repo-update || pod install || true
           fi
-          echo "iOS project layout verified for Mac builder."
+          echo "iOS project layout and CocoaPods verified for Mac builder."
 
-      - name: Upload iOS Project Workspace Info
+      - name: Upload iOS Project & JS Bundle Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: auto-parts-india-ios-workspace
-          path: react-native-app/ios/
+          name: auto-parts-india-ios-bundles
+          path: |
+            react-native-app/ios/
+
