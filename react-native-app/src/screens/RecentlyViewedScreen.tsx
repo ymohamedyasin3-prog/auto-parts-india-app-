@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, FlatList, StyleSheet, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Text, Icon } from 'react-native-paper';
 import { getRecentlyViewedParts, clearRecentlyViewedParts } from '../services/recentlyViewed';
+import { ListFeedSkeleton } from '../components/SkeletonLoaders';
 
 export default function RecentlyViewedScreen({ navigation }: any) {
   const [recentlyViewed, setRecentlyViewed] = useState<any[]>([]);
@@ -36,8 +37,8 @@ export default function RecentlyViewedScreen({ navigation }: any) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator color="#0066FF" size="large" />
+      <View style={styles.container}>
+        <ListFeedSkeleton count={4} />
       </View>
     );
   }

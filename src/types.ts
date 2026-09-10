@@ -44,9 +44,21 @@ export interface SparePart {
   location: string; // e.g. "Mumbai" (fallback/legacy or formatted)
   state?: string;   // e.g. "Maharashtra"
   district?: string; // e.g. "Mumbai"
+  city?: string;
   area?: string;     // e.g. "Pallapatti", "Town Hall", etc.
+  pincode?: string;
+  address?: string;
   lat?: number;
   lng?: number;
+  oemNumber?: string;
+  partNumber?: string;
+  year?: number | string;
+  modelYear?: number | string;
+  deliveryAvailable?: boolean;
+  allIndiaShipping?: boolean;
+  finalPartName?: string;
+  finalCategory?: string;
+  subCategory?: string;
   contactName: string;
   contactPhone: string;
   imageUrl: string;

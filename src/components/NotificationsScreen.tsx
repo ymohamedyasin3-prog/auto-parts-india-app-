@@ -35,7 +35,20 @@ export default function NotificationsScreen({
   onBack
 }: NotificationsScreenProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => {
+    try {
+      const rawNotifs = localStorage.getItem("autoparts_deleted_notifications") || "[]";
+      const rawAnns = localStorage.getItem("autoparts_deleted_announcements") || "[]";
+      const parsedNotifs = JSON.parse(rawNotifs);
+      const parsedAnns = JSON.parse(rawAnns);
+      return new Set<string>([
+        ...(Array.isArray(parsedNotifs) ? parsedNotifs : []),
+        ...(Array.isArray(parsedAnns) ? parsedAnns : [])
+      ]);
+    } catch (_) {
+      return new Set<string>();
+    }
+  });
 
   const visibleAnnouncements = announcements.filter((a) => !deletedIds.has(a.id));
   const unreadList = visibleAnnouncements.filter((a) => !a.isRead);

@@ -128,48 +128,6 @@ export async function sendChatMessageNotification(params: {
   } catch (e) {
     console.warn('[notifications] Error saving chat notification to Firestore:', e);
   }
-
-  // 2. Trigger server-side push notification
-  try {
-    const endpoints = [
-      typeof window !== 'undefined' && window.location?.origin ? `${window.location.origin}/api/notifications/send` : null,
-      'https://ais-pre-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/notifications/send',
-      'https://ais-dev-4dp4t7tqjoefwoiuc4pb6b-572875732715.asia-southeast1.run.app/api/notifications/send'
-    ].filter(Boolean) as string[];
-
-    const targetUrl = endpoints[0];
-
-    fetch(targetUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        senderId,
-        senderName,
-        receiverId: recipientId,
-        text,
-        chatId,
-        partTitle,
-        partImageUrl,
-      })
-    }).catch(() => {
-      // Fallback try preview/dev url
-      if (endpoints[1]) {
-        fetch(endpoints[1], {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            senderId,
-            senderName,
-            receiverId: recipientId,
-            text,
-            chatId,
-            partTitle,
-            partImageUrl,
-          })
-        }).catch(() => {});
-      }
-    });
-  } catch (_) {}
 }
 
 /**
@@ -191,6 +149,53 @@ export async function markNotificationAsRead(notificationId: string): Promise<vo
 }
 
 const DELETED_ANNOUNCEMENTS_STORAGE_KEY = '@autoparts_deleted_announcements';
+const DELETED_NOTIFICATIONS_STORAGE_KEY = '@autoparts_deleted_notifications';
+
+/**
+ * Gets all personal notification IDs that have been deleted by current device/user
+ */
+export async function getLocalDeletedNotificationIds(): Promise<Set<string>> {
+  try {
+    const raw = await AsyncStorage.getItem(DELETED_NOTIFICATIONS_STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        return new Set<string>(arr);
+      }
+    }
+  } catch (err) {
+    console.warn('[notifications] Error reading local deleted notifications:', err);
+  }
+  return new Set<string>();
+}
+
+/**
+ * Adds a notification ID to local deleted list
+ */
+export async function addLocalDeletedNotificationId(id: string): Promise<void> {
+  if (!id) return;
+  try {
+    const set = await getLocalDeletedNotificationIds();
+    set.add(id);
+    await AsyncStorage.setItem(DELETED_NOTIFICATIONS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch (err) {
+    console.warn('[notifications] Error saving local deleted notification:', err);
+  }
+}
+
+/**
+ * Adds multiple notification IDs to local deleted list
+ */
+export async function addLocalDeletedNotificationIds(ids: string[]): Promise<void> {
+  if (!ids || ids.length === 0) return;
+  try {
+    const set = await getLocalDeletedNotificationIds();
+    ids.forEach((id) => { if (id) set.add(id); });
+    await AsyncStorage.setItem(DELETED_NOTIFICATIONS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch (err) {
+    console.warn('[notifications] Error saving local deleted notifications:', err);
+  }
+}
 
 /**
  * Gets all announcement IDs that have been dismissed/deleted by current device/user
@@ -280,7 +285,7 @@ export async function deleteMultipleAnnouncementsForUser(announcementIds: string
 }
 
 /**
- * Deletes all personal notifications for a recipient from Firestore
+ * Deletes all personal notifications for a recipient from Firestore and local storage
  */
 export async function deleteAllPersonalNotifications(userId: string): Promise<void> {
   if (!userId) return;
@@ -293,6 +298,9 @@ export async function deleteAllPersonalNotifications(userId: string): Promise<vo
         .get();
 
       if (snap && snap.docs) {
+        const docIds = snap.docs.map((d: any) => d.id);
+        await addLocalDeletedNotificationIds(docIds);
+
         const promises = snap.docs.map((docSnap: any) =>
           docSnap.ref.delete().catch(() => {})
         );
@@ -305,14 +313,15 @@ export async function deleteAllPersonalNotifications(userId: string): Promise<vo
 }
 
 /**
- * Deletes a personal chat notification from Firestore
+ * Deletes a personal chat notification from Firestore and local storage
  */
 export async function deleteNotification(notificationId: string): Promise<void> {
   if (!notificationId) return;
   try {
+    await addLocalDeletedNotificationId(notificationId);
     const db = getFirebaseFirestore();
     if (db && typeof db.collection === 'function') {
-      await db.collection('notifications').doc(notificationId).delete();
+      await db.collection('notifications').doc(notificationId).delete().catch(() => {});
     }
   } catch (e) {
     console.warn('[notifications] Error deleting notification:', e);

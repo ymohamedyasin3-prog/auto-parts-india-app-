@@ -33,9 +33,6 @@ export const UserProfilePopupModal: React.FC<UserProfilePopupModalProps> = ({
   userPhoto,
   userName,
 }) => {
-  const fallbackPhoto =
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=800';
-  
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
@@ -46,7 +43,12 @@ export const UserProfilePopupModal: React.FC<UserProfilePopupModalProps> = ({
     }
   }, [visible, userPhoto]);
 
-  const targetUri = !hasError && userPhoto ? userPhoto : fallbackPhoto;
+  const hasValidPhoto =
+    !hasError &&
+    Boolean(userPhoto) &&
+    typeof userPhoto === 'string' &&
+    userPhoto.trim().length > 5 &&
+    !userPhoto.includes('photo-1534528741775-53994a69daeb');
 
   return (
     <Modal
@@ -65,20 +67,30 @@ export const UserProfilePopupModal: React.FC<UserProfilePopupModalProps> = ({
               ) : null}
 
               <View style={styles.imageCard}>
-                <Image
-                  source={{ uri: targetUri }}
-                  style={styles.profileImage}
-                  resizeMode="cover"
-                  onLoadStart={() => setIsLoading(true)}
-                  onLoadEnd={() => setIsLoading(false)}
-                  onError={() => {
-                    setHasError(true);
-                    setIsLoading(false);
-                  }}
-                />
-                {isLoading && (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#FFFFFF" />
+                {hasValidPhoto ? (
+                  <>
+                    <Image
+                      source={{ uri: userPhoto! }}
+                      style={styles.profileImage}
+                      resizeMode="cover"
+                      onLoadStart={() => setIsLoading(true)}
+                      onLoadEnd={() => setIsLoading(false)}
+                      onError={() => {
+                        setHasError(true);
+                        setIsLoading(false);
+                      }}
+                    />
+                    {isLoading && (
+                      <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="small" color="#0066FF" />
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <View style={[styles.profileImage, { backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ fontSize: 48, fontWeight: '800', color: '#0066FF' }}>
+                      {(userName || 'U').charAt(0).toUpperCase()}
+                    </Text>
                   </View>
                 )}
               </View>

@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { Text, Surface, ActivityIndicator, Icon } from 'react-native-paper';
+import { NotificationListSkeleton } from '../components/SkeletonLoaders';
 import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
 import { 
   markAnnouncementsAsRead, 
@@ -20,7 +21,8 @@ import {
   deleteMultipleAnnouncementsForUser,
   deleteAllPersonalNotifications,
   getLocalReadAnnouncementIds,
-  getLocalDeletedAnnouncementIds 
+  getLocalDeletedAnnouncementIds,
+  getLocalDeletedNotificationIds
 } from '../services/notifications';
 
 export default function NotificationsScreen({ navigation }: any) {
@@ -49,11 +51,16 @@ export default function NotificationsScreen({ navigation }: any) {
           .collection('notifications')
           .where('recipientId', '==', currentUid);
 
-        const handleNotifSnapshot = (snapshot: any) => {
+        const handleNotifSnapshot = async (snapshot: any) => {
           const list: any[] = [];
+          const deletedNotifSet = await getLocalDeletedNotificationIds();
           if (snapshot && typeof snapshot.forEach === 'function') {
             snapshot.forEach((doc: any) => {
-              list.push({ id: doc.id, ...(doc.data ? doc.data() : doc) });
+              const docId = doc.id;
+              const data = doc.data ? doc.data() : doc;
+              if (docId && deletedNotifSet.has(docId)) return;
+              if (data?.deleted || (Array.isArray(data?.deletedFor) && data.deletedFor.includes(currentUid))) return;
+              list.push({ id: docId, ...data });
             });
           }
           list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -452,10 +459,7 @@ export default function NotificationsScreen({ navigation }: any) {
       </View>
 
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator color="#0066FF" size="large" />
-          <Text style={styles.loadingText}>Loading notifications...</Text>
-        </View>
+        <NotificationListSkeleton count={5} />
       ) : currentList.length === 0 ? (
         <View style={styles.centerContainer}>
           <View style={styles.emptyIconBox}>

@@ -582,6 +582,26 @@ export default function HomeScreen({
       return true;
     };
 
+    // When a search query is active, prioritize exact and ranked query matches across all locations
+    if (query) {
+      const queryMatches = activeParts.filter(part => matchesSpecificsAndQuery(part, true, true));
+      if (queryMatches.length > 0) {
+        return { finalFilteredParts: queryMatches, fallbackBanner: null };
+      }
+
+      // If specific filters (brand/model) eliminated matches, try matching query across all parts
+      const queryOnlyMatches = activeParts.filter(part => matchesSpecificsAndQuery(part, true, false));
+      if (queryOnlyMatches.length > 0) {
+        return {
+          finalFilteredParts: queryOnlyMatches,
+          fallbackBanner: "No exact matches with current dropdown filters. Showing all matching listings across India."
+        };
+      }
+
+      // If nothing matches the search query, return empty array so user gets a clean empty state
+      return { finalFilteredParts: [], fallbackBanner: null };
+    }
+
     // Mode 1: Nearby (Haversine distance radius check)
     if (locationFilterMode === "nearby") {
       const center = effectiveUserCoords;
@@ -665,21 +685,10 @@ export default function HomeScreen({
       };
     }
 
-    // Relaxed Query-only filter
-    if (query) {
-      const queryOnly = activeParts.filter(p => matchesSpecificsAndQuery(p, true, false));
-      if (queryOnly.length > 0) {
-        return {
-          finalFilteredParts: queryOnly,
-          fallbackBanner: "No exact matches found. Showing the closest available listings."
-        };
-      }
-    }
-
-    // Absolute fallback: all active parts
+    // Fallback: all active parts
     return {
       finalFilteredParts: activeParts,
-      fallbackBanner: "No exact matches found. Showing all available spare parts."
+      fallbackBanner: null
     };
   }, [
     activeParts,
@@ -734,32 +743,69 @@ export default function HomeScreen({
   const trimmedQuery = searchQuery.trim().toLowerCase();
   
   const suggestions = React.useMemo(() => {
-    const result: { text: string; type: "Part Name" | "Brand" | "Model" }[] = [];
+    const result: { text: string; type: "Part Name" | "Brand" | "Model" | "Location" }[] = [];
     if (!trimmedQuery) return result;
+
+    const lowerQ = trimmedQuery.toLowerCase();
+
+    // Match part names
+    ALL_SPARE_PART_NAMES.forEach(name => {
+      if (name && name.toLowerCase().includes(lowerQ) && !result.some(s => s.text.toLowerCase() === name.toLowerCase())) {
+        result.push({ text: name, type: "Part Name" });
+      }
+    });
 
     // Match brands
     ALL_BRANDS.forEach(brand => {
-      if (brand && brand.toLowerCase().includes(trimmedQuery) && !result.some(s => s.text === brand)) {
+      if (brand && brand.toLowerCase().includes(lowerQ) && !result.some(s => s.text.toLowerCase() === brand.toLowerCase())) {
         result.push({ text: brand, type: "Brand" });
       }
     });
     
     // Match models
     ALL_MODELS.forEach(model => {
-      if (model && model.toLowerCase().includes(trimmedQuery) && !result.some(s => s.text === model)) {
+      if (model && model.toLowerCase().includes(lowerQ) && !result.some(s => s.text.toLowerCase() === model.toLowerCase())) {
         result.push({ text: model, type: "Model" });
       }
     });
 
-    // Match part names
-    ALL_SPARE_PART_NAMES.forEach(name => {
-      if (name && name.toLowerCase().includes(trimmedQuery) && !result.some(s => s.text === name)) {
-        result.push({ text: name, type: "Part Name" });
+    // Match popular Indian cities & states and locations extracted from listings
+    const POPULAR_LOCATIONS = [
+      "Chennai", "Coimbatore", "Madurai", "Salem", "Trichy", "Tirunelveli", "Erode", "Vellore", "Tiruppur", "Thanjavur",
+      "Bangalore", "Bengaluru", "Mysore", "Mangalore", "Hubli",
+      "Kochi", "Ernakulam", "Trivandrum", "Kozhikode", "Thrissur",
+      "Hyderabad", "Secunderabad", "Vijayawada", "Visakhapatnam",
+      "Mumbai", "Pune", "Nagpur", "Nashik", "Thane",
+      "Delhi", "New Delhi", "Noida", "Gurgaon", "Ghaziabad",
+      "Ahmedabad", "Surat", "Vadodara", "Rajkot",
+      "Jaipur", "Jodhpur", "Udaipur", "Kolkata", "Lucknow", "Chandigarh",
+      "Tamil Nadu", "Kerala", "Karnataka", "Maharashtra", "Telangana", "Andhra Pradesh", "Gujarat", "Delhi NCR"
+    ];
+
+    activeParts.forEach(p => {
+      const loc = p.district || p.city || p.location;
+      if (loc && typeof loc === 'string' && loc.length < 25 && !POPULAR_LOCATIONS.some(l => l.toLowerCase() === loc.toLowerCase())) {
+        POPULAR_LOCATIONS.push(loc);
       }
     });
 
+    POPULAR_LOCATIONS.forEach(loc => {
+      if (loc && loc.toLowerCase().includes(lowerQ) && !result.some(s => s.text.toLowerCase() === loc.toLowerCase())) {
+        result.push({ text: loc, type: "Location" });
+      }
+    });
+
+    // Sort suggestions: prefix matches first, then shorter names
+    result.sort((a, b) => {
+      const aStarts = a.text.toLowerCase().startsWith(lowerQ);
+      const bStarts = b.text.toLowerCase().startsWith(lowerQ);
+      if (aStarts && !bStarts) return -1;
+      if (!aStarts && bStarts) return 1;
+      return a.text.length - b.text.length;
+    });
+
     return result.slice(0, 10);
-  }, [trimmedQuery, ALL_BRANDS, ALL_MODELS, ALL_SPARE_PART_NAMES]);
+  }, [trimmedQuery, ALL_BRANDS, ALL_MODELS, ALL_SPARE_PART_NAMES, activeParts]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -938,6 +984,10 @@ export default function HomeScreen({
                           setSelectedBrand(brand);
                           setSelectedModel(suggestion.text);
                         }
+                      } else if (suggestion.type === "Location") {
+                        // Location query searches directly across cities/districts/states
+                        setSearchQuery(suggestion.text);
+                        setShowSuggestions(false);
                       }
                     }}
                     className="w-full text-left px-3.5 py-2 text-xs text-slate-800 hover:bg-slate-50 transition-colors flex items-center justify-between"
@@ -948,7 +998,9 @@ export default function HomeScreen({
                         ? "text-emerald-700 bg-emerald-50 border border-emerald-200" 
                         : suggestion.type === "Model" 
                           ? "text-sky-700 bg-sky-50 border border-sky-200" 
-                          : "text-[#2563EB] bg-blue-50 border border-blue-200"
+                          : suggestion.type === "Location"
+                            ? "text-amber-700 bg-amber-50 border border-amber-200"
+                            : "text-[#2563EB] bg-blue-50 border border-blue-200"
                     }`}>
                       {suggestion.type}
                     </span>

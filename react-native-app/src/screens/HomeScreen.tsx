@@ -56,7 +56,13 @@ import {
 } from '../services/taxonomyDefaults';
 import NetInfo from '@react-native-community/netinfo';
 import { ScalePressable, FadeInSlide, FavoriteHeartButton } from '../components/animations';
-import { ProductFeedSkeletonList } from '../components/ProductCardSkeleton';
+import { 
+  ProductFeedSkeletonList,
+  CategoryGridSkeleton,
+  BrandListSkeleton,
+  ProductGridSkeleton 
+} from '../components/ProductCardSkeleton';
+import { UserAvatar } from '../components/UserAvatar';
 
 // City coordinates for real distance calculations
 const CITY_COORDINATES: Record<string, { lat: number; lng: number }> = {
@@ -788,14 +794,19 @@ export default function HomeScreen({ navigation, route, user }: any) {
       // 5. City filter
       if (selectedCity && selectedCity !== 'All India') {
         const cityLower = selectedCity.toLowerCase().trim();
-        const partLoc = (
-          part.location ||
-          part.district ||
-          part.city ||
-          part.state ||
-          part.area ||
-          ''
-        ).toString().toLowerCase();
+        const partLoc = [
+          part.location,
+          part.district,
+          part.city,
+          part.state,
+          part.area,
+          part.sellerCity,
+          part.sellerDistrict,
+          part.sellerState
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
 
         if (!partLoc.includes(cityLower)) {
           // Allow nationwide shipping parts or parts without strict location
@@ -931,6 +942,16 @@ export default function HomeScreen({ navigation, route, user }: any) {
                   <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
                 </View>
               )}
+            </TouchableOpacity>
+
+            {/* User Profile Avatar */}
+            <TouchableOpacity
+              style={styles.profileHeaderBtn}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'ProfileTab' })}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
+            >
+              <UserAvatar size={30} borderWidth={1.5} borderColor="rgba(255,255,255,0.85)" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1089,119 +1110,119 @@ export default function HomeScreen({ navigation, route, user }: any) {
         </View>
 
         {/* 1. TOP CATEGORIES (4-Column Grid) - Real Admin Categories Only */}
-        {displayCategories.length > 0 && (
-          <>
-            <View style={styles.sectionHeaderRow}>
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Top Categories
-              </Text>
-            </View>
+        <View style={styles.sectionHeaderRow}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            Top Categories
+          </Text>
+        </View>
 
-            <View style={styles.categoriesGrid}>
-              {displayCategories.slice(0, 8).map((cat: any, idx: number) => {
-                const isSelected = selectedCategory.toLowerCase() === cat.name.toLowerCase();
-                const isMore = cat.id === 'More' || cat.name?.toLowerCase() === 'more';
-                return (
-                  <FadeInSlide
-                    key={cat.id || cat.name}
-                    delay={idx * 30}
-                    slideDistance={10}
-                    style={{ width: catCardWidth }}
-                  >
-                    <ScalePressable
-                      scaleTo={0.93}
-                      style={[styles.categoryItem, { width: catCardWidth }]}
-                      onPress={() => {
-                        if (isMore) {
-                          navigation.navigate('AllCategories');
-                        } else {
-                          setSelectedCategory(isSelected ? 'All' : cat.name);
-                        }
-                      }}
-                    >
-                      {/* Top Rounded Card Box - 100% Image Filled */}
-                      <View
-                        style={[
-                          styles.categoryCardBox,
-                          { width: catCardWidth, height: catCardWidth },
-                          isSelected && styles.categoryCardBoxActive,
-                        ]}
-                      >
-                        {isMore ? (
-                          <View style={[styles.categoryFallbackCenter, { backgroundColor: '#EFF6FF' }]}>
-                            <Icon source="dots-grid" size={Math.round(catCardWidth * 0.45)} color="#0066FF" />
-                          </View>
-                        ) : cat.imageUrl ? (
-                          <Image
-                            source={{ uri: cat.imageUrl }}
-                            style={styles.categoryFullImage}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <View style={styles.categoryFallbackCenter}>
-                            <Category3DIcon
-                              categoryName={cat.name}
-                              iconUrl={cat.iconUrl}
-                              size={Math.round(catCardWidth * 0.56)}
-                            />
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Outside Text Label Below Card */}
-                      <Text
-                        style={[
-                          styles.categoryLabel, 
-                          isSelected && styles.categoryLabelActive,
-                          isMore && { color: '#0066FF', fontWeight: '700' }
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {cat.name}
-                      </Text>
-                    </ScalePressable>
-                  </FadeInSlide>
-                );
-              })}
-            </View>
-          </>
-        )}
-
-        {/* 3. POPULAR CAR BRANDS - Real Admin Brands Only */}
-        {displayBrands.length > 0 && (
-          <>
-            <View style={styles.sectionHeaderRow}>
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Popular Brands
-              </Text>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.brandsScroll}
-            >
-              {displayBrands.map((brand: any) => {
-                const isSelected = selectedBrand.toLowerCase() === brand.name.toLowerCase();
-                return (
+        {loading ? (
+          <CategoryGridSkeleton cardWidth={catCardWidth} count={8} />
+        ) : displayCategories.length > 0 ? (
+          <View style={styles.categoriesGrid}>
+            {displayCategories.slice(0, 8).map((cat: any, idx: number) => {
+              const isSelected = selectedCategory.toLowerCase() === cat.name.toLowerCase();
+              const isMore = cat.id === 'More' || cat.name?.toLowerCase() === 'more';
+              return (
+                <FadeInSlide
+                  key={cat.id || cat.name}
+                  delay={idx * 30}
+                  slideDistance={10}
+                  style={{ width: catCardWidth }}
+                >
                   <ScalePressable
-                    key={brand.id || brand.name}
-                    scaleTo={0.94}
-                    style={[styles.brandPill, isSelected && styles.brandPillActive]}
+                    scaleTo={0.93}
+                    style={[styles.categoryItem, { width: catCardWidth }]}
                     onPress={() => {
-                      setSelectedBrand(isSelected ? 'All' : brand.name);
+                      if (isMore) {
+                        navigation.navigate('AllCategories');
+                      } else {
+                        setSelectedCategory(isSelected ? 'All' : cat.name);
+                      }
                     }}
                   >
-                    <CarBrandBadge brandName={brand.name} logoUrl={brand.logoUrl || brand.imageUrl} size={24} />
-                    <Text style={[styles.brandNameText, isSelected && styles.brandNameTextActive]}>
-                      {brand.name}
+                    {/* Top Rounded Card Box - 100% Image Filled */}
+                    <View
+                      style={[
+                        styles.categoryCardBox,
+                        { width: catCardWidth, height: catCardWidth },
+                        isSelected && styles.categoryCardBoxActive,
+                      ]}
+                    >
+                      {isMore ? (
+                        <View style={[styles.categoryFallbackCenter, { backgroundColor: '#EFF6FF' }]}>
+                          <Icon source="dots-grid" size={Math.round(catCardWidth * 0.45)} color="#0066FF" />
+                        </View>
+                      ) : cat.imageUrl ? (
+                        <Image
+                          source={{ uri: cat.imageUrl }}
+                          style={styles.categoryFullImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.categoryFallbackCenter}>
+                          <Category3DIcon
+                            categoryName={cat.name}
+                            iconUrl={cat.iconUrl}
+                            size={Math.round(catCardWidth * 0.56)}
+                          />
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Outside Text Label Below Card */}
+                    <Text
+                      style={[
+                        styles.categoryLabel, 
+                        isSelected && styles.categoryLabelActive,
+                        isMore && { color: '#0066FF', fontWeight: '700' }
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {cat.name}
                     </Text>
                   </ScalePressable>
-                );
-              })}
-            </ScrollView>
-          </>
-        )}
+                </FadeInSlide>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {/* 3. POPULAR CAR BRANDS - Real Admin Brands Only */}
+        <View style={styles.sectionHeaderRow}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            Popular Brands
+          </Text>
+        </View>
+
+        {loading ? (
+          <BrandListSkeleton count={5} />
+        ) : displayBrands.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.brandsScroll}
+          >
+            {displayBrands.map((brand: any) => {
+              const isSelected = selectedBrand.toLowerCase() === brand.name.toLowerCase();
+              return (
+                <ScalePressable
+                  key={brand.id || brand.name}
+                  scaleTo={0.94}
+                  style={[styles.brandPill, isSelected && styles.brandPillActive]}
+                  onPress={() => {
+                    setSelectedBrand(isSelected ? 'All' : brand.name);
+                  }}
+                >
+                  <CarBrandBadge brandName={brand.name} logoUrl={brand.logoUrl || brand.imageUrl} size={24} />
+                  <Text style={[styles.brandNameText, isSelected && styles.brandNameTextActive]}>
+                    {brand.name}
+                  </Text>
+                </ScalePressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
 
         {/* 4. VERIFIED SPARE PARTS FEED */}
         <View style={[styles.sectionHeaderRow, { marginTop: 20 }]}>
@@ -1237,7 +1258,7 @@ export default function HomeScreen({ navigation, route, user }: any) {
         )}
 
         {loading ? (
-          <ProductFeedSkeletonList cardWidth={productCardWidth} count={4} />
+          <ProductGridSkeleton cardWidth={productCardWidth} count={6} />
         ) : filteredParts.length === 0 ? (
           <View style={styles.emptyBox}>
             <Icon source="car-off" size={48} color="#64748B" />
@@ -1447,6 +1468,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.18)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  profileHeaderBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 2,
   },
   badge: {
     position: 'absolute',

@@ -4,6 +4,7 @@ import { Text, Icon } from 'react-native-paper';
 import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
 import useFavorites from '../services/favorites';
 import { ScalePressable } from '../components/animations';
+import { ListFeedSkeleton } from '../components/SkeletonLoaders';
 
 export default function WishlistScreen({ navigation }: any) {
   const { favorites, toggleFavorite } = useFavorites();
@@ -49,8 +50,8 @@ export default function WishlistScreen({ navigation }: any) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator color="#0066FF" size="large" />
+      <View style={styles.container}>
+        <ListFeedSkeleton count={4} />
       </View>
     );
   }

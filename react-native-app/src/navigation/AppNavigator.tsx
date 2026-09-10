@@ -8,7 +8,9 @@ import {
   Animated, 
   Image,
   Vibration,
-  PanResponder
+  PanResponder,
+  AppState,
+  AppStateStatus
 } from 'react-native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -39,6 +41,7 @@ import LocationSelectScreen from '../screens/LocationSelectScreen';
 import EditListingScreen from '../screens/EditListingScreen';
 import { navigationRef, navigate } from './navigationRef';
 import { ScalePressable } from '../components/animations';
+import { UserProfileTabIcon } from '../components/UserProfileTabIcon';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -66,7 +69,7 @@ function TabNavigator() {
   const bottomPadding = Platform.OS === 'android' ? Math.max(insets.bottom, 6) : insets.bottom;
   const tabHeight = 62 + bottomPadding;
 
-  // Real Presence Heartbeat
+  // Real Presence Heartbeat & Lifecycle Tracking
   useEffect(() => {
     let interval: any = null;
     const updatePresence = async (isOnline: boolean) => {
@@ -76,23 +79,43 @@ function TabNavigator() {
         if (!uid) return;
         const db = getFirebaseFirestore();
         if (db && typeof db.collection === 'function') {
-          await db.collection('presence').doc(uid).set({
+          const payload = {
             online: isOnline,
             lastSeen: Date.now(),
-          }, { merge: true });
+          };
+          // Write to both presence collection and users collection
+          await Promise.allSettled([
+            db.collection('presence').doc(uid).set(payload, { merge: true }),
+            db.collection('users').doc(uid).set(payload, { merge: true }),
+          ]);
         }
       } catch (err) {
         console.warn('Presence update error:', err);
       }
     };
 
+    // Mark online on launch
     updatePresence(true);
+
+    // Heartbeat every 25 seconds while app is active
     interval = setInterval(() => {
-      updatePresence(true);
-    }, 20000);
+      if (AppState.currentState === 'active') {
+        updatePresence(true);
+      }
+    }, 25000);
+
+    // Listen to background / foreground changes
+    const appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        updatePresence(true);
+      } else {
+        updatePresence(false);
+      }
+    });
 
     return () => {
       if (interval) clearInterval(interval);
+      appStateSubscription.remove();
       updatePresence(false);
     };
   }, []);
@@ -228,7 +251,7 @@ function TabNavigator() {
         options={{ 
           title: 'Profile',
           tabBarIcon: ({ color, size, focused }) => (
-            <Icon source={focused ? "account" : "account-outline"} color={color} size={24} />
+            <UserProfileTabIcon focused={focused} color={color} size={size} />
           )
         }}
       />

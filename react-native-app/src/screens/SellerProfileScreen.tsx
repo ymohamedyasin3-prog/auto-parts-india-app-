@@ -17,6 +17,7 @@ import { getFirebaseAuth, getFirebaseFirestore, getCurrentUser, setCurrentAuthUs
 import { UserProfilePopupModal } from '../components/UserProfilePopupModal';
 import { EditProfileModal } from '../components/EditProfileModal';
 import { EmptyListingsIllustration } from '../components/EmptyListingsIllustration';
+import { ProfileSkeleton } from '../components/SkeletonLoaders';
 import { openNativeCamera, openNativeGallery } from '../services/imagePickerService';
 import { uploadImageToCloudinary } from '../services/cloudinary';
 
@@ -88,7 +89,7 @@ export default function SellerProfileScreen({ route, navigation }: any) {
             if (exists && isMounted) {
               const userData = typeof userDoc?.data === 'function' ? userDoc.data() : userDoc?.data;
               if (userData) {
-                const photo = userData.profilePhoto || userData.photoURL || userData.profileImageUrl;
+                const photo = userData.customPhoto || userData.profilePhoto || userData.photoURL || userData.profileImageUrl;
                 if (photo) setSellerPhoto(photo);
                 if (userData.displayName || userData.name) {
                   setSellerName(userData.displayName || userData.name);
@@ -297,11 +298,14 @@ export default function SellerProfileScreen({ route, navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-      >
+      {loading ? (
+        <ProfileSkeleton />
+      ) : (
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+        >
         {/* 2. Profile Details Header Block */}
         <View style={styles.profileHeaderBlock}>
           {/* Avatar and Name/Handle Row */}
@@ -493,6 +497,7 @@ export default function SellerProfileScreen({ route, navigation }: any) {
           )}
         </View>
       </ScrollView>
+      )}
 
       {/* Profile Photo Viewer Popup */}
       <UserProfilePopupModal

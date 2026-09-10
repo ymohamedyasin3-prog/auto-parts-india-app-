@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   FlatList,
@@ -204,8 +205,8 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
 
   // Presence & Typing State
   const [partnerPresence, setPartnerPresence] = useState<{ online: boolean; lastSeen: number }>({
-    online: true,
-    lastSeen: Date.now(),
+    online: false,
+    lastSeen: 0,
   });
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
 
@@ -313,16 +314,38 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
         const presenceDocRef = db.collection('presence').doc(partnerId);
         unsubPresence = presenceDocRef.onSnapshot(
           (docSnap: any) => {
-            const data = docSnap?.data ? docSnap.data() : docSnap;
-            if (data) {
-              const active = data.online === true && (Date.now() - (data.lastSeen || 0) < 60000);
+            const data = docSnap?.data ? docSnap.data() : (docSnap?.exists ? docSnap.data() : null);
+            if (data && typeof data === 'object') {
+              const lastSeen = data.lastSeen || 0;
+              const active = data.online === true && (Date.now() - lastSeen < 60000);
               setPartnerPresence({
                 online: active,
-                lastSeen: data.lastSeen || Date.now(),
+                lastSeen: lastSeen,
+              });
+            } else {
+              // Try fallback to users/{partnerId} collection if presence doc doesn't exist
+              db.collection('users').doc(partnerId).get().then((userSnap: any) => {
+                const uData = userSnap?.data ? userSnap.data() : null;
+                if (uData && uData.online === true && (Date.now() - (uData.lastSeen || 0) < 60000)) {
+                  setPartnerPresence({
+                    online: true,
+                    lastSeen: uData.lastSeen || Date.now(),
+                  });
+                } else {
+                  setPartnerPresence({
+                    online: false,
+                    lastSeen: uData?.lastSeen || 0,
+                  });
+                }
+              }).catch(() => {
+                setPartnerPresence({ online: false, lastSeen: 0 });
               });
             }
           },
-          (err: any) => console.warn('[ChatRoomScreen] Presence error:', err)
+          (err: any) => {
+            console.warn('[ChatRoomScreen] Presence error:', err);
+            setPartnerPresence({ online: false, lastSeen: 0 });
+          }
         );
       }
     } catch (e) {
@@ -661,9 +684,31 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
     return `${d.getDate()} ${months[d.getMonth()]}`;
   };
 
+  // Local deleted messages state for current chat
+  const [localDeletedMsgIds, setLocalDeletedMsgIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!chatId) return;
+    let isMounted = true;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(`@autoparts_deleted_messages_${chatId}`);
+        if (raw && isMounted) {
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr)) {
+            setLocalDeletedMsgIds(new Set<string>(arr));
+          }
+        }
+      } catch (_) {}
+    })();
+    return () => { isMounted = false; };
+  }, [chatId]);
+
   const clearedAtTimestamp = mergedChat?.clearedAt?.[currentUid] || remoteChatDoc?.clearedAt?.[currentUid] || 0;
   const visibleMessages = messages.filter((msg) => {
-    if (Array.isArray(msg.deletedFor) && msg.deletedFor.includes(currentUid)) {
+    if (!msg || !msg.id) return false;
+    if (localDeletedMsgIds.has(msg.id)) return false;
+    if (Array.isArray(msg.deletedFor) && msg.deletedFor.some((id: any) => String(id) === String(currentUid) || String(id) === String(activeUser?.uid) || String(id) === String(activeUser?.id))) {
       return false;
     }
     const msgTime = parseTimestamp(msg.createdAt);
@@ -697,12 +742,20 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
       text: translateDynamic('Delete for Me'),
       onPress: async () => {
         try {
+          if (msgItem.id && chatId) {
+            setLocalDeletedMsgIds((prev) => {
+              const next = new Set(prev);
+              next.add(msgItem.id);
+              AsyncStorage.setItem(`@autoparts_deleted_messages_${chatId}`, JSON.stringify(Array.from(next))).catch(() => {});
+              return next;
+            });
+          }
           const db = getFirebaseFirestore();
           if (db && typeof db.collection === 'function' && chatId && msgItem.id) {
             const msgRef = db.collection('chats').doc(chatId).collection('messages').doc(msgItem.id);
             const docSnap = await msgRef.get();
             const currentDeletedFor = docSnap?.exists ? (docSnap.data()?.deletedFor || []) : [];
-            const nextDeletedFor = Array.from(new Set([...currentDeletedFor, currentUid]));
+            const nextDeletedFor = Array.from(new Set([...currentDeletedFor, currentUid, activeUser?.uid, activeUser?.id].filter(Boolean)));
             await msgRef.set({ deletedFor: nextDeletedFor }, { merge: true });
           }
           setMessages((prev) => prev.filter((m) => m.id !== msgItem.id));
@@ -963,7 +1016,12 @@ export default function ChatRoomScreen({ route, navigation, user: initialUser }:
             </Text>
 
             <View style={styles.statusIndicatorRow}>
-              <View style={styles.onlineDot} />
+              <View
+                style={[
+                  styles.onlineDot,
+                  { backgroundColor: partnerPresence.online ? '#22C55E' : '#94A3B8' },
+                ]}
+              />
               {partnerIsTyping ? (
                 <Text style={styles.onlineStatusText}>
                   {translateDynamic('Typing...')}

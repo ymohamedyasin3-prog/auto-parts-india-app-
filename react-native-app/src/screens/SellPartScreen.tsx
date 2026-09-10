@@ -32,6 +32,7 @@ import {
   promptImageSourceDialog,
 } from '../services/imagePickerService';
 import { uploadImageToCloudinary, uploadMultipleImagesToCloudinary, deleteImageFromCloudinary } from '../services/cloudinary';
+import { callGeminiDirectlyFromDevice } from '../services/directGeminiService';
 import {
   getCurrentLocation,
   reverseGeocodeLatLng,
@@ -774,66 +775,76 @@ export default function SellPartScreen({ navigation, user: initialUser }: any) {
       let data: any = null;
       let lastFetchErr: any = null;
 
-      const endpoints: string[] = [];
-      
-      // Relative API route (primary for web & reverse proxy)
-      endpoints.push('/api/ai/autofill-listing');
+      // 1. Direct device-native Gemini AI execution (zero web-app server dependency)
+      try {
+        const directResult = await callGeminiDirectlyFromDevice({
+          imageUriOrBase64: imageToSend,
+          currentBrand: finalBrand,
+          currentModel: finalModel,
+          currentCategory: finalCategory,
+          currentPartName: finalPartName,
+          taxonomyBrands,
+          taxonomyCategories,
+        });
 
-      if (typeof window !== 'undefined' && window.location?.origin) {
-        const winOrigin = window.location.origin;
-        if (winOrigin.startsWith('http://') || winOrigin.startsWith('https://')) {
-          const absoluteUrl = `${winOrigin}/api/ai/autofill-listing`;
-          if (!endpoints.includes(absoluteUrl)) {
-            endpoints.unshift(absoluteUrl);
-          }
+        if (directResult && (directResult.success || directResult.isAutomotive === false)) {
+          data = directResult;
         }
+      } catch (directErr: any) {
+        console.warn('[AI AutoFill] Direct Gemini call error:', directErr?.message);
+        lastFetchErr = directErr;
       }
 
-      for (const endpoint of endpoints) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 20000);
+      // 2. Fallback to web endpoint only if running in web preview and direct device call was not handled
+      if (!data && typeof window !== 'undefined' && window.location?.origin) {
+        const endpoints: string[] = [];
+        const winOrigin = window.location.origin;
+        if (winOrigin.startsWith('http://') || winOrigin.startsWith('https://')) {
+          endpoints.push(`${winOrigin}/api/ai/autofill-listing`);
+        }
+        endpoints.push('/api/ai/autofill-listing');
 
-          const candidateRes = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            signal: controller.signal,
-            body: JSON.stringify({
-              image: imageToSend,
-              currentBrand: finalBrand,
-              currentModel: finalModel,
-              currentCategory: finalCategory,
-              currentPartName: finalPartName,
-            }),
-          });
-          clearTimeout(timeoutId);
+        for (const endpoint of endpoints) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-          const contentType = candidateRes.headers.get('content-type') || '';
-          if (!contentType.includes('application/json')) {
-            console.warn(`[AI AutoFill] Endpoint ${endpoint} returned non-JSON response (${candidateRes.status})`);
-            continue;
+            const candidateRes = await fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              signal: controller.signal,
+              body: JSON.stringify({
+                image: imageToSend,
+                currentBrand: finalBrand,
+                currentModel: finalModel,
+                currentCategory: finalCategory,
+                currentPartName: finalPartName,
+              }),
+            });
+            clearTimeout(timeoutId);
+
+            const contentType = candidateRes.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+              continue;
+            }
+
+            const resJson = await candidateRes.json();
+
+            if (candidateRes.ok && resJson && resJson.success) {
+              data = resJson;
+              break;
+            } else if (resJson && resJson.isAutomotive === false) {
+              data = resJson;
+              break;
+            } else if (resJson && (resJson.error || resJson.message)) {
+              lastFetchErr = new Error(resJson.error || resJson.message);
+            }
+          } catch (err: any) {
+            lastFetchErr = err;
           }
-
-          const resJson = await candidateRes.json();
-
-          if (candidateRes.ok && resJson && resJson.success) {
-            data = resJson;
-            break;
-          } else if (resJson && resJson.isAutomotive === false) {
-            // Non-automotive image rejection response from server
-            data = resJson;
-            break;
-          } else if (resJson && (resJson.error || resJson.message)) {
-            lastFetchErr = new Error(resJson.error || resJson.message);
-          } else {
-            lastFetchErr = new Error(`AI service returned HTTP ${candidateRes.status}`);
-          }
-        } catch (err: any) {
-          console.warn(`[AI AutoFill] Attempt failed for ${endpoint}:`, err?.message);
-          lastFetchErr = err;
         }
       }
 

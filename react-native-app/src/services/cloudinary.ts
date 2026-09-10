@@ -169,6 +169,11 @@ export async function deleteImageFromCloudinary(urlOrPublicId: string): Promise<
   const publicId = extractCloudinaryPublicId(urlOrPublicId);
   if (!publicId) return false;
 
+  // In standalone native mobile app, avoid attempting relative web endpoints
+  if (typeof window === 'undefined' || !window.location?.origin) {
+    return true;
+  }
+
   try {
     const res = await fetch('/api/delete-cloudinary-image', {
       method: 'POST',
@@ -178,7 +183,7 @@ export async function deleteImageFromCloudinary(urlOrPublicId: string): Promise<
     const data = await res.json().catch(() => null);
     return Boolean(data?.success);
   } catch (err) {
-    console.log('[Cloudinary Delete Client Notice]', err);
+    console.log('[Cloudinary Delete Notice]', err);
     return false;
   }
 }
@@ -193,6 +198,11 @@ export async function deleteMultipleImagesFromCloudinary(urlsOrPublicIds: string
     .filter(Boolean);
 
   if (publicIds.length === 0) return;
+
+  // In standalone native mobile app, avoid attempting relative web endpoints
+  if (typeof window === 'undefined' || !window.location?.origin) {
+    return;
+  }
 
   try {
     await fetch('/api/delete-cloudinary-image', {

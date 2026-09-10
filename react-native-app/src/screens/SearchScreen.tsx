@@ -25,6 +25,8 @@ import { matchPartSearch, parseCreatedAt } from '../utils/searchHelper';
 import { MASTER_CATEGORIES, MasterCategory } from '../constants/categories';
 import { ScalePressable, FadeInSlide, FavoriteHeartButton } from '../components/animations';
 import FilterAndSortModal, { FilterTabType, FilterValues } from '../components/FilterAndSortModal';
+import { UserAvatar } from '../components/UserAvatar';
+import { CategoryGridSkeleton, BrandListSkeleton, ListFeedSkeleton } from '../components/SkeletonLoaders';
 
 const RECENT_SEARCHES_KEY = '@autoparts_recent_searches';
 
@@ -107,6 +109,7 @@ export default function SearchScreen({ navigation, route }: any) {
 
   // Parts & Favorites
   const [parts, setParts] = useState<any[]>(INITIAL_SPARE_PARTS);
+  const [loading, setLoading] = useState<boolean>(true);
   const { favorites, toggleFavorite } = useFavorites();
 
   // Unread badge counts for bottom navigation bar
@@ -241,9 +244,11 @@ export default function SearchScreen({ navigation, route }: any) {
             });
             list.sort((a, b) => parseCreatedAt(b.createdAt) - parseCreatedAt(a.createdAt));
             setParts(list.length > 0 ? list : INITIAL_SPARE_PARTS);
+            setLoading(false);
           },
           () => {
             setParts((current) => (current.length > 0 ? current : INITIAL_SPARE_PARTS));
+            setLoading(false);
           }
         );
 
@@ -472,13 +477,22 @@ export default function SearchScreen({ navigation, route }: any) {
       }
 
       if (selectedLocation !== 'All India' && selectedLocation !== 'All States') {
-        const locLower = selectedLocation.toLowerCase();
-        const matchesLocation =
-          (part.state && part.state.toLowerCase().includes(locLower)) ||
-          (part.location && part.location.toLowerCase().includes(locLower)) ||
-          (part.district && part.district.toLowerCase().includes(locLower)) ||
-          (part.city && part.city.toLowerCase().includes(locLower));
-        if (!matchesLocation) {
+        const locLower = selectedLocation.toLowerCase().trim();
+        const partLoc = [
+          part.state,
+          part.location,
+          part.district,
+          part.city,
+          part.area,
+          part.sellerCity,
+          part.sellerDistrict,
+          part.sellerState
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+
+        if (!partLoc.includes(locLower)) {
           continue;
         }
       }
@@ -607,6 +621,13 @@ export default function SearchScreen({ navigation, route }: any) {
           <Text style={styles.cardTitle} numberOfLines={2}>
             {item.title}
           </Text>
+
+          {/* Description Snippet if available */}
+          {Boolean(item.description) && (
+            <Text style={styles.cardDescription} numberOfLines={1}>
+              {item.description}
+            </Text>
+          )}
 
           {/* Brand & Model Chip */}
           <View style={styles.tagRow}>
@@ -958,7 +979,9 @@ export default function SearchScreen({ navigation, route }: any) {
           </View>
 
           {/* Main Parts List */}
-          {filteredParts.length === 0 ? (
+          {loading ? (
+            <ListFeedSkeleton count={5} />
+          ) : filteredParts.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>
                 <Icon source="car-off" size={42} color="#94A3B8" />
@@ -1052,7 +1075,7 @@ export default function SearchScreen({ navigation, route }: any) {
             activeOpacity={0.7}
             onPress={() => navigation.navigate('MainTabs', { screen: 'ProfileTab' })}
           >
-            <Icon source="account-outline" size={24} color="#64748B" />
+            <UserAvatar size={24} borderWidth={1} borderColor="#94A3B8" />
             <Text style={styles.bottomTabLabel}>Profile</Text>
           </TouchableOpacity>
         </View>
@@ -1510,6 +1533,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0F172A',
     lineHeight: 17,
+    marginBottom: 2,
+  },
+  cardDescription: {
+    fontSize: 11,
+    color: '#64748B',
+    lineHeight: 15,
     marginBottom: 4,
   },
   tagRow: {

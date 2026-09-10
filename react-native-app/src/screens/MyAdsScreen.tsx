@@ -19,6 +19,7 @@ import { getFirebaseFirestore, getCurrentUser, getFirebaseAuth } from '../servic
 import { useLanguage } from '../context/LanguageContext';
 import { EditListingModal } from '../components/EditListingModal';
 import { getOptimizedImageUrl, deleteMultipleImagesFromCloudinary } from '../services/cloudinary';
+import { ListFeedSkeleton } from '../components/SkeletonLoaders';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
@@ -731,10 +732,7 @@ export default function MyAdsScreen({ navigation, user: initialUser }: any) {
 
       {/* 5. ADS LIST */}
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#0066FF" />
-          <Text style={styles.loadingText}>Loading your listings...</Text>
-        </View>
+        <ListFeedSkeleton count={4} />
       ) : (
         <FlatList
           data={filteredAds}

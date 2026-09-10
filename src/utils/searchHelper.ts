@@ -132,7 +132,39 @@ const COMMON_ALIASES: Record<string, string[]> = {
   volkswagen: ['vw'],
   merc: ['mercedes', 'benz', 'mercedes-benz'],
   mercedes: ['benz', 'mercedes-benz', 'merc'],
-  benz: ['mercedes', 'mercedes-benz']
+  benz: ['mercedes', 'mercedes-benz'],
+  tata: ['tata motors'],
+  toyota: ['tkm'],
+
+  // Indian Cities & States synonyms & short forms
+  chennai: ['madras', 'tn', 'tamil nadu', 'tamilnadu'],
+  madras: ['chennai'],
+  bangalore: ['bengaluru', 'blr', 'karnataka'],
+  bengaluru: ['bangalore', 'blr', 'karnataka'],
+  blr: ['bangalore', 'bengaluru'],
+  delhi: ['new delhi', 'ncr'],
+  mumbai: ['bombay', 'maharashtra'],
+  bombay: ['mumbai'],
+  hyderabad: ['hyd', 'telangana'],
+  hyd: ['hyderabad'],
+  kolkata: ['calcutta', 'west bengal'],
+  calcutta: ['kolkata'],
+  coimbatore: ['kovai', 'tamil nadu'],
+  kovai: ['coimbatore'],
+  madurai: ['tamil nadu'],
+  salem: ['tamil nadu'],
+  trichy: ['tiruchirappalli', 'tamil nadu'],
+  tiruchirappalli: ['trichy'],
+  kochi: ['cochin', 'ernakulam', 'kerala'],
+  cochin: ['kochi', 'ernakulam'],
+  trivandrum: ['thiruvananthapuram', 'kerala'],
+  thiruvananthapuram: ['trivandrum'],
+  pune: ['maharashtra'],
+  ahmedabad: ['gujarat'],
+  jaipur: ['rajasthan'],
+  chandigarh: ['punjab', 'haryana'],
+  tn: ['tamil nadu', 'tamilnadu', 'chennai'],
+  tamilnadu: ['tamil nadu', 'tn']
 };
 
 /**
@@ -171,6 +203,16 @@ function checkAliases(token: string, text: string): boolean {
 }
 
 /**
+ * Checks if any word inside the given text starts with the target token.
+ * Highly effective for single alphabet and partial typing (e.g. "b" -> "bumper", "c" -> "chennai").
+ */
+function hasWordStartingWith(text: string, token: string): boolean {
+  if (!text || !token) return false;
+  const words = text.split(/[\s,\-_/().:]+/);
+  return words.some((w) => w.startsWith(token));
+}
+
+/**
  * Safe timestamp converter for sorting and freshness checks.
  */
 export function parseCreatedAt(val: any): number {
@@ -189,7 +231,8 @@ export function parseCreatedAt(val: any): number {
 
 /**
  * Evaluates whether a listing matches the search query across:
- * Title, Description, Brand, Model, Part Name, Category, OEM Numbers, and Locations.
+ * Title, Description, Brand, Model, Variant, Part Name, Category, OEM Numbers, and ALL Location fields (city, district, state, area, pincode).
+ * Supports prefix matching on every word (so typing "b" or "che" or "sw" immediately surfaces "Bumper", "Chennai", "Swift" with top score).
  * Computes a weighted relevance score for high-quality ranking.
  */
 export function matchPartSearch(part: any, rawQuery: string): SearchMatchResult {
@@ -204,28 +247,62 @@ export function matchPartSearch(part: any, rawQuery: string): SearchMatchResult 
     return { matches: true, score: 0 };
   }
 
-  const title = (part.title || '').toLowerCase();
-  const description = (part.description || '').toLowerCase();
+  const title = (part.title || part.name || '').toLowerCase();
+  
+  // Aggregate all possible description and detail fields
+  const descriptionParts = [
+    part.description,
+    part.desc,
+    part.details,
+    part.specifications,
+    part.specification,
+    part.notes,
+    part.features,
+    part.conditionNotes,
+    part.compatibleModels,
+    part.compatibility,
+    part.condition
+  ]
+    .filter(Boolean)
+    .map((s) => String(s).trim().toLowerCase());
+  const description = Array.from(new Set(descriptionParts)).join(' ');
+
   const brand = (part.carBrand || part.brand || part.make || '').toLowerCase();
   const model = (part.carModel || part.model || '').toLowerCase();
-  const partName = (part.partName || part.finalPartName || '').toLowerCase();
+  const variant = (part.carVariant || part.variant || part.fuelType || '').toLowerCase();
+  const partName = (part.partName || part.finalPartName || part.selectedPart || part.part || '').toLowerCase();
   const category = (part.category || part.finalCategory || part.subCategory || part.subcategory || '').toLowerCase();
-  const location = (
-    part.location ||
-    part.city ||
-    part.district ||
-    part.state ||
-    part.area ||
-    ''
-  ).toLowerCase();
   const numbers = (part.oemNumber || part.partNumber || '').toLowerCase();
+  const year = (part.year || part.modelYear || '').toString().toLowerCase();
+  const seller = (part.sellerName || part.contactName || '').toLowerCase();
 
-  const fullContent = `${title} ${brand} ${model} ${partName} ${category} ${numbers} ${description} ${location}`;
+  // Combine ALL location fields without shadowing
+  const locationParts = [
+    part.location,
+    part.city,
+    part.district,
+    part.state,
+    part.area,
+    part.pincode,
+    part.address,
+    part.sellerCity,
+    part.sellerDistrict,
+    part.sellerState,
+    part.sellerLocation
+  ]
+    .filter(Boolean)
+    .map((s) => String(s).trim().toLowerCase());
+  const location = Array.from(new Set(locationParts)).join(' ');
+
+  const fullContent = `${title} ${brand} ${model} ${variant} ${partName} ${category} ${numbers} ${year} ${description} ${location} ${seller}`;
   const collapsedContent = fullContent.replace(/[\s\-_]/g, '');
 
-  // Every token entered by the user must match somewhere in the item or via synonym/plural/space collapse
+  // Every token entered by the user must match somewhere in the item or via synonym/plural/space collapse/prefix
   for (const token of tokens) {
-    let found = fullContent.includes(token) || checkAliases(token, fullContent);
+    let found =
+      fullContent.includes(token) ||
+      hasWordStartingWith(fullContent, token) ||
+      checkAliases(token, fullContent);
 
     if (!found) {
       const variants = getPluralVariants(token);
@@ -250,64 +327,72 @@ export function matchPartSearch(part: any, rawQuery: string): SearchMatchResult 
     }
   }
 
-  // --- Compute Relevance Score ---
+  // --- Compute Weighted Relevance Score ---
   let score = 10;
 
   // 1. Exact full query in title gives the highest relevance boost
   if (title.includes(query)) {
-    score += 200;
-  } else {
-    for (const t of tokens) {
-      if (title.includes(t)) score += 45;
-    }
+    score += 300;
   }
-
-  // 2. Exact match in brand / model
-  if (brand.includes(query) || model.includes(query)) {
-    score += 120;
-  } else {
-    for (const t of tokens) {
-      if (brand.includes(t)) score += 35;
-      if (model.includes(t)) score += 35;
-    }
-  }
-
-  // 3. Exact match in partName
+  // 2. Exact match in partName
   if (partName.includes(query)) {
-    score += 90;
-  } else {
-    for (const t of tokens) {
-      if (partName.includes(t)) score += 30;
-    }
+    score += 260;
   }
-
-  // 4. Exact match in OEM or Part Number
-  if (numbers && numbers.includes(query)) {
-    score += 110;
+  // 3. Exact match in brand / model
+  if (brand.includes(query) || model.includes(query)) {
+    score += 220;
   }
-
-  // 5. Match in category
-  if (category.includes(query)) {
-    score += 40;
-  }
-
-  // 6. Match in Description
-  if (description.includes(query)) {
-    score += 30;
-  } else {
-    for (const t of tokens) {
-      if (description.includes(t)) score += 10;
-    }
-  }
-
-  // 7. Match in location
+  // 4. Exact match in location (city / district / state / area)
   if (location.includes(query)) {
-    score += 25;
+    score += 200;
+  }
+  // 5. Match in OEM or Part Number
+  if (numbers && numbers.includes(query)) {
+    score += 180;
+  }
+  // 6. Match in category
+  if (category.includes(query)) {
+    score += 120;
+  }
+  // 7. Match in Description
+  if (description.includes(query)) {
+    score += 140;
+  }
+
+  // Word Prefix Matching Boost (CRITICAL for single alphabet and partial typing like "b", "c", "sw", "che")
+  for (const t of tokens) {
+    if (hasWordStartingWith(partName, t)) {
+      score += 180;
+    }
+    if (hasWordStartingWith(title, t)) {
+      score += 160;
+    }
+    if (hasWordStartingWith(brand, t) || hasWordStartingWith(model, t)) {
+      score += 140;
+    }
+    if (hasWordStartingWith(location, t)) {
+      score += 130;
+    }
+    if (hasWordStartingWith(category, t)) {
+      score += 80;
+    }
+    if (hasWordStartingWith(description, t)) {
+      score += 80;
+    }
+
+    // Substring matches per token
+    if (partName.includes(t)) score += 50;
+    if (title.includes(t)) score += 40;
+    if (brand.includes(t)) score += 35;
+    if (model.includes(t)) score += 35;
+    if (location.includes(t)) score += 30;
+    if (description.includes(t)) score += 30;
+    if (category.includes(t)) score += 20;
   }
 
   // Slight boost for listings with images and verified details
   if (part.imageUrl || (part.images && part.images.length > 0)) {
-    score += 5;
+    score += 10;
   }
 
   return { matches: true, score };

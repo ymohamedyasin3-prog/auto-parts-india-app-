@@ -155,19 +155,29 @@ export default function SearchScreen({
       // State filter
       if (selectedState !== "All States") {
         const sState = selectedState.toLowerCase().trim();
-        const pState = (part.state || "").toLowerCase().trim();
-        const pLocation = (part.location || "").toLowerCase().trim();
-        const matchesState = pState.includes(sState) || pLocation.includes(sState);
-        if (!matchesState) continue;
+        const locState = [
+          part.state,
+          part.location,
+          part.city,
+          part.district,
+          part.area,
+          (part as any).sellerState
+        ].filter(Boolean).join(" ").toLowerCase();
+        if (!locState.includes(sState)) continue;
       }
 
       // District filter
       if (selectedDistrict !== "All Districts") {
         const sDist = selectedDistrict.toLowerCase().trim();
-        const pDist = (part.district || "").toLowerCase().trim();
-        const pLocation = (part.location || "").toLowerCase().trim();
-        const matchesDist = pDist.includes(sDist) || pLocation.includes(sDist);
-        if (!matchesDist) continue;
+        const locDist = [
+          part.district,
+          part.city,
+          part.location,
+          part.area,
+          (part as any).sellerDistrict,
+          (part as any).sellerCity
+        ].filter(Boolean).join(" ").toLowerCase();
+        if (!locDist.includes(sDist)) continue;
       }
 
       scoredList.push({ part, score: searchScore });

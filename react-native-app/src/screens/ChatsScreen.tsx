@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   FlatList,
@@ -10,6 +11,28 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+
+const HIDDEN_CHATS_STORAGE_KEY = '@autoparts_hidden_chats';
+
+async function getLocalHiddenChatIds(): Promise<Set<string>> {
+  try {
+    const raw = await AsyncStorage.getItem(HIDDEN_CHATS_STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set<string>(arr);
+    }
+  } catch (_) {}
+  return new Set<string>();
+}
+
+async function addLocalHiddenChatId(chatId: string): Promise<void> {
+  if (!chatId) return;
+  try {
+    const set = await getLocalHiddenChatIds();
+    set.add(chatId);
+    await AsyncStorage.setItem(HIDDEN_CHATS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch (_) {}
+}
 import {
   Text,
   Searchbar,
@@ -23,6 +46,8 @@ import { getFirebaseFirestore, getCurrentUser } from '../services/firebase';
 import { markNotificationAsRead } from '../services/notifications';
 import { useLanguage } from '../context/LanguageContext';
 import BrandLogo from '../components/BrandLogo';
+import { UserAvatar } from '../components/UserAvatar';
+import { ChatListSkeleton } from '../components/SkeletonLoaders';
 
 export default function ChatsScreen({ navigation, user: initialUser }: any) {
   const [chats, setChats] = useState<any[]>([]);
@@ -107,12 +132,17 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
       let sellerLoaded = false;
       let partLoaded = false;
 
-      const mergeChats = () => {
+      const mergeChats = async () => {
         if (!buyerLoaded || !sellerLoaded || !partLoaded) return;
         const chatsMap = new Map<string, any>();
-        buyerChats.forEach(c => chatsMap.set(c.id, c));
-        sellerChats.forEach(c => chatsMap.set(c.id, c));
-        partChats.forEach(c => chatsMap.set(c.id, c));
+        const hiddenChatSet = await getLocalHiddenChatIds();
+
+        [...buyerChats, ...sellerChats, ...partChats].forEach((c) => {
+          if (!c || !c.id) return;
+          if (hiddenChatSet.has(c.id)) return;
+          if (Array.isArray(c.hiddenFor) && c.hiddenFor.includes(activeUid)) return;
+          chatsMap.set(c.id, c);
+        });
         
         const list = Array.from(chatsMap.values());
         
@@ -400,6 +430,9 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
             style: 'destructive',
             onPress: async () => {
               try {
+                if (chatItem.id) {
+                  await addLocalHiddenChatId(chatItem.id);
+                }
                 const db = getFirebaseFirestore();
                 if (db && typeof db.collection === 'function' && chatItem.id) {
                   const chatRef = db.collection('chats').doc(chatItem.id);
@@ -457,15 +490,13 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
       >
         {/* User Profile Avatar */}
         <View style={styles.avatarContainer}>
-          {userProfilePicture ? (
-            <Image source={{ uri: userProfilePicture }} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarInitial}>
-                {(partnerName || 'U').charAt(0).toUpperCase()}
-              </Text>
-            </View>
-          )}
+          <UserAvatar
+            photoUrl={userProfilePicture}
+            name={partnerName}
+            size={48}
+            borderWidth={1.5}
+            borderColor="#E2E8F0"
+          />
 
           {/* Small Product Part Thumbnail Badge */}
           {item.partImageUrl ? (
@@ -558,6 +589,13 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
             >
               <Icon source="dots-vertical" size={24} color="#FFFFFF" />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerProfileBtn}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'ProfileTab' })}
+              activeOpacity={0.8}
+            >
+              <UserAvatar size={30} borderWidth={1.5} borderColor="#BAE6FD" />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -637,10 +675,7 @@ export default function ChatsScreen({ navigation, user: initialUser }: any) {
       {/* Main White Curved List Container */}
       <View style={styles.sheetContainer}>
         {loading ? (
-          <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color="#0072F5" />
-            <Text style={styles.loadingText}>{translateDynamic('Syncing conversations...')}</Text>
-          </View>
+          <ChatListSkeleton count={6} />
         ) : (
           <FlatList
             data={filteredChats}
@@ -768,6 +803,14 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  headerProfileBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 2,
   },
   searchbarWrap: {
     marginBottom: 12,

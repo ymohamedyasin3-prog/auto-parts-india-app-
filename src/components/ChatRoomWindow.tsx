@@ -60,7 +60,18 @@ export default function ChatRoomWindow({ chat, currentUser, onClose, onOpenUserP
 
   // Filter messages for deleted / cleared history
   const clearedAtTimestamp = chat.clearedAt?.[currentUser.id] || 0;
+  const localDeletedSet = React.useMemo(() => {
+    try {
+      const raw = localStorage.getItem(`autoparts_deleted_msgs_${chat.id}`);
+      return new Set<string>(raw ? JSON.parse(raw) : []);
+    } catch (_) {
+      return new Set<string>();
+    }
+  }, [chat.id, messages]);
+
   const visibleMessages = messages.filter((msg) => {
+    if (!msg || !msg.id) return false;
+    if (localDeletedSet.has(msg.id)) return false;
     if (Array.isArray(msg.deletedFor) && msg.deletedFor.includes(currentUser.id)) {
       return false;
     }

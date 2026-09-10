@@ -17,6 +17,7 @@ import {
   openLocationInExternalMaps,
   LocationCoords 
 } from '../services/location';
+import { ProductDetailSkeleton } from '../components/SkeletonLoaders';
 
 export default function ProductDetailScreen({ route, navigation, user: initialUser }: any) {
   const insets = useSafeAreaInsets();
@@ -404,6 +405,23 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
       return "Recently";
     }
   };
+
+  if (loadingDoc || !part) {
+    return (
+      <View style={[styles.screenWrapper, { paddingTop: Math.max(insets.top, 12) }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 }}>
+          <TouchableOpacity 
+            style={styles.stickyHeaderBackBtn} 
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+          >
+            <Icon source="arrow-left" size={20} color="#0F172A" />
+          </TouchableOpacity>
+        </View>
+        <ProductDetailSkeleton />
+      </View>
+    );
+  }
 
   const allImages = (part.imageUrls && part.imageUrls.length > 0)
     ? part.imageUrls

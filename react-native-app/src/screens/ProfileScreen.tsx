@@ -5,14 +5,13 @@ import { getFirebaseAuth, getFirebaseFirestore, getCurrentUser } from '../servic
 import { signOutFromGoogle } from '../services/googleAuth';
 import { UserProfilePopupModal } from '../components/UserProfilePopupModal';
 import { EditProfileModal } from '../components/EditProfileModal';
-
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250';
+import { UserAvatar } from '../components/UserAvatar';
 
 export default function ProfileScreen({ navigation, route, user: initialUser }: any) {
   const [activeUid, setActiveUid] = useState<string | null>(initialUser?.uid || null);
   const [userEmail, setUserEmail] = useState<string>(initialUser?.email || '');
   const [displayName, setDisplayName] = useState<string>(initialUser?.displayName || 'Auto Parts India User');
-  const [displayPhotoUrl, setDisplayPhotoUrl] = useState<string>(initialUser?.photoURL || DEFAULT_AVATAR);
+  const [displayPhotoUrl, setDisplayPhotoUrl] = useState<string | null>(initialUser?.photoURL || null);
   const [dbUserDoc, setDbUserDoc] = useState<any>(null);
 
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
@@ -153,19 +152,25 @@ export default function ProfileScreen({ navigation, route, user: initialUser }: 
         <View style={styles.profileHeaderCard}>
           <TouchableOpacity 
             onPress={() => {
-              const uid = activeUid || getCurrentUser()?.uid;
-              if (uid) {
-                navigation.navigate('SellerProfile', { sellerId: uid, sellerName: displayName });
+              if (displayPhotoUrl && !displayPhotoUrl.includes('photo-1534528741775-53994a69daeb')) {
+                setIsPopupModalVisible(true);
+              } else {
+                setIsEditProfileModalOpen(true);
               }
             }} 
             style={styles.avatarWrap}
             activeOpacity={0.85}
           >
-            <Image 
-              source={{ uri: displayPhotoUrl }} 
-              style={styles.avatarImage} 
-              key={displayPhotoUrl}
+            <UserAvatar
+              photoUrl={displayPhotoUrl}
+              name={displayName}
+              size={68}
+              borderWidth={2}
+              borderColor="#0066FF"
             />
+            <View style={styles.cameraIconBadge}>
+              <Icon source="camera" size={12} color="#FFFFFF" />
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -352,8 +357,24 @@ const styles = StyleSheet.create({
     height: 68,
     borderRadius: 34,
     position: 'relative',
+  },
+  cameraIconBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#0066FF',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#1565FF',
+    borderColor: '#FFFFFF',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
   avatarImage: {
     width: 64,

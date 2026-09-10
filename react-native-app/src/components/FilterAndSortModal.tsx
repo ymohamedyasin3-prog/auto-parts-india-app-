@@ -499,11 +499,9 @@ export default function FilterAndSortModal({
                             size={18}
                             color={isSelected ? '#1565FF' : '#64748B'}
                           />
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styles.radioLabel, isSelected && styles.radioLabelActive]}>
-                              {cat.name}
-                            </Text>
-                          </View>
+                          <Text style={[styles.radioLabel, isSelected && styles.radioLabelActive]}>
+                            {cat.name}
+                          </Text>
                         </View>
                         <View style={[styles.radioCircle, isSelected && styles.radioCircleActive]}>
                           {isSelected && <View style={styles.radioInnerDot} />}
@@ -712,19 +710,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    marginBottom: 4,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 6,
+    minHeight: 46,
+    backgroundColor: '#FFFFFF',
   },
   radioRowActive: {
-    backgroundColor: '#F0F7FF',
+    backgroundColor: '#EFF6FF',
   },
   radioTextWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingRight: 8,
+    paddingRight: 10,
   },
   radioLabel: {
     fontSize: 13.5,

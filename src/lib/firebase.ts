@@ -2496,7 +2496,11 @@ export async function setUserPresence(userId: string, isOnline: boolean): Promis
   if (useFirebase && db) {
     try {
       const userRef = doc(db, "users", userId);
-      await setDoc(userRef, payload, { merge: true });
+      const presenceRef = doc(db, "presence", userId);
+      await Promise.allSettled([
+        setDoc(userRef, payload, { merge: true }),
+        setDoc(presenceRef, payload, { merge: true })
+      ]);
     } catch (err) {
       console.warn("Failed to set user presence in Firestore:", err);
     }
@@ -2519,16 +2523,31 @@ export function subscribeToUserPresence(
 
   if (useFirebase && db) {
     try {
-      const userRef = doc(db, "users", userId);
-      const unsub = onSnapshot(userRef, (snap) => {
+      const presenceRef = doc(db, "presence", userId);
+      const unsub = onSnapshot(presenceRef, (snap) => {
         if (snap.exists()) {
           const data = snap.data();
+          const isRecent = data.lastSeen ? (Date.now() - Number(data.lastSeen) < 60000) : false;
           callback({
-            online: !!data.online,
+            online: !!data.online && isRecent,
             lastSeen: data.lastSeen || Date.now()
           });
         } else {
-          callback({ online: false, lastSeen: Date.now() });
+          // Fallback to users/{userId}
+          getDoc(doc(db, "users", userId)).then((uSnap) => {
+            if (uSnap.exists()) {
+              const uData = uSnap.data();
+              const isRecent = uData.lastSeen ? (Date.now() - Number(uData.lastSeen) < 60000) : false;
+              callback({
+                online: !!uData.online && isRecent,
+                lastSeen: uData.lastSeen || Date.now()
+              });
+            } else {
+              callback({ online: false, lastSeen: Date.now() });
+            }
+          }).catch(() => {
+            callback({ online: false, lastSeen: Date.now() });
+          });
         }
       }, () => {
         callback({ online: false, lastSeen: Date.now() });
@@ -2927,6 +2946,17 @@ export async function markMessagesAsDelivered(chatId: string, currentUserId: str
 }
 
 export async function deleteChatMessageForMe(chatId: string, messageId: string, userId: string): Promise<void> {
+  try {
+    const key = `autoparts_deleted_msgs_${chatId}`;
+    const raw = localStorage.getItem(key) || "[]";
+    const arr: string[] = JSON.parse(raw);
+    if (!arr.includes(messageId)) {
+      arr.push(messageId);
+      localStorage.setItem(key, JSON.stringify(arr));
+      window.dispatchEvent(new CustomEvent("autoparts_chat_updated", { detail: { chatId } }));
+    }
+  } catch (_) {}
+
   if (useFirebase && db) {
     try {
       const msgRef = doc(db, "chats", chatId, "messages", messageId);

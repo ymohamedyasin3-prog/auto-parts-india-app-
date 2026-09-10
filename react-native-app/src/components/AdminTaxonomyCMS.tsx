@@ -21,6 +21,7 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import { getFirestoreInstance } from '../services/firebase';
 import { uploadImageToCloudinary } from '../services/cloudinary';
 import { INDIAN_STATES_AND_DISTRICTS } from '../data/indianLocations';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface BrandItem {
   name: string;
@@ -189,9 +190,7 @@ export const AdminTaxonomyCMS: React.FC = () => {
           updatedAt: Date.now(),
         }, { merge: true });
 
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.setItem('config_locations', JSON.stringify(uniqueLocs));
-        }
+        AsyncStorage.setItem('config_locations', JSON.stringify(uniqueLocs)).catch(() => {});
       } catch (locSyncErr) {
         console.warn('[AdminTaxonomyCMS] location sync error:', locSyncErr);
       }
@@ -384,10 +383,8 @@ export const AdminTaxonomyCMS: React.FC = () => {
         { merge: true }
       );
 
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem('config_locations', JSON.stringify(uniqueLocs));
-        window.localStorage.setItem('taxonomy_locations', JSON.stringify(updatedLocs));
-      }
+      AsyncStorage.setItem('config_locations', JSON.stringify(uniqueLocs)).catch(() => {});
+      AsyncStorage.setItem('taxonomy_locations', JSON.stringify(updatedLocs)).catch(() => {});
     } catch (e) {
       console.warn('[AdminTaxonomyCMS] auto-sync error:', e);
     }

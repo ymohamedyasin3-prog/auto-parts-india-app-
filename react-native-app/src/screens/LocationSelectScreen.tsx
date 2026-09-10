@@ -25,6 +25,7 @@ import {
   getUserSavedLocation,
 } from '../services/location';
 import { getFirebaseFirestore } from '../services/firebase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface LocationSelectScreenProps {
   navigation: any;
@@ -64,24 +65,27 @@ export default function LocationSelectScreen({ navigation, route }: LocationSele
     });
 
     // Immediate local storage fallback for instant reactivity
-    if (typeof window !== 'undefined' && window.localStorage) {
-      try {
-        const cachedLocs = window.localStorage.getItem('taxonomy_locations');
-        if (cachedLocs) {
+    AsyncStorage.getItem('taxonomy_locations').then((cachedLocs) => {
+      if (cachedLocs) {
+        try {
           const parsed = JSON.parse(cachedLocs);
           if (Array.isArray(parsed) && parsed.length > 0) {
             setAdminTaxonomyLocations(parsed);
           }
-        }
-        const cachedConfig = window.localStorage.getItem('config_locations');
-        if (cachedConfig) {
+        } catch (_) {}
+      }
+    }).catch(() => {});
+
+    AsyncStorage.getItem('config_locations').then((cachedConfig) => {
+      if (cachedConfig) {
+        try {
           const parsed = JSON.parse(cachedConfig);
           if (Array.isArray(parsed) && parsed.length > 0) {
             setAdminLocations((prev) => Array.from(new Set([...prev, ...parsed])));
           }
-        }
-      } catch (_) {}
-    }
+        } catch (_) {}
+      }
+    }).catch(() => {});
 
     const db = getFirebaseFirestore();
     if (!db) return;
