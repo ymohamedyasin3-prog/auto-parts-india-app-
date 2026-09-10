@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, ScrollView, StyleSheet, Alert, Linking, Image, Share, TouchableOpacity, ActivityIndicator, Animated, InteractionManager } from "react-native";
+import { View, ScrollView, StyleSheet, Alert, Linking, Image, Share, TouchableOpacity, ActivityIndicator, Animated } from "react-native";
 import { Text, Button, Card, Avatar, Divider, Chip, IconButton, Icon, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { INITIAL_SPARE_PARTS } from '../data/mockData';
@@ -28,20 +28,6 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
   const [liveSellerPhoto, setLiveSellerPhoto] = useState<string | null>(null);
   const [isProductInfoExpanded, setIsProductInfoExpanded] = useState<boolean>(true);
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
-  const [isHeavyUIReady, setIsHeavyUIReady] = useState<boolean>(false);
-
-  useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {
-      setIsHeavyUIReady(true);
-    });
-    const timer = setTimeout(() => {
-      setIsHeavyUIReady(true);
-    }, 200);
-    return () => {
-      task.cancel();
-      clearTimeout(timer);
-    };
-  }, []);
 
   useEffect(() => {
     const sellerId = part?.sellerId || part?.ownerId || part?.userId;
@@ -181,7 +167,7 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
   const [loadingRelated, setLoadingRelated] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!part?.id || !isHeavyUIReady) return;
+    if (!part?.id) return;
 
     const brand = (part.carBrand || part.brand || '').trim();
     const model = (part.carModel || part.model || '').trim();
@@ -804,16 +790,7 @@ export default function ProductDetailScreen({ route, navigation, user: initialUs
               </TouchableOpacity>
             ) : null}
           </View>
-          {isHeavyUIReady ? (
-            <GMap latitude={partLat} longitude={partLng} state={part.state} district={part.district || part.location} title={`${part.title} - ${part.location || 'India'}`} interactive={false} style={{ marginBottom: 8 }} height={140} />
-          ) : (
-            <View style={{ height: 140, borderRadius: 12, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
-              <Icon source="map-marker-radius" size={28} color="#0066FF" />
-              <Text style={{ fontSize: 12, color: '#64748B', marginTop: 4, fontWeight: '500' }}>
-                {part.district || part.location || part.state || 'Loading location map...'}
-              </Text>
-            </View>
-          )}
+          <GMap latitude={partLat} longitude={partLng} state={part.state} district={part.district || part.location} title={`${part.title} - ${part.location || 'India'}`} interactive={false} style={{ marginBottom: 8 }} height={140} />
         </View>
 
         {/* SIMILAR & RELATED PARTS */}
